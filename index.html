@@ -61,7 +61,7 @@
         </select>
       </div>
 
-      <div class="d-flex align-items-center gap-1 flex-nowrap" style="overflow-x: auto;">
+      <div class="d-flex align-items-center gap-2 flex-nowrap pb-2" style="overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;">
         <button class="btn-toggle-tipo active" id="btnModoGeral" onclick="alternarModoOperacao('TODOS')">
           <i class="bi bi-pie-chart-fill me-1"></i> Consolidado Geral
         </button>
@@ -538,7 +538,7 @@
 
       <!-- TABELA ANALÍTICA DE AUDITORIA COM ORDENAÇÃO POR CLIQUE -->
       <div class="table-responsive border rounded bg-white">
-        <table class="table tabela-auditoria table-hover align-middle">
+        <table class="table tabela-auditoria table-hover align-middle" style="white-space: nowrap;">
           <thead>
             <tr>
               <th class="text-start" onclick="ordenarTabelaAuditoriaPor('posto')">Posto & Bandeira</th>
