@@ -108,8 +108,8 @@ function gerarConteudoTooltipUf(uf) {
     regs = regs.filter(d => d.MES_ANO === mesSel);
   }
 
-  const litExterno = regs.filter(d => d.TIPO_OPERACAO === 'EXTERNO').reduce((a, c) => a + parseFloat(c.LITROS_MES || 0), 0);
-  const valExterno = regs.filter(d => d.TIPO_OPERACAO === 'EXTERNO').reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_MES || 0), 0);
+  const litExterno = regs.filter(d => d.TIPO_OPERACAO === 'EXTERNO').reduce((a, c) => a + parseFloat(c.VOLUME_CICLO || c.LITROS_MES || 0), 0);
+  const valExterno = regs.filter(d => d.TIPO_OPERACAO === 'EXTERNO').reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_CICLO || c.VALOR_TOTAL_MES || 0), 0);
   const medExterno = litExterno > 0 ? (valExterno / litExterno) : 0;
 
   if (uf === 'SP') {
@@ -119,8 +119,8 @@ function gerarConteudoTooltipUf(uf) {
       const p = normalizarTextoComparacao(d.POSTO);
       return m.includes('BARUERI') || p.includes('BARUERI');
     });
-    const litBarueri = regsBarueri.reduce((a, c) => a + parseFloat(c.LITROS_MES || 0), 0);
-    const valBarueri = regsBarueri.reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_MES || 0), 0);
+    const litBarueri = regsBarueri.reduce((a, c) => a + parseFloat(c.VOLUME_CICLO || c.LITROS_MES || 0), 0);
+    const valBarueri = regsBarueri.reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_CICLO || c.VALOR_TOTAL_MES || 0), 0);
     const medBarueri = litBarueri > 0 ? (valBarueri / litBarueri) : 0;
 
     const regsRibeirao = regs.filter(d => {
@@ -129,8 +129,8 @@ function gerarConteudoTooltipUf(uf) {
       const p = normalizarTextoComparacao(d.POSTO);
       return m.includes('RIBEIRAO') || p.includes('RIBEIRAO') || p.includes('RP');
     });
-    const litRibeirao = regsRibeirao.reduce((a, c) => a + parseFloat(c.LITROS_MES || 0), 0);
-    const valRibeirao = regsRibeirao.reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_MES || 0), 0);
+    const litRibeirao = regsRibeirao.reduce((a, c) => a + parseFloat(c.VOLUME_CICLO || c.LITROS_MES || 0), 0);
+    const valRibeirao = regsRibeirao.reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_CICLO || c.VALOR_TOTAL_MES || 0), 0);
     const medRibeirao = litRibeirao > 0 ? (valRibeirao / litRibeirao) : 0;
 
     const totalSp = litBarueri + litRibeirao + litExterno;
@@ -150,8 +150,8 @@ function gerarConteudoTooltipUf(uf) {
     `;
   }
 
-  const litInterno = regs.filter(d => d.TIPO_OPERACAO === 'INTERNO').reduce((a, c) => a + parseFloat(c.LITROS_MES || 0), 0);
-  const valInterno = regs.filter(d => d.TIPO_OPERACAO === 'INTERNO').reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_MES || 0), 0);
+  const litInterno = regs.filter(d => d.TIPO_OPERACAO === 'INTERNO').reduce((a, c) => a + parseFloat(c.VOLUME_CICLO || c.LITROS_MES || 0), 0);
+  const valInterno = regs.filter(d => d.TIPO_OPERACAO === 'INTERNO').reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_CICLO || c.VALOR_TOTAL_MES || 0), 0);
   const medInterno = litInterno > 0 ? (valInterno / litInterno) : 0;
 
   const totalL = litInterno + litExterno;
@@ -190,7 +190,7 @@ function atualizarCoresMiniMapa() {
   const volPorUf = {};
   regs.forEach(d => {
     if (!d.UF_POSTO) return;
-    volPorUf[d.UF_POSTO] = (volPorUf[d.UF_POSTO] || 0) + parseFloat(d.LITROS_MES || 0);
+    volPorUf[d.UF_POSTO] = (volPorUf[d.UF_POSTO] || 0) + parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0);
   });
 
   camadaGeoJsonBrasil = L.geoJSON(dadosGeoJsonBr, {
@@ -342,8 +342,9 @@ function adicionarCampoParada() {
   const container = document.getElementById('containerPontosRota');
   const itens = container.querySelectorAll('.ponto-rota-item');
 
-  if (itens.length >= 5) {
-    alert("Limite máximo de 5 pontos na rota atingido.");
+  // Limite estendido para suportar até 10 pontos operacionais
+  if (itens.length >= 10) {
+    alert("Limite máximo de 10 pontos na rota atingido.");
     return;
   }
 
@@ -500,7 +501,6 @@ function obterCoordenadasItem(itemEl) {
 }
 
 function calcularRotaLeaflet() {
-  // 1. Remove o foco e a borda verde dos campos de entrada
   document.querySelectorAll('.input-cidade-rota').forEach(el => {
     el.classList.remove('foco-ativo');
     el.blur();
@@ -544,6 +544,45 @@ function calcularRotaLeaflet() {
   });
 }
 
+// Função global para adicionar posto diretamente do popup
+window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
+  const container = document.getElementById('containerPontosRota');
+  let itens = container.querySelectorAll('.ponto-rota-item');
+  let campoVazio = null;
+
+  // Procura o primeiro campo sem coordenadas preenchidas
+  for (let i = 0; i < itens.length; i++) {
+    const h = itens[i].querySelector('.hidden-coord-rota');
+    if (!h.value) {
+      campoVazio = itens[i];
+      break;
+    }
+  }
+
+  // Se não houver campo vazio, tenta criar um novo (até o limite de 10)
+  if (!campoVazio) {
+    if (itens.length < 10) {
+      adicionarCampoParada();
+      itens = container.querySelectorAll('.ponto-rota-item');
+      campoVazio = itens[itens.length - 1]; // Pega a nova paragem criada antes do destino
+    } else {
+      alert("Limite máximo de 10 pontos na rota atingido.");
+      return;
+    }
+  }
+
+  // Preenche o campo vazio com os dados do posto clicado e traça a rota
+  if (campoVazio) {
+    const input = campoVazio.querySelector('.input-cidade-rota');
+    const hidden = campoVazio.querySelector('.hidden-coord-rota');
+    input.value = nomeCidade;
+    hidden.value = `${lat},${lon}`;
+    
+    atualizarMarcadoresWaypoints();
+    calcularRotaLeaflet();
+  }
+};
+
 function plotarPostosComDuploRaio(routeCoords) {
   if (!leafletMapInstance) return;
   markersPostosLeaflet.forEach(m => leafletMapInstance.removeLayer(m));
@@ -553,7 +592,7 @@ function plotarPostosComDuploRaio(routeCoords) {
   const registrosRef = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
   const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
 
-  // Deduplicação dos postos para reter apenas o último registro ativo
+  // Deduplicação e Agregação de Volume (Soma de todos os ciclos)
   const mapaPostosConsolidado = {};
   registrosRef.forEach(d => {
     const nome = (d.POSTO || '').trim();
@@ -561,8 +600,9 @@ function plotarPostosComDuploRaio(routeCoords) {
     const uf = (d.UF_POSTO || '').trim().toUpperCase();
     const chave = `${nome}__${mun}__${uf}`;
 
-    const preco = parseFloat(d.ULTIMO_PRECO_MES || d.PRECO_MEDIO_MES || 0);
-    const dataReg = d.ULTIMA_DATA_MES || d.MES_ANO || "";
+    const preco = parseFloat(d.VALOR_UNITARIO || d.ULTIMO_PRECO_MES || d.PRECO_MEDIO_MES || 0);
+    const dataReg = d.DATA_FIM_CICLO || d.ULTIMA_DATA_MES || d.MES_ANO || "";
+    const volumeAtual = parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0);
 
     if (!mapaPostosConsolidado[chave]) {
       mapaPostosConsolidado[chave] = {
@@ -571,11 +611,15 @@ function plotarPostosComDuploRaio(routeCoords) {
         uf: uf,
         preco: preco,
         tipo: d.TIPO_OPERACAO,
-        data: dataReg
+        data: dataReg,
+        volumeTotal: volumeAtual
       };
-    } else if (dataReg && dataReg > mapaPostosConsolidado[chave].data) {
-      mapaPostosConsolidado[chave].data = dataReg;
-      mapaPostosConsolidado[chave].preco = preco;
+    } else {
+      mapaPostosConsolidado[chave].volumeTotal += volumeAtual;
+      if (dataReg && dataReg > mapaPostosConsolidado[chave].data) {
+        mapaPostosConsolidado[chave].data = dataReg;
+        mapaPostosConsolidado[chave].preco = preco;
+      }
     }
   });
 
@@ -599,10 +643,8 @@ function plotarPostosComDuploRaio(routeCoords) {
     for (const pt of amostraRota) {
       const d = calcularDistanciaKm(achada.lat, achada.lon, pt.lat, pt.lng);
       if (d < menorDist) menorDist = d;
-      // Removido o 'break' prematuro para calcular a menor distância real até a rodovia
     }
 
-    // 2. Raio expandido reduzido para 201 a 400 km
     if (menorDist <= 400) {
       let corPin = "#94a3b8";
       let statusTexto = "Posto em Raio Expandido de Apoio";
@@ -612,8 +654,13 @@ function plotarPostosComDuploRaio(routeCoords) {
         statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
       }
 
+      // Cálculo Dinâmico do Raio Baseado no Volume Consolidado
+      let raioDinamico = 6;
+      if (p.volumeTotal > 50000) raioDinamico = 13;
+      else if (p.volumeTotal > 15000) raioDinamico = 9;
+
       const marker = L.circleMarker([achada.lat, achada.lon], {
-        radius: 8,
+        radius: raioDinamico,
         fillColor: corPin,
         color: "#ffffff",
         weight: 2,
@@ -621,13 +668,17 @@ function plotarPostosComDuploRaio(routeCoords) {
         fillOpacity: 0.95
       }).addTo(leafletMapInstance);
 
+      // Injeção do Botão "Incluir na Rota" no Popup
       marker.bindPopup(`
         <strong style="color:#1c483a;">${p.posto}</strong><br>
         Cidade: ${p.municipio}/${p.uf}<br>
-        Último Preço: <b>R$ ${p.preco.toFixed(3)}</b><br>
+        Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b><br>
         Tipo: ${p.tipo}<br>
         Status: <b>${statusTexto}</b><br>
-        <span class="small text-muted">Aprox. ${Math.round(menorDist)} km da rota</span>
+        <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota</span>
+        <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${p.municipio.replace(/'/g, "\\'")}', ${achada.lat}, ${achada.lon})">
+          ➕ Incluir na Rota
+        </button>
       `);
 
       markersPostosLeaflet.push(marker);
@@ -644,7 +695,6 @@ function plotarPostosComDuploRaio(routeCoords) {
     }
   });
 
-  // 3. Ordenação para o relatório priorizando postos no corredor direto
   postosSugeridosUltimaRota.sort((a, b) => {
     if (a.distancia !== b.distancia) return a.distancia - b.distancia;
     return a.preco - b.preco;
@@ -680,7 +730,7 @@ function imprimirRoteiroViagem() {
       <tr>
         <td><b>${p.posto}</b></td>
         <td>${p.cidade}</td>
-        <td class="text-success fw-bold">R$ ${p.preco.toFixed(3)}</td>
+        <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
         <td>${p.distancia} km</td>
         <td>${p.tipo}</td>
       </tr>
