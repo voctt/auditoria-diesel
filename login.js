@@ -12,7 +12,6 @@ let utilizadorAutenticado = null;
       <div class="card-login-voctt text-center">
         <img src="logo_voctt.png" alt="VOCTT" class="brand-logo-central">
         
-        <div class="login-titulo-marca">VOCTT</div>
         <div class="login-subtitulo-marca">Fuel Intelligence Suite</div>
 
         <div id="msgErroLogin"></div>
