@@ -653,3 +653,15 @@ body {
   #secaoRoteirizador { display: block !important; border: none !important; }
   #areaImpressaoRoteiro { display: block !important; }
 }
+
+/* ==========================================================================
+   CORREÇÃO: FORÇA DESTRUIÇÃO DE TOOLTIPS FANTASMAS (APEXCHARTS)
+   ========================================================================== */
+.apexcharts-canvas:not(:hover) .apexcharts-tooltip,
+.apexcharts-canvas:not(:hover) .apexcharts-xaxistooltip,
+.apexcharts-canvas:not(:hover) .apexcharts-marker {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    display: none !important;
+    transition: none !important;
+}
