@@ -564,14 +564,16 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
     if (itens.length < 10) {
       adicionarCampoParada();
       itens = container.querySelectorAll('.ponto-rota-item');
-      campoVazio = itens[itens.length - 1]; // Pega a nova paragem criada antes do destino
+      // O novo campo intermediário é injetado antes do destino. 
+      // Portanto, ele se torna o penúltimo item do array (length - 2).
+      campoVazio = itens[itens.length - 2];
     } else {
       alert("Limite máximo de 10 pontos na rota atingido.");
       return;
     }
   }
 
-  // Preenche o campo vazio com os dados do posto clicado e traça a rota
+  // Preenche o campo selecionado com os dados do posto clicado e traça a rota
   if (campoVazio) {
     const input = campoVazio.querySelector('.input-cidade-rota');
     const hidden = campoVazio.querySelector('.hidden-coord-rota');
