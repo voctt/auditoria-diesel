@@ -931,13 +931,6 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     card.className = `card-posto-termometro ${ehZebrado}`;
     
     // Tratamento de destruição do tooltip fantasma ao tirar o mouse do card
-    card.addEventListener('mouseleave', () => {
-      const tooltips = document.querySelectorAll('.apexcharts-tooltip');
-      tooltips.forEach(t => {
-        t.style.opacity = '0';
-        t.classList.remove('apexcharts-active');
-      });
-    });
 
     card.innerHTML = `
       <div class="col-posto-identificacao">
