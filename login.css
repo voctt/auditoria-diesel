@@ -52,17 +52,17 @@
   color: #f8fafc;
 }
 
-/* Logo VOCTT calibrada em 54px para nitidez máxima */
+/* Logo VOCTT ampliada */
 .card-login-voctt .brand-logo-central {
-  width: 54px;
-  height: 54px;
+  width: 85px;
+  height: 85px;
   border-radius: 50%;
-  border: 1.5px solid rgba(34, 197, 94, 0.7);
-  box-shadow: 0 0 16px rgba(34, 197, 94, 0.3);
+  border: 2px solid rgba(34, 197, 94, 0.8);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
   object-fit: cover;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .login-titulo-marca {
