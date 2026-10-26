@@ -1,5 +1,5 @@
 // Módulo de Matrizes Gerenciais e Auditoria Estratégica (Power BI Engine Alinhado)
-// Utiliza QTD_ABASTECIMENTOS para reproduzir o AVERAGE(VALOR_UNITARIO) de cada abastecimento
+// Utiliza agregação Gaps and Islands (VOLUME_CICLO e VALOR_TOTAL_CICLO) para Média Ponderada Real
 
 let cacheAnpBase = null;
 
@@ -123,7 +123,7 @@ function gerarInsightsInteligentes(analiseExterna, analiseInterna, analiseSpread
           <p class="mb-0 text-muted" style="font-size: 0.78rem;">
             O estado do <strong>${analiseExterna.melhorUf}</strong> lidera o poder de compra da frota com 
             <strong class="text-success">${analiseExterna.melhorVar.toFixed(2).replace('.', ',')}%</strong> abaixo da ANP Revenda 
-            (${analiseExterna.melhorQtd.toLocaleString('pt-BR')} abastecimentos no período).
+            (${analiseExterna.melhorQtd.toLocaleString('pt-BR')} transações no período).
           </p>
         </div>
       </div>
@@ -141,7 +141,7 @@ function gerarInsightsInteligentes(analiseExterna, analiseInterna, analiseSpread
           <p class="mb-0 text-muted" style="font-size: 0.78rem;">
             A praça da <strong>${analiseExterna.piorUf}</strong> encerrou o período acumulando 
             <strong class="text-danger">+${analiseExterna.piorVar.toFixed(2).replace('.', ',')}%</strong> acima da ANP 
-            (${analiseExterna.piorQtd.toLocaleString('pt-BR')} abastecimentos). Ponto crítico para revisão imediata de acordos e postos homologados.
+            (${analiseExterna.piorQtd.toLocaleString('pt-BR')} transações). Ponto crítico para revisão imediata de acordos e postos homologados.
           </p>
         </div>
       </div>
@@ -201,7 +201,6 @@ function gerarInsightsInteligentes(analiseExterna, analiseInterna, analiseSpread
   `;
 }
 
-// Identifica a chave interna discriminando SP entre Barueri e Ribeirão Preto
 function obterChaveInternaUnidade(registro) {
   if (registro.TIPO_OPERACAO !== 'INTERNO') return registro.UF_POSTO;
   const uf = registro.UF_POSTO;
@@ -242,8 +241,8 @@ function obterPostoVilao(registros, chaveUnidade, mes, tipoOperacao, refAnp) {
   let maiorDesvioTotal = 0;
 
   regs.forEach(r => {
-    const preco = parseFloat(r.PRECO_MEDIO_MES || 0);
-    const litros = parseFloat(r.LITROS_MES || 0);
+    const preco = parseFloat(r.VALOR_UNITARIO || 0);
+    const litros = parseFloat(r.VOLUME_CICLO || 0);
     if (preco > refAnp && litros > 0) {
       const desvioReais = (preco - refAnp) * litros;
       if (desvioReais > maiorDesvioTotal) {
@@ -284,56 +283,57 @@ async function calcularMatrizesGerenciais(registros) {
 
   const ufsExterno = [...new Set(registros.filter(r => r.TIPO_OPERACAO === 'EXTERNO').map(r => r.UF_POSTO).filter(Boolean))].sort();
 
-  // Lista de unidades internas discriminando SP
   const chavesInternasSet = new Set();
   registros.filter(r => r.TIPO_OPERACAO === 'INTERNO').forEach(r => {
     chavesInternasSet.add(obterChaveInternaUnidade(r));
   });
 
-  // Ordena mantendo UFs padrão e abrindo SP_BAR e SP_RP no final
   const chavesInterno = [...chavesInternasSet].sort((a, b) => {
     if (a.startsWith('SP_') && !b.startsWith('SP_')) return 1;
     if (!a.startsWith('SP_') && b.startsWith('SP_')) return -1;
     return a.localeCompare(b);
   });
 
+  // Novo motor de Agregação (Média Ponderada Real)
   const dadosAgrupados = {};
 
   registros.forEach(r => {
     const chaveUnidade = r.TIPO_OPERACAO === 'INTERNO' ? obterChaveInternaUnidade(r) : r.UF_POSTO;
     const chave = `${chaveUnidade}_${r.MES_ANO}_${r.TIPO_OPERACAO}`;
     if (!dadosAgrupados[chave]) {
-      dadosAgrupados[chave] = { somaPonderadaTransacoes: 0, totalAbastecimentos: 0 };
+      dadosAgrupados[chave] = { somaValor: 0, somaVolume: 0, totalAbastecimentos: 0 };
     }
 
-    const preco = parseFloat(r.PRECO_MEDIO_MES || 0);
+    const volume = parseFloat(r.VOLUME_CICLO || 0);
+    const valorTotal = parseFloat(r.VALOR_TOTAL_CICLO || 0);
     const qtd = parseInt(r.QTD_ABASTECIMENTOS || 0, 10);
 
-    if (preco > 0 && qtd > 0) {
-      dadosAgrupados[chave].somaPonderadaTransacoes += (preco * qtd);
+    if (volume > 0 && valorTotal > 0) {
+      dadosAgrupados[chave].somaValor += valorTotal;
+      dadosAgrupados[chave].somaVolume += volume;
       dadosAgrupados[chave].totalAbastecimentos += qtd;
     }
   });
 
   function getPrecoMedioSimples(chaveUnidade, mes, tipo) {
     const d = dadosAgrupados[`${chaveUnidade}_${mes}_${tipo}`];
-    if (!d || d.totalAbastecimentos === 0) return null;
-    return d.somaPonderadaTransacoes / d.totalAbastecimentos;
+    if (!d || d.somaVolume === 0) return null;
+    return d.somaValor / d.somaVolume;
   }
 
   function getTotalUfSimples(chaveUnidade, tipo) {
-    let somaTotal = 0;
-    let qtdTotal = 0;
+    let somaValor = 0;
+    let somaVolume = 0;
 
     mesesColunas.forEach(m => {
       const d = dadosAgrupados[`${chaveUnidade}_${m.id}_${tipo}`];
-      if (d && d.totalAbastecimentos > 0) {
-        somaTotal += d.somaPonderadaTransacoes;
-        qtdTotal += d.totalAbastecimentos;
+      if (d && d.somaVolume > 0) {
+        somaValor += d.somaValor;
+        somaVolume += d.somaVolume;
       }
     });
 
-    return qtdTotal > 0 ? (somaTotal / qtdTotal) : null;
+    return somaVolume > 0 ? (somaValor / somaVolume) : null;
   }
 
   function getQtdTotalUf(chaveUnidade, tipo) {
@@ -345,9 +345,11 @@ async function calcularMatrizesGerenciais(registros) {
     return qtdTotal;
   }
 
+  // ATENÇÃO: As tabelas HTML abaixo receberam o atributo style="white-space: nowrap;" na tag <table>
+
   // 1. MATRIZ EXECUTIVA EXTERNA (ROTA POR UF)
   let htmlExterna = `
-    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.72rem;">
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.72rem; white-space: nowrap;">
       <thead class="table-light">
         <tr>
           <th style="width: 48px; background-color: #f8fafc;">UF</th>
@@ -434,7 +436,7 @@ async function calcularMatrizesGerenciais(registros) {
 
   // 2. MATRIZ EXECUTIVA INTERNA (DIVIDINDO SP EM BARUERI E RIB. PRETO)
   let htmlInterna = `
-    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.72rem;">
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.72rem; white-space: nowrap;">
       <thead class="table-light">
         <tr>
           <th style="min-width: 80px; background-color: #f8fafc;">Filial / UF</th>
@@ -498,7 +500,7 @@ async function calcularMatrizesGerenciais(registros) {
 
   // 3. MATRIZ EXECUTIVA DE SPREAD (DIVIDINDO SP EM BARUERI E RIB. PRETO)
   let htmlSpread = `
-    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.72rem;">
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.72rem; white-space: nowrap;">
       <thead class="table-light">
         <tr>
           <th style="min-width: 80px; background-color: #f8fafc;">Filial / UF</th>
@@ -576,7 +578,7 @@ async function calcularMatrizesGerenciais(registros) {
 
   // CHECAGEM 1: Custo Médio Externo Pago (R$/L)
   let htmlCheckPago = `
-    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem;">
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem; white-space: nowrap;">
       <thead class="table-dark">
         <tr>
           <th style="width: 45px;">UF</th>
@@ -602,7 +604,7 @@ async function calcularMatrizesGerenciais(registros) {
   // CHECAGEM 2: Custo Médio ANP Revenda (R$/L)
   const ufsAnpRevenda = Object.keys(mapaRevenda).sort();
   let htmlCheckAnp = `
-    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem;">
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem; white-space: nowrap;">
       <thead class="table-dark">
         <tr>
           <th style="width: 45px;">UF</th>
@@ -627,9 +629,9 @@ async function calcularMatrizesGerenciais(registros) {
   });
   htmlCheckAnp += `</tbody></table>`;
 
-  // CHECAGEM 3: Custo Médio Interno Pago (R$/L) - COM BARUERI E RIBEIRÃO PRETO
+  // CHECAGEM 3: Custo Médio Interno Pago (R$/L)
   let htmlCheckInternoPago = `
-    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem;">
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem; white-space: nowrap;">
       <thead class="table-dark">
         <tr>
           <th style="min-width: 80px;">Filial / UF</th>
@@ -656,7 +658,7 @@ async function calcularMatrizesGerenciais(registros) {
   // CHECAGEM 4: Custo Médio ANP Distribuição (R$/L)
   const ufsAnpDist = Object.keys(mapaDistribuicao).sort();
   let htmlCheckAnpDist = `
-    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem;">
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.70rem; white-space: nowrap;">
       <thead class="table-dark">
         <tr>
           <th style="width: 45px;">UF</th>
