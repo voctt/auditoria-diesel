@@ -153,13 +153,14 @@ function renderizarAbaAuditoriaComercial() {
     let precoBaseHistorico = 0;
 
     regsPosto.forEach(r => {
-      const p = parseFloat(r.ULTIMO_PRECO_MES || r.PRECO_MEDIO_MES || 0);
-      const v = parseFloat(r.LITROS_MES || 0);
-      if (r.ULTIMA_DATA_MES && r.ULTIMA_DATA_MES > dataUltimoBomba) {
-        dataUltimoBomba = r.ULTIMA_DATA_MES;
+      const p = parseFloat(r.VALOR_UNITARIO || 0);
+      const v = parseFloat(r.VOLUME_CICLO || 0);
+      
+      if (r.DATA_FIM_CICLO && r.DATA_FIM_CICLO > dataUltimoBomba) {
+        dataUltimoBomba = r.DATA_FIM_CICLO;
         ultimoPrecoBomba = p;
       }
-      if (trat.vigencia && r.ULTIMA_DATA_MES && r.ULTIMA_DATA_MES.substring(0, 10) >= trat.vigencia) {
+      if (trat.vigencia && r.DATA_FIM_CICLO && r.DATA_FIM_CICLO.substring(0, 10) >= trat.vigencia) {
         volumeAuditado += v;
       } else {
         precoBaseHistorico = p;
@@ -250,8 +251,8 @@ function renderizarAbaAuditoriaComercial() {
 
     // Ordenação cronológica estrita da gaveta micro (Mais recente para o mais antigo)
     const historicoOrdenado = [...regsPosto].sort((a, b) => {
-      const dtA = a.ULTIMA_DATA_MES || "";
-      const dtB = b.ULTIMA_DATA_MES || "";
+      const dtA = a.DATA_FIM_CICLO || "";
+      const dtB = b.DATA_FIM_CICLO || "";
       return dtB.localeCompare(dtA);
     });
 
@@ -386,16 +387,15 @@ function renderizarAbaAuditoriaComercial() {
     let linhasMicroHtml = "";
     if (Array.isArray(p.historicoTransacoes) && p.historicoTransacoes.length > 0) {
       linhasMicroHtml = p.historicoTransacoes.map(t => {
-        const pMes = parseFloat(t.PRECO_MEDIO_MES || 0);
-        const ultMes = parseFloat(t.ULTIMO_PRECO_MES || 0);
-        const lts = parseFloat(t.LITROS_MES || 0);
-        const dtFmt = formatarDataDiaMes(t.ULTIMA_DATA_MES);
-        const ehPos = (p.vigencia && t.ULTIMA_DATA_MES && t.ULTIMA_DATA_MES.substring(0, 10) >= p.vigencia);
+        const valorUnitario = parseFloat(t.VALOR_UNITARIO || 0);
+        const lts = parseFloat(t.VOLUME_CICLO || 0);
+        const dtFmt = formatarDataDiaMes(t.DATA_FIM_CICLO);
+        const ehPos = (p.vigencia && t.DATA_FIM_CICLO && t.DATA_FIM_CICLO.substring(0, 10) >= p.vigencia);
         
         const anpMes = (typeof anpRevenda !== 'undefined' && anpRevenda[p.uf] && anpRevenda[p.uf][t.MES_ANO]) 
           ? anpRevenda[p.uf][t.MES_ANO] 
           : p.refAnpValor;
-        const diffAnp = (pMes > 0 && anpMes > 0) ? (pMes - anpMes) : 0;
+        const diffAnp = (valorUnitario > 0 && anpMes > 0) ? (valorUnitario - anpMes) : 0;
         const savingMicro = diffAnp < 0 ? Math.abs(diffAnp * lts) : 0;
 
         return `
@@ -403,8 +403,8 @@ function renderizarAbaAuditoriaComercial() {
             <td class="font-monospace text-dark fw-bold">${t.MES_ANO}</td>
             <td class="font-monospace text-muted">${dtFmt}</td>
             <td class="text-end font-monospace">${Math.round(lts).toLocaleString('pt-BR')} L</td>
-            <td class="text-end font-monospace fw-bold text-dark">R$ ${pMes.toFixed(3)}</td>
-            <td class="text-end font-monospace text-secondary">R$ ${ultMes.toFixed(3)}</td>
+            <td class="text-end font-monospace fw-bold text-dark">R$ ${valorUnitario.toFixed(3)}</td>
+            <td class="text-end font-monospace text-secondary">R$ ${valorUnitario.toFixed(3)}</td>
             <td class="text-end font-monospace text-primary">${anpMes > 0 ? `R$ ${anpMes.toFixed(3)}` : '--'}</td>
             <td class="text-center">${ehPos ? '<span class="badge bg-success" style="font-size:0.55rem;">PÓS-ACORDO</span>' : '<span class="badge bg-secondary" style="font-size:0.55rem;">PRÉ-ACORDO</span>'}</td>
             <td class="text-end font-monospace ${diffAnp < 0 ? 'text-success fw-bold' : 'text-danger'}">
