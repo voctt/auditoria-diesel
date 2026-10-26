@@ -420,13 +420,13 @@ function processarPainel() {
     baseCalculoGeral = registros.filter(d => d.MES_ANO === mesSel);
   }
 
-  // 1. Tabela Sintética de Conferência
+  // 1. Tabela Sintética de Conferência (Agora soma os ciclos)
   let qtdRota = 0, volRota = 0, gastoRota = 0;
   let qtdInterno = 0, volInterno = 0, gastoInterno = 0;
 
   baseCalculoGeral.forEach(d => {
-    const l = parseFloat(d.LITROS_MES || 0);
-    const v = parseFloat(d.VALOR_TOTAL_MES || 0);
+    const l = parseFloat(d.VOLUME_CICLO || 0);
+    const v = parseFloat(d.VALOR_TOTAL_CICLO || 0);
     const q = parseInt(d.QTD_ABASTECIMENTOS || 0, 10);
 
     if (d.TIPO_OPERACAO === 'INTERNO') {
@@ -487,40 +487,41 @@ function processarPainel() {
   if (mesSel === 'YTD') {
     let maxDataGeral = "";
     baseCalculo.forEach(d => {
-      if (d.ULTIMA_DATA_MES > maxDataGeral) maxDataGeral = d.ULTIMA_DATA_MES;
+      if (d.DATA_FIM_CICLO > maxDataGeral) maxDataGeral = d.DATA_FIM_CICLO;
     });
     if (maxDataGeral) {
       const match = maxDataGeral.match(/(\d{4})-(\d{2})-(\d{2})/);
       if (match) {
         const dtCorte = new Date(new Date(`${match[1]}-${match[2]}-${match[3]}T12:00:00Z`).getTime() - (30 * 24 * 60 * 60 * 1000));
         const strCorte = dtCorte.toISOString().slice(0, 10);
-        amostraTempoLocal = baseCalculo.filter(d => (d.ULTIMA_DATA_MES || '').substring(0, 10) >= strCorte);
+        amostraTempoLocal = baseCalculo.filter(d => (d.DATA_FIM_CICLO || '').substring(0, 10) >= strCorte);
       }
     }
   }
 
   const melhorConcorrenteMunicipio = {};
   amostraTempoLocal.forEach(d => {
-    const preco = parseFloat(d.ULTIMO_PRECO_MES || d.PRECO_MEDIO_MES || 0);
+    const preco = parseFloat(d.VALOR_UNITARIO || 0);
     const mun = normalizarTexto(d.MUNICIPIO_POSTO);
     if (preco > 0 && mun && d.TIPO_OPERACAO === 'EXTERNO') {
       if (!melhorConcorrenteMunicipio[mun] || preco < melhorConcorrenteMunicipio[mun].preco) {
         melhorConcorrenteMunicipio[mun] = {
           posto: d.POSTO,
           preco: preco,
-          data: d.ULTIMA_DATA_MES
+          data: d.DATA_FIM_CICLO
         };
       }
     }
   });
 
+  // Agregação dos ciclos por posto
   baseCalculo.forEach(d => {
     const chave = d.TIPO_OPERACAO === 'INTERNO' 
       ? `${d.POSTO}_${d.UF_POSTO}_${d.MUNICIPIO_POSTO}` 
       : `${d.POSTO}_${d.UF_POSTO}`;
 
-    const litros = parseFloat(d.LITROS_MES || 0);
-    const valor = parseFloat(d.VALOR_TOTAL_MES || 0);
+    const litros = parseFloat(d.VOLUME_CICLO || 0);
+    const valor = parseFloat(d.VALOR_TOTAL_CICLO || 0);
 
     somaLitrosCards += litros;
     somaGastoCards += valor;
@@ -533,8 +534,8 @@ function processarPainel() {
         TIPO_OPERACAO: d.TIPO_OPERACAO,
         LITROS_TOTAL: 0,
         VALOR_TOTAL: 0,
-        ULTIMO_PRECO: parseFloat(d.ULTIMO_PRECO_MES || 0),
-        DATA_MAIS_RECENTE: d.ULTIMA_DATA_MES,
+        ULTIMO_PRECO: parseFloat(d.VALOR_UNITARIO || 0),
+        DATA_MAIS_RECENTE: d.DATA_FIM_CICLO || "",
         MES_MAIS_RECENTE: d.MES_ANO
       };
     }
@@ -542,22 +543,24 @@ function processarPainel() {
     postosMap[chave].LITROS_TOTAL += litros;
     postosMap[chave].VALOR_TOTAL += valor;
 
-    if (d.ULTIMA_DATA_MES > postosMap[chave].DATA_MAIS_RECENTE) {
-      postosMap[chave].DATA_MAIS_RECENTE = d.ULTIMA_DATA_MES;
-      postosMap[chave].ULTIMO_PRECO = parseFloat(d.ULTIMO_PRECO_MES || 0);
+    if ((d.DATA_FIM_CICLO || "") > postosMap[chave].DATA_MAIS_RECENTE) {
+      postosMap[chave].DATA_MAIS_RECENTE = d.DATA_FIM_CICLO;
+      postosMap[chave].ULTIMO_PRECO = parseFloat(d.VALOR_UNITARIO || 0);
       postosMap[chave].MES_MAIS_RECENTE = d.MES_ANO;
     }
   });
 
   const listaPostos = Object.values(postosMap).map(p => {
     let precoMedioExibicao = 0;
-
+    
     if (mesSel === 'YTD') {
-      const regVigente = baseRegistrosMensais.find(r => 
+      const ciclosVigentes = baseRegistrosMensais.filter(r => 
         r.POSTO === p.POSTO && r.UF_POSTO === p.UF_POSTO && r.MES_ANO === p.MES_MAIS_RECENTE &&
         (p.TIPO_OPERACAO !== 'INTERNO' || r.MUNICIPIO_POSTO === p.MUNICIPIO_POSTO)
       );
-      precoMedioExibicao = regVigente ? parseFloat(regVigente.PRECO_MEDIO_MES || 0) : 0;
+      const litMes = ciclosVigentes.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0);
+      const valMes = ciclosVigentes.reduce((acc, c) => acc + parseFloat(c.VALOR_TOTAL_CICLO || 0), 0);
+      precoMedioExibicao = litMes > 0 ? (valMes / litMes) : 0;
     } else {
       precoMedioExibicao = p.LITROS_TOTAL > 0 ? (p.VALOR_TOTAL / p.LITROS_TOTAL) : 0;
     }
@@ -605,8 +608,8 @@ function processarPainel() {
   let precoMedioCard = 0;
   if (mesSel === 'YTD') {
     const regsMesRecente = registrosModo.filter(d => d.MES_ANO === mesMaisRecenteGeral);
-    const litRec = regsMesRecente.reduce((acc, c) => acc + parseFloat(c.LITROS_MES || 0), 0);
-    const valRec = regsMesRecente.reduce((acc, c) => acc + parseFloat(c.VALOR_TOTAL_MES || 0), 0);
+    const litRec = regsMesRecente.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0);
+    const valRec = regsMesRecente.reduce((acc, c) => acc + parseFloat(c.VALOR_TOTAL_CICLO || 0), 0);
     precoMedioCard = litRec > 0 ? (valRec / litRec) : 0;
   } else {
     precoMedioCard = somaLitrosCards > 0 ? (somaGastoCards / somaLitrosCards) : 0;
@@ -624,7 +627,6 @@ function processarPainel() {
       : "R$ 0,000";
   }
 
-  // TOP 3 POSTOS COM PRIORIDADE DE AÇÃO
   const postosComDesvio = listaPostos
     .filter(p => p.TIPO_OPERACAO === 'EXTERNO' && p.IMPACTO_REAIS > 0)
     .sort((a, b) => b.IMPACTO_REAIS - a.IMPACTO_REAIS)
@@ -664,7 +666,7 @@ function renderizarSparklineVolumeCard(mesesDisponiveis, registros) {
 
   const dadosVolume = mesesDisponiveis.map(m => {
     const regs = registros.filter(r => r.MES_ANO === m);
-    return Math.round(regs.reduce((acc, c) => acc + parseFloat(c.LITROS_MES || 0), 0));
+    return Math.round(regs.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0));
   });
 
   if (sparkVolumeCardInstance) {
@@ -701,14 +703,14 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
 
   if (!containerMaior || !containerMenor) return;
 
-  let amostra = todosRegistros.filter(d => parseFloat(d.ULTIMO_PRECO_MES || 0) > 0 && d.ULTIMA_DATA_MES);
+  let amostra = todosRegistros.filter(d => parseFloat(d.VALOR_UNITARIO || 0) > 0 && d.DATA_FIM_CICLO);
 
   if (mesSel !== 'YTD') {
     amostra = amostra.filter(d => d.MES_ANO === mesSel);
   } else {
     let maxDataStr = "";
     amostra.forEach(d => {
-      if (d.ULTIMA_DATA_MES > maxDataStr) maxDataStr = d.ULTIMA_DATA_MES;
+      if (d.DATA_FIM_CICLO > maxDataStr) maxDataStr = d.DATA_FIM_CICLO;
     });
 
     if (maxDataStr) {
@@ -717,7 +719,7 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
         const maxDate = new Date(`${match[1]}-${match[2]}-${match[3]}T12:00:00Z`);
         const dataCorte = new Date(maxDate.getTime() - (20 * 24 * 60 * 60 * 1000));
         const dataCorteStr = dataCorte.toISOString().slice(0, 10);
-        amostra = amostra.filter(d => (d.ULTIMA_DATA_MES || '').substring(0, 10) >= dataCorteStr);
+        amostra = amostra.filter(d => (d.DATA_FIM_CICLO || '').substring(0, 10) >= dataCorteStr);
       }
     }
   }
@@ -727,20 +729,20 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
     let maxReg = lista[0];
     let minReg = lista[0];
     lista.forEach(item => {
-      const p = parseFloat(item.ULTIMO_PRECO_MES);
-      if (p > parseFloat(maxReg.ULTIMO_PRECO_MES)) maxReg = item;
-      if (p < parseFloat(minReg.ULTIMO_PRECO_MES)) minReg = item;
+      const p = parseFloat(item.VALOR_UNITARIO);
+      if (p > parseFloat(maxReg.VALOR_UNITARIO)) maxReg = item;
+      if (p < parseFloat(minReg.VALOR_UNITARIO)) minReg = item;
     });
     return {
       max: {
         uf: maxReg.UF_POSTO,
         posto: identificarNomePonto(maxReg.POSTO, maxReg.MUNICIPIO_POSTO, maxReg.UF_POSTO, maxReg.TIPO_OPERACAO),
-        preco: parseFloat(maxReg.ULTIMO_PRECO_MES)
+        preco: parseFloat(maxReg.VALOR_UNITARIO)
       },
       min: {
         uf: minReg.UF_POSTO,
         posto: identificarNomePonto(minReg.POSTO, minReg.MUNICIPIO_POSTO, minReg.UF_POSTO, minReg.TIPO_OPERACAO),
-        preco: parseFloat(minReg.ULTIMO_PRECO_MES)
+        preco: parseFloat(minReg.VALOR_UNITARIO)
       }
     };
   }
@@ -858,7 +860,8 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     if (p.REF_ANP > 0) {
       const sinal = p.GAP_MERCADO >= 0 ? "+" : "-";
       const corGap = p.GAP_MERCADO > 0.05 ? "text-danger" : "text-success";
-      gapHtml = `<span class="${corGap} fw-bold small">${sinal}R$ ${Math.abs(p.GAP_MERCADO).toFixed(3)} (${sinal}${Math.abs(p.GAP_PERC).toFixed(1)}%)</span>`;
+      // Correção da máscara monetária com toLocaleString para utilizar vírgula
+      gapHtml = `<span class="${corGap} fw-bold small">${sinal}R$ ${Math.abs(p.GAP_MERCADO).toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} (${sinal}${Math.abs(p.GAP_PERC).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)</span>`;
     }
 
     let impactoHtml = `<span class="text-muted small">R$ 0,00</span>`;
@@ -871,8 +874,8 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
 
     let tagDispersao = "";
     if (p.DIFF_LOCAL > 0) {
-      const titleTexto = `Opção mais barata no mesmo período: ${p.NOME_MELHOR_LOCAL} a R$ ${p.PRECO_MELHOR_LOCAL.toFixed(2)}`;
-      tagDispersao = `<span class="badge-dispersao-local" title="${titleTexto}">Opção local -R$ ${p.DIFF_LOCAL.toFixed(2)}</span>`;
+      const titleTexto = `Opção mais barata no mesmo período: ${p.NOME_MELHOR_LOCAL} a R$ ${p.PRECO_MELHOR_LOCAL.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+      tagDispersao = `<span class="badge-dispersao-local" title="${titleTexto}">Opção local -R$ ${p.DIFF_LOCAL.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
     }
 
     const dataUltimoFormatada = formatarDataDiaMes(p.DATA_MAIS_RECENTE);
@@ -882,14 +885,22 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     const dadosAnpMes = [];
 
     mesesDisponiveis.forEach((m, mIdx) => {
-      const reg = baseRegistrosMensais.find(r => 
+      // Agrupa os ciclos do posto no mês específico para achar o Preço Médio ponderado daquele mês para o gráfico
+      const ciclosMes = baseRegistrosMensais.filter(r => 
         r.POSTO === p.POSTO && r.UF_POSTO === p.UF_POSTO && r.MES_ANO === m &&
         (p.TIPO_OPERACAO !== 'INTERNO' || r.MUNICIPIO_POSTO === p.MUNICIPIO_POSTO)
       );
-      const precoKmm = reg ? parseFloat(reg.PRECO_MEDIO_MES || 0) : null;
-      if (precoKmm > 0) {
+      
+      let precoKmmMes = null;
+      if (ciclosMes.length > 0) {
+        const litrosMes = ciclosMes.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0);
+        const valorMes = ciclosMes.reduce((acc, c) => acc + parseFloat(c.VALOR_TOTAL_CICLO || 0), 0);
+        if (litrosMes > 0) precoKmmMes = (valorMes / litrosMes);
+      }
+
+      if (precoKmmMes > 0) {
         indicesAbastecidos.push(mIdx);
-        dadosKmmMes.push(parseFloat(precoKmm.toFixed(3)));
+        dadosKmmMes.push(parseFloat(precoKmmMes.toFixed(3)));
       } else {
         dadosKmmMes.push(null);
       }
@@ -918,8 +929,17 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
 
     const card = document.createElement('div');
     card.className = `card-posto-termometro ${ehZebrado}`;
+    
+    // Tratamento de destruição do tooltip fantasma ao tirar o mouse do card
+    card.addEventListener('mouseleave', () => {
+      const tooltips = document.querySelectorAll('.apexcharts-tooltip');
+      tooltips.forEach(t => {
+        t.style.opacity = '0';
+        t.classList.remove('apexcharts-active');
+      });
+    });
+
     card.innerHTML = `
-      <!-- COLUNA 1: IDENTIFICAÇÃO -->
       <div class="col-posto-identificacao">
         <span class="badge-uf">${p.UF_POSTO || '--'}</span>
         <div style="min-width: 0;">
@@ -933,13 +953,11 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
         </div>
       </div>
 
-      <!-- COLUNA 2: LINHA DO TEMPO -->
       <div class="col-posto-grafico">
         ${marcadoresLinhasHtml}
         <div id="${chartDomId}" style="width: 100%; height: 100%;"></div>
       </div>
 
-      <!-- COLUNA 3: MÉTRICAS INTEGRADAS -->
       <div class="col-posto-metricas">
         <div class="col-m-vol">
           <div class="small text-muted text-uppercase" style="font-size: 0.58rem; font-weight: 800;">Volume</div>
@@ -956,7 +974,7 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
         <div class="col-m-anp">
           <div class="small text-muted text-uppercase" style="font-size: 0.58rem; font-weight: 800;">Ref. ANP</div>
           <div class="font-monospace text-secondary fw-semibold" style="font-size: 0.78rem;">
-            ${p.REF_ANP > 0 ? "R$ " + p.REF_ANP.toFixed(3) : "--"}
+            ${p.REF_ANP > 0 ? "R$ " + p.REF_ANP.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3}) : "--"}
           </div>
         </div>
 
@@ -1025,7 +1043,7 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
         },
         y: {
           formatter: function(val) {
-            return val ? `R$ ${val.toFixed(3)}` : "Sem reg.";
+            return val ? `R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}` : "Sem reg.";
           }
         }
       }
