@@ -271,6 +271,27 @@ function calcularDistanciaKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+// Lógica de Auditoria Temporal do Preço (+30 dias)
+function verificarSePrecoDesatualizado(dataString) {
+  if (!dataString) return true;
+  
+  let dt = new Date(dataString);
+  if (isNaN(dt.getTime()) && dataString.includes('/')) {
+    const partes = dataString.split('/');
+    if (partes.length === 3) {
+      dt = new Date(`${partes[2]}-${partes[1]}-${partes[0]}T12:00:00`);
+    } else if (partes.length === 2) {
+      dt = new Date(`${partes[1]}-${partes[0]}-01T12:00:00`);
+    }
+  }
+  
+  if (isNaN(dt.getTime())) return true;
+  
+  const hoje = new Date();
+  const diferencaDias = (hoje - dt) / (1000 * 60 * 60 * 24);
+  return diferencaDias > 30;
+}
+
 // -------------------------------------------------------------------------
 // GEOCODIFICAÇÃO AUTOMÁTICA (Nominatim)
 // -------------------------------------------------------------------------
@@ -278,17 +299,14 @@ async function obterCoordenadasNominatim(municipio, uf) {
   if (!municipio || !uf) return null;
   const chave = `${normalizarTextoBusca(municipio)}_${normalizarTextoBusca(uf)}`;
   
-  // 1. Tenta buscar no cidades.js (rápido e offline)
   const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
   const achadaLocal = listaCidadesRef.find(c => normalizarTextoBusca(c.nome).includes(normalizarTextoBusca(municipio)));
   if (achadaLocal) return { lat: achadaLocal.lat, lon: achadaLocal.lon };
 
-  // 2. Tenta buscar no cache da sessão
   if (cacheGeocodificacao[chave] !== undefined) return cacheGeocodificacao[chave];
 
-  // 3. Busca no OpenStreetMap
   try {
-    await new Promise(r => setTimeout(r, 600)); // Previne bloqueio da API pública
+    await new Promise(r => setTimeout(r, 600)); 
     const query = encodeURIComponent(`${municipio}, ${uf}, Brasil`);
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`;
     const resp = await fetch(url, { headers: { 'User-Agent': 'VOCTT-Logistics-Consulting/1.0' } });
@@ -600,7 +618,7 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
 };
 
 // -------------------------------------------------------------------------
-// NOVA FUNÇÃO: PLOTAGEM DE POSTOS NA ROTA (ASYNC)
+// PLOTAGEM DE POSTOS NA ROTA (ASYNC)
 // -------------------------------------------------------------------------
 async function plotarPostosComDuploRaio(routeCoords) {
   if (!leafletMapInstance) return;
@@ -643,7 +661,6 @@ async function plotarPostosComDuploRaio(routeCoords) {
     amostraRota.push(routeCoords[i]);
   }
 
-  // Previne cliques enquanto busca as coordenadas
   const btnRota = document.querySelector('button[onclick="calcularRotaLeaflet()"]');
   const textoOriginalBtn = btnRota ? btnRota.innerHTML : '';
   if (btnRota) {
@@ -664,10 +681,14 @@ async function plotarPostosComDuploRaio(routeCoords) {
     }
 
     if (menorDist <= 400) {
+      const isDesatualizado = verificarSePrecoDesatualizado(p.data);
       let corPin = "#94a3b8";
       let statusTexto = "Posto em Raio Expandido de Apoio";
 
-      if (menorDist <= 200) {
+      if (isDesatualizado) {
+        corPin = "#475569";
+        statusTexto = "POSTO DESATUALIZADO";
+      } else if (menorDist <= 200) {
         corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
         statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
       }
@@ -691,6 +712,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
         Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b><br>
         Tipo: ${p.tipo}<br>
         Status: <b>${statusTexto}</b><br>
+        ${isDesatualizado ? `<span class="small text-danger">Data do Registro: ${p.data || 'Indisponível'}</span><br>` : ''}
         <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota</span>
         <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${p.municipio.replace(/'/g, "\\'")}', ${coords.lat}, ${coords.lon})">
           ➕ Incluir na Rota
@@ -702,7 +724,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
       if (menorDist <= 200) {
         postosSugeridosUltimaRota.push({
           posto: p.posto, cidade: `${p.municipio}/${p.uf}`, preco: p.preco,
-          distancia: Math.round(menorDist), tipo: p.tipo
+          distancia: Math.round(menorDist), tipo: p.tipo, desatualizado: isDesatualizado
         });
       }
     }
@@ -720,12 +742,11 @@ async function plotarPostosComDuploRaio(routeCoords) {
 }
 
 // -------------------------------------------------------------------------
-// NOVA FUNÇÃO: FILTRO LIVRE POR ESTADO DIRETAMENTE NO ROTEIRIZADOR
+// FILTRO LIVRE POR ESTADO DIRETAMENTE NO ROTEIRIZADOR
 // -------------------------------------------------------------------------
 window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   if (!leafletMapInstance) return;
 
-  // Limpa rotas e pontos se existirem
   if (routingControlInstance) {
     leafletMapInstance.removeControl(routingControlInstance);
     routingControlInstance = null;
@@ -737,7 +758,6 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   markersWaypoints = [];
   postosSugeridosUltimaRota = [];
 
-  // Limpa caixas de texto
   document.querySelectorAll('.input-cidade-rota').forEach(el => el.value = '');
   document.querySelectorAll('.hidden-coord-rota').forEach(el => el.value = '');
 
@@ -788,8 +808,17 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
     const coords = await obterCoordenadasNominatim(p.municipio, p.uf);
     if (!coords) continue;
 
-    let corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
-    let statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
+    const isDesatualizado = verificarSePrecoDesatualizado(p.data);
+    let corPin = "#94a3b8";
+    let statusTexto = "";
+
+    if (isDesatualizado) {
+      corPin = "#475569";
+      statusTexto = "POSTO DESATUALIZADO";
+    } else {
+      corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
+      statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
+    }
 
     let raioDinamico = 6;
     if (p.volumeTotal > 50000) raioDinamico = 13;
@@ -805,6 +834,7 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
       Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b><br>
       Tipo: ${p.tipo}<br>
       Status: <b>${statusTexto}</b><br>
+      ${isDesatualizado ? `<span class="small text-danger">Data do Registro: ${p.data || 'Indisponível'}</span><br>` : ''}
     `);
 
     markersPostosLeaflet.push(marker);
@@ -841,11 +871,12 @@ function imprimirRoteiroViagem() {
   `;
 
   postosSugeridosUltimaRota.forEach(p => {
+    const alertaPreco = p.desatualizado ? `<br><span style="color:#dc2626; font-size:0.7em;">(Preço Desatualizado)</span>` : '';
     htmlTabela += `
       <tr>
         <td><b>${p.posto}</b></td>
         <td>${p.cidade}</td>
-        <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+        <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} ${alertaPreco}</td>
         <td>${p.distancia} km</td>
         <td>${p.tipo}</td>
       </tr>
