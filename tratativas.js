@@ -606,7 +606,7 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
 
   // Controle de permissão RBAC
   const emailLogado = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.email : "";
-  const ehAdmin = emailLogado.toLowerCase().includes("willian");
+  const ehAdmin = emailLogado.toLowerCase().includes("willian") || emailLogado.toLowerCase().includes("thayane");
 
   const btnSalvar = document.getElementById('btnSalvarTratativa');
   const alertaPermissao = document.getElementById('alertaPermissaoTratativa');
