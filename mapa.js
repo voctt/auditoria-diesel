@@ -31,20 +31,17 @@ let markersWaypoints = [];
 let campoFocoAtivo = null;
 let postosSugeridosUltimaRota = [];
 
+// Cache de Geocodificação Automática
+const cacheGeocodificacao = {};
+
 // =========================================================================
 // 1. MINI MAPA LEAFLET: IDENTIDADE INSTITUCIONAL CARGOSOFT & VOCTT
 // =========================================================================
 
-/**
- * Remove acentuação e converte para maiúsculas para comparações seguras de texto.
- */
 function normalizarTextoComparacao(txt) {
   return (txt || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
 }
 
-/**
- * Converte qualquer variação de nome ou sigla da feature GeoJSON na UF de 2 letras da base KMM.
- */
 function extrairSiglaUf(props) {
   if (!props) return "";
   if (props.sigla && props.sigla.length === 2) return props.sigla.toUpperCase();
@@ -55,9 +52,6 @@ function extrairSiglaUf(props) {
   return DE_PARA_NOMES_UFS[nomeLimpo] || (nomeLimpo.length === 2 ? nomeLimpo : "");
 }
 
-/**
- * Inicializa a instância do Mini Mapa Leaflet do Brasil.
- */
 async function inicializarMiniMapaBrasil() {
   const mapContainer = document.getElementById('miniMapaBrasil');
   if (!mapContainer || miniMapaLeaflet) return;
@@ -84,9 +78,6 @@ async function inicializarMiniMapaBrasil() {
   }
 }
 
-/**
- * Paleta de cores alinhada à identidade visual Cargosoft (#1c483a) e VOCTT (#062316 / #22c55e).
- */
 function obterCorPorVolume(vol) {
   if (!vol || vol === 0) return '#e2e8f0';
   if (vol < 50000) return '#4ade80';
@@ -96,9 +87,6 @@ function obterCorPorVolume(vol) {
   return '#062316';
 }
 
-/**
- * Monta o conteúdo HTML do resumo de abastecimento para o tooltip.
- */
 function gerarConteudoTooltipUf(uf) {
   const mesSel = document.getElementById('filtroMesAno') ? document.getElementById('filtroMesAno').value : 'YTD';
   let regs = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
@@ -170,9 +158,6 @@ function gerarConteudoTooltipUf(uf) {
   `;
 }
 
-/**
- * Atualiza os polígonos, contornos e o enquadramento do Mini Mapa.
- */
 function atualizarCoresMiniMapa() {
   if (!miniMapaLeaflet || !dadosGeoJsonBr) return;
 
@@ -269,7 +254,7 @@ function atualizarCoresMiniMapa() {
 }
 
 // =========================================================================
-// 2. ROTEIRIZADOR DE POSTOS (LEAFLET + AUTOCOMPLETE + CORREDORES DE ABASTECIMENTO)
+// 2. ROTEIRIZADOR DE POSTOS & FILTRO LIVRE
 // =========================================================================
 
 function normalizarTextoBusca(txt) {
@@ -284,6 +269,42 @@ function calcularDistanciaKm(lat1, lon1, lat2, lon2) {
             Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+// -------------------------------------------------------------------------
+// GEOCODIFICAÇÃO AUTOMÁTICA (Nominatim)
+// -------------------------------------------------------------------------
+async function obterCoordenadasNominatim(municipio, uf) {
+  if (!municipio || !uf) return null;
+  const chave = `${normalizarTextoBusca(municipio)}_${normalizarTextoBusca(uf)}`;
+  
+  // 1. Tenta buscar no cidades.js (rápido e offline)
+  const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
+  const achadaLocal = listaCidadesRef.find(c => normalizarTextoBusca(c.nome).includes(normalizarTextoBusca(municipio)));
+  if (achadaLocal) return { lat: achadaLocal.lat, lon: achadaLocal.lon };
+
+  // 2. Tenta buscar no cache da sessão
+  if (cacheGeocodificacao[chave] !== undefined) return cacheGeocodificacao[chave];
+
+  // 3. Busca no OpenStreetMap
+  try {
+    await new Promise(r => setTimeout(r, 600)); // Previne bloqueio da API pública
+    const query = encodeURIComponent(`${municipio}, ${uf}, Brasil`);
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'VOCTT-Logistics-Consulting/1.0' } });
+    const data = await resp.json();
+    
+    if (data && data.length > 0) {
+      const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      cacheGeocodificacao[chave] = coords;
+      return coords;
+    }
+  } catch(e) {
+    console.warn(`Aviso: Falha ao geocodificar ${municipio}-${uf}.`, e);
+  }
+  
+  cacheGeocodificacao[chave] = null;
+  return null;
 }
 
 function configurarAutocompletarItem(itemEl) {
@@ -342,7 +363,6 @@ function adicionarCampoParada() {
   const container = document.getElementById('containerPontosRota');
   const itens = container.querySelectorAll('.ponto-rota-item');
 
-  // Limite estendido para suportar até 10 pontos operacionais
   if (itens.length >= 10) {
     alert("Limite máximo de 10 pontos na rota atingido.");
     return;
@@ -538,19 +558,17 @@ function calcularRotaLeaflet() {
     }
   }).addTo(leafletMapInstance);
 
-  routingControlInstance.on('routesfound', function(e) {
+  routingControlInstance.on('routesfound', async function(e) {
     const routeCoords = e.routes[0].coordinates;
-    plotarPostosComDuploRaio(routeCoords);
+    await plotarPostosComDuploRaio(routeCoords);
   });
 }
 
-// Função global para adicionar posto diretamente do popup
 window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
   const container = document.getElementById('containerPontosRota');
   let itens = container.querySelectorAll('.ponto-rota-item');
   let campoVazio = null;
 
-  // Procura o primeiro campo sem coordenadas preenchidas
   for (let i = 0; i < itens.length; i++) {
     const h = itens[i].querySelector('.hidden-coord-rota');
     if (!h.value) {
@@ -559,13 +577,10 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
     }
   }
 
-  // Se não houver campo vazio, tenta criar um novo (até o limite de 10)
   if (!campoVazio) {
     if (itens.length < 10) {
       adicionarCampoParada();
       itens = container.querySelectorAll('.ponto-rota-item');
-      // O novo campo intermediário é injetado antes do destino. 
-      // Portanto, ele se torna o penúltimo item do array (length - 2).
       campoVazio = itens[itens.length - 2];
     } else {
       alert("Limite máximo de 10 pontos na rota atingido.");
@@ -573,7 +588,6 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
     }
   }
 
-  // Preenche o campo selecionado com os dados do posto clicado e traça a rota
   if (campoVazio) {
     const input = campoVazio.querySelector('.input-cidade-rota');
     const hidden = campoVazio.querySelector('.hidden-coord-rota');
@@ -585,16 +599,17 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
   }
 };
 
-function plotarPostosComDuploRaio(routeCoords) {
+// -------------------------------------------------------------------------
+// NOVA FUNÇÃO: PLOTAGEM DE POSTOS NA ROTA (ASYNC)
+// -------------------------------------------------------------------------
+async function plotarPostosComDuploRaio(routeCoords) {
   if (!leafletMapInstance) return;
   markersPostosLeaflet.forEach(m => leafletMapInstance.removeLayer(m));
   markersPostosLeaflet = [];
   postosSugeridosUltimaRota = [];
 
   const registrosRef = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
-  const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
 
-  // Deduplicação e Agregação de Volume (Soma de todos os ciclos)
   const mapaPostosConsolidado = {};
   registrosRef.forEach(d => {
     const nome = (d.POSTO || '').trim();
@@ -608,13 +623,8 @@ function plotarPostosComDuploRaio(routeCoords) {
 
     if (!mapaPostosConsolidado[chave]) {
       mapaPostosConsolidado[chave] = {
-        posto: d.POSTO,
-        municipio: mun,
-        uf: uf,
-        preco: preco,
-        tipo: d.TIPO_OPERACAO,
-        data: dataReg,
-        volumeTotal: volumeAtual
+        posto: d.POSTO, municipio: mun, uf: uf, preco: preco,
+        tipo: d.TIPO_OPERACAO, data: dataReg, volumeTotal: volumeAtual
       };
     } else {
       mapaPostosConsolidado[chave].volumeTotal += volumeAtual;
@@ -633,17 +643,23 @@ function plotarPostosComDuploRaio(routeCoords) {
     amostraRota.push(routeCoords[i]);
   }
 
-  postos.forEach(p => {
-    if (!p.municipio || p.municipio === 'ND') return;
+  // Previne cliques enquanto busca as coordenadas
+  const btnRota = document.querySelector('button[onclick="calcularRotaLeaflet()"]');
+  const textoOriginalBtn = btnRota ? btnRota.innerHTML : '';
+  if (btnRota) {
+     btnRota.disabled = true;
+     btnRota.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Mapeando postos...';
+  }
 
-    const achada = listaCidadesRef.find(c =>
-      normalizarTextoBusca(c.nome).includes(normalizarTextoBusca(p.municipio))
-    );
-    if (!achada) return;
+  for (const p of postos) {
+    if (!p.municipio || p.municipio === 'ND') continue;
+
+    const coords = await obterCoordenadasNominatim(p.municipio, p.uf);
+    if (!coords) continue;
 
     let menorDist = Infinity;
     for (const pt of amostraRota) {
-      const d = calcularDistanciaKm(achada.lat, achada.lon, pt.lat, pt.lng);
+      const d = calcularDistanciaKm(coords.lat, coords.lon, pt.lat, pt.lng);
       if (d < menorDist) menorDist = d;
     }
 
@@ -656,12 +672,11 @@ function plotarPostosComDuploRaio(routeCoords) {
         statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
       }
 
-      // Cálculo Dinâmico do Raio Baseado no Volume Consolidado
       let raioDinamico = 6;
       if (p.volumeTotal > 50000) raioDinamico = 13;
       else if (p.volumeTotal > 15000) raioDinamico = 9;
 
-      const marker = L.circleMarker([achada.lat, achada.lon], {
+      const marker = L.circleMarker([coords.lat, coords.lon], {
         radius: raioDinamico,
         fillColor: corPin,
         color: "#ffffff",
@@ -670,7 +685,6 @@ function plotarPostosComDuploRaio(routeCoords) {
         fillOpacity: 0.95
       }).addTo(leafletMapInstance);
 
-      // Injeção do Botão "Incluir na Rota" no Popup
       marker.bindPopup(`
         <strong style="color:#1c483a;">${p.posto}</strong><br>
         Cidade: ${p.municipio}/${p.uf}<br>
@@ -678,7 +692,7 @@ function plotarPostosComDuploRaio(routeCoords) {
         Tipo: ${p.tipo}<br>
         Status: <b>${statusTexto}</b><br>
         <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota</span>
-        <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${p.municipio.replace(/'/g, "\\'")}', ${achada.lat}, ${achada.lon})">
+        <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${p.municipio.replace(/'/g, "\\'")}', ${coords.lat}, ${coords.lon})">
           ➕ Incluir na Rota
         </button>
       `);
@@ -687,21 +701,120 @@ function plotarPostosComDuploRaio(routeCoords) {
 
       if (menorDist <= 200) {
         postosSugeridosUltimaRota.push({
-          posto: p.posto,
-          cidade: `${p.municipio}/${p.uf}`,
-          preco: p.preco,
-          distancia: Math.round(menorDist),
-          tipo: p.tipo
+          posto: p.posto, cidade: `${p.municipio}/${p.uf}`, preco: p.preco,
+          distancia: Math.round(menorDist), tipo: p.tipo
         });
       }
     }
-  });
+  }
 
   postosSugeridosUltimaRota.sort((a, b) => {
     if (a.distancia !== b.distancia) return a.distancia - b.distancia;
     return a.preco - b.preco;
   });
+
+  if (btnRota) {
+     btnRota.disabled = false;
+     btnRota.innerHTML = textoOriginalBtn;
+  }
 }
+
+// -------------------------------------------------------------------------
+// NOVA FUNÇÃO: FILTRO LIVRE POR ESTADO DIRETAMENTE NO ROTEIRIZADOR
+// -------------------------------------------------------------------------
+window.plotarPostosPorUfLivre = async function(ufSelecionada) {
+  if (!leafletMapInstance) return;
+
+  // Limpa rotas e pontos se existirem
+  if (routingControlInstance) {
+    leafletMapInstance.removeControl(routingControlInstance);
+    routingControlInstance = null;
+  }
+  
+  markersPostosLeaflet.forEach(m => leafletMapInstance.removeLayer(m));
+  markersPostosLeaflet = [];
+  markersWaypoints.forEach(m => leafletMapInstance.removeLayer(m));
+  markersWaypoints = [];
+  postosSugeridosUltimaRota = [];
+
+  // Limpa caixas de texto
+  document.querySelectorAll('.input-cidade-rota').forEach(el => el.value = '');
+  document.querySelectorAll('.hidden-coord-rota').forEach(el => el.value = '');
+
+  if (!ufSelecionada) {
+     leafletMapInstance.setView([-20.0, -48.0], 5);
+     return;
+  }
+
+  const registrosRef = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
+  const mapaPostosConsolidado = {};
+  
+  registrosRef.forEach(d => {
+    if((d.UF_POSTO || '').trim().toUpperCase() !== ufSelecionada) return;
+
+    const nome = (d.POSTO || '').trim();
+    const mun = (d.MUNICIPIO_POSTO || '').trim().toUpperCase();
+    const uf = (d.UF_POSTO || '').trim().toUpperCase();
+    const chave = `${nome}__${mun}__${uf}`;
+
+    const preco = parseFloat(d.VALOR_UNITARIO || d.ULTIMO_PRECO_MES || d.PRECO_MEDIO_MES || 0);
+    const dataReg = d.DATA_FIM_CICLO || d.ULTIMA_DATA_MES || d.MES_ANO || "";
+    const volumeAtual = parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0);
+
+    if (!mapaPostosConsolidado[chave]) {
+      mapaPostosConsolidado[chave] = {
+        posto: d.POSTO, municipio: mun, uf: uf, preco: preco,
+        tipo: d.TIPO_OPERACAO, data: dataReg, volumeTotal: volumeAtual
+      };
+    } else {
+      mapaPostosConsolidado[chave].volumeTotal += volumeAtual;
+      if (dataReg && dataReg > mapaPostosConsolidado[chave].data) {
+        mapaPostosConsolidado[chave].data = dataReg;
+        mapaPostosConsolidado[chave].preco = preco;
+      }
+    }
+  });
+
+  const postos = Object.values(mapaPostosConsolidado);
+  if (postos.length === 0) {
+    alert("Nenhum posto encontrado para a UF selecionada neste período.");
+    return;
+  }
+
+  const bounds = L.latLngBounds();
+
+  for (const p of postos) {
+    if (!p.municipio || p.municipio === 'ND') continue;
+    const coords = await obterCoordenadasNominatim(p.municipio, p.uf);
+    if (!coords) continue;
+
+    let corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
+    let statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
+
+    let raioDinamico = 6;
+    if (p.volumeTotal > 50000) raioDinamico = 13;
+    else if (p.volumeTotal > 15000) raioDinamico = 9;
+
+    const marker = L.circleMarker([coords.lat, coords.lon], {
+      radius: raioDinamico, fillColor: corPin, color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.95
+    }).addTo(leafletMapInstance);
+
+    marker.bindPopup(`
+      <strong style="color:#1c483a;">${p.posto}</strong><br>
+      Cidade: ${p.municipio}/${p.uf}<br>
+      Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b><br>
+      Tipo: ${p.tipo}<br>
+      Status: <b>${statusTexto}</b><br>
+    `);
+
+    markersPostosLeaflet.push(marker);
+    bounds.extend([coords.lat, coords.lon]);
+  }
+
+  if (bounds.isValid()) {
+     leafletMapInstance.fitBounds(bounds, { padding: [30, 30] });
+  }
+};
 
 function imprimirRoteiroViagem() {
   if (postosSugeridosUltimaRota.length === 0) {
