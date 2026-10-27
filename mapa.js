@@ -292,6 +292,39 @@ function verificarSePrecoDesatualizado(dataString) {
   return diferencaDias > 30;
 }
 
+// Interceptador para fundir Base KMM com Base de Tratativas
+function aplicarTratativasNosPostos(postos) {
+  postos.forEach(p => {
+    p.origemPreco = "Base KMM";
+    const chaveId = `${p.posto}_${p.uf}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]/g, "_").toUpperCase();
+    
+    if (typeof mapaTratativasCadastradas !== 'undefined' && mapaTratativasCadastradas[chaveId]) {
+      const trat = mapaTratativasCadastradas[chaveId];
+      if (trat.status === 'ACORDO_FECHADO' && trat.preco_acordado > 0) {
+        const dataTratativa = trat.vigencia || trat.atualizado_em;
+        
+        let dataKmm = new Date(p.data);
+        let dataTrat = new Date(dataTratativa);
+        
+        if (isNaN(dataKmm.getTime()) && p.data && p.data.includes('/')) {
+           const pts = p.data.split('/');
+           dataKmm = pts.length === 3 ? new Date(`${pts[2]}-${pts[1]}-${pts[0]}T12:00:00`) : new Date(`${pts[1]}-${pts[0]}-01T12:00:00`);
+        }
+        if (isNaN(dataTrat.getTime()) && dataTratativa && dataTratativa.includes('/')) {
+           const pts = dataTratativa.split('/');
+           dataTrat = pts.length === 3 ? new Date(`${pts[2]}-${pts[1]}-${pts[0]}T12:00:00`) : new Date(`${pts[1]}-${pts[0]}-01T12:00:00`);
+        }
+        
+        if (isNaN(dataKmm.getTime()) || (dataTrat >= dataKmm && !isNaN(dataTrat.getTime()))) {
+          p.preco = trat.preco_acordado;
+          p.data = dataTratativa;
+          p.origemPreco = "Acordo na Mesa";
+        }
+      }
+    }
+  });
+}
+
 // -------------------------------------------------------------------------
 // GEOCODIFICAÇÃO AUTOMÁTICA (Nominatim)
 // -------------------------------------------------------------------------
@@ -654,6 +687,9 @@ async function plotarPostosComDuploRaio(routeCoords) {
   });
 
   const postos = Object.values(mapaPostosConsolidado);
+  
+  // Aplica o cruzamento das tratativas para sobrepor preço/data
+  aplicarTratativasNosPostos(postos);
 
   const amostraRota = [];
   const passo = Math.max(1, Math.floor(routeCoords.length / 80));
@@ -709,10 +745,10 @@ async function plotarPostosComDuploRaio(routeCoords) {
       marker.bindPopup(`
         <strong style="color:#1c483a;">${p.posto}</strong><br>
         Cidade: ${p.municipio}/${p.uf}<br>
-        Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b><br>
+        Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b> <span style="font-size:0.6rem; color:#64748b;">(${p.origemPreco})</span><br>
         Tipo: ${p.tipo}<br>
         Status: <b>${statusTexto}</b><br>
-        ${isDesatualizado ? `<span class="small text-danger">Data do Registro: ${p.data || 'Indisponível'}</span><br>` : ''}
+        ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
         <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota</span>
         <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${p.municipio.replace(/'/g, "\\'")}', ${coords.lat}, ${coords.lon})">
           ➕ Incluir na Rota
@@ -724,7 +760,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
       if (menorDist <= 200) {
         postosSugeridosUltimaRota.push({
           posto: p.posto, cidade: `${p.municipio}/${p.uf}`, preco: p.preco,
-          distancia: Math.round(menorDist), tipo: p.tipo, desatualizado: isDesatualizado
+          distancia: Math.round(menorDist), tipo: p.tipo, desatualizado: isDesatualizado, origemPreco: p.origemPreco
         });
       }
     }
@@ -796,6 +832,10 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   });
 
   const postos = Object.values(mapaPostosConsolidado);
+  
+  // Aplica o cruzamento das tratativas para sobrepor preço/data
+  aplicarTratativasNosPostos(postos);
+
   if (postos.length === 0) {
     alert("Nenhum posto encontrado para a UF selecionada neste período.");
     return;
@@ -831,10 +871,10 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
     marker.bindPopup(`
       <strong style="color:#1c483a;">${p.posto}</strong><br>
       Cidade: ${p.municipio}/${p.uf}<br>
-      Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b><br>
+      Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b> <span style="font-size:0.6rem; color:#64748b;">(${p.origemPreco})</span><br>
       Tipo: ${p.tipo}<br>
       Status: <b>${statusTexto}</b><br>
-      ${isDesatualizado ? `<span class="small text-danger">Data do Registro: ${p.data || 'Indisponível'}</span><br>` : ''}
+      ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
     `);
 
     markersPostosLeaflet.push(marker);
@@ -876,7 +916,7 @@ function imprimirRoteiroViagem() {
       <tr>
         <td><b>${p.posto}</b></td>
         <td>${p.cidade}</td>
-        <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} ${alertaPreco}</td>
+        <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} <span style="font-size:0.8em; color:#6c757d;">(${p.origemPreco})</span>${alertaPreco}</td>
         <td>${p.distancia} km</td>
         <td>${p.tipo}</td>
       </tr>
