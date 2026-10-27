@@ -254,7 +254,7 @@ function atualizarCoresMiniMapa() {
 }
 
 // =========================================================================
-// 2. ROTEIRIZADOR DE POSTOS & FILTRO LIVRE
+// 2. ROTEIRIZADOR DE POSTOS & FILTROS LIVRES
 // =========================================================================
 
 function normalizarTextoBusca(txt) {
@@ -651,7 +651,7 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
 };
 
 // -------------------------------------------------------------------------
-// PLOTAGEM DE POSTOS NA ROTA (ASYNC)
+// PLOTAGEM DE POSTOS NA ROTA COM PREVENÇÃO DE SOBREPOSIÇÃO (SPIDERFY)
 // -------------------------------------------------------------------------
 async function plotarPostosComDuploRaio(routeCoords) {
   if (!leafletMapInstance) return;
@@ -704,6 +704,8 @@ async function plotarPostosComDuploRaio(routeCoords) {
      btnRota.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Mapeando postos...';
   }
 
+  const controleSobreposicao = {};
+
   for (const p of postos) {
     if (!p.municipio || p.municipio === 'ND') continue;
 
@@ -733,7 +735,22 @@ async function plotarPostosComDuploRaio(routeCoords) {
       if (p.volumeTotal > 50000) raioDinamico = 13;
       else if (p.volumeTotal > 15000) raioDinamico = 9;
 
-      const marker = L.circleMarker([coords.lat, coords.lon], {
+      // Lógica de Afastamento Magnético (Spiderfy)
+      const coordKey = `${coords.lat.toFixed(4)}_${coords.lon.toFixed(4)}`;
+      const idxOverlap = controleSobreposicao[coordKey] || 0;
+      controleSobreposicao[coordKey] = idxOverlap + 1;
+
+      let finalLat = coords.lat;
+      let finalLon = coords.lon;
+      
+      if (idxOverlap > 0) {
+        const raioGraus = 0.015;
+        const angulo = idxOverlap * (Math.PI / 3);
+        finalLat += raioGraus * Math.cos(angulo);
+        finalLon += raioGraus * Math.sin(angulo);
+      }
+
+      const marker = L.circleMarker([finalLat, finalLon], {
         radius: raioDinamico,
         fillColor: corPin,
         color: "#ffffff",
@@ -782,6 +799,8 @@ async function plotarPostosComDuploRaio(routeCoords) {
 // -------------------------------------------------------------------------
 window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   if (!leafletMapInstance) return;
+
+  document.getElementById('filtroMapaLivreRede').value = "";
 
   if (routingControlInstance) {
     leafletMapInstance.removeControl(routingControlInstance);
@@ -833,7 +852,6 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
 
   const postos = Object.values(mapaPostosConsolidado);
   
-  // Aplica o cruzamento das tratativas para sobrepor preço/data
   aplicarTratativasNosPostos(postos);
 
   if (postos.length === 0) {
@@ -842,6 +860,7 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   }
 
   const bounds = L.latLngBounds();
+  const controleSobreposicao = {};
 
   for (const p of postos) {
     if (!p.municipio || p.municipio === 'ND') continue;
@@ -864,7 +883,21 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
     if (p.volumeTotal > 50000) raioDinamico = 13;
     else if (p.volumeTotal > 15000) raioDinamico = 9;
 
-    const marker = L.circleMarker([coords.lat, coords.lon], {
+    const coordKey = `${coords.lat.toFixed(4)}_${coords.lon.toFixed(4)}`;
+    const idxOverlap = controleSobreposicao[coordKey] || 0;
+    controleSobreposicao[coordKey] = idxOverlap + 1;
+
+    let finalLat = coords.lat;
+    let finalLon = coords.lon;
+    
+    if (idxOverlap > 0) {
+      const raioGraus = 0.015;
+      const angulo = idxOverlap * (Math.PI / 3);
+      finalLat += raioGraus * Math.cos(angulo);
+      finalLon += raioGraus * Math.sin(angulo);
+    }
+
+    const marker = L.circleMarker([finalLat, finalLon], {
       radius: raioDinamico, fillColor: corPin, color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.95
     }).addTo(leafletMapInstance);
 
@@ -878,7 +911,132 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
     `);
 
     markersPostosLeaflet.push(marker);
-    bounds.extend([coords.lat, coords.lon]);
+    bounds.extend([finalLat, finalLon]);
+  }
+
+  if (bounds.isValid()) {
+     leafletMapInstance.fitBounds(bounds, { padding: [30, 30] });
+  }
+};
+
+// -------------------------------------------------------------------------
+// FILTRO LIVRE POR REDE DIRETAMENTE NO ROTEIRIZADOR
+// -------------------------------------------------------------------------
+window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
+  if (!leafletMapInstance) return;
+
+  document.getElementById('filtroMapaLivreUf').value = "";
+
+  if (routingControlInstance) {
+    leafletMapInstance.removeControl(routingControlInstance);
+    routingControlInstance = null;
+  }
+  
+  markersPostosLeaflet.forEach(m => leafletMapInstance.removeLayer(m));
+  markersPostosLeaflet = [];
+  markersWaypoints.forEach(m => leafletMapInstance.removeLayer(m));
+  markersWaypoints = [];
+  postosSugeridosUltimaRota = [];
+
+  document.querySelectorAll('.input-cidade-rota').forEach(el => el.value = '');
+  document.querySelectorAll('.hidden-coord-rota').forEach(el => el.value = '');
+
+  if (!redeSelecionada) {
+     leafletMapInstance.setView([-20.0, -48.0], 5);
+     return;
+  }
+
+  const registrosRef = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
+  const mapaPostosConsolidado = {};
+  
+  registrosRef.forEach(d => {
+    if(!d.POSTO || !d.POSTO.toUpperCase().includes(redeSelecionada.toUpperCase())) return;
+
+    const nome = d.POSTO.trim();
+    const mun = (d.MUNICIPIO_POSTO || '').trim().toUpperCase();
+    const uf = (d.UF_POSTO || '').trim().toUpperCase();
+    const chave = `${nome}__${mun}__${uf}`;
+
+    const preco = parseFloat(d.VALOR_UNITARIO || d.ULTIMO_PRECO_MES || d.PRECO_MEDIO_MES || 0);
+    const dataReg = d.DATA_FIM_CICLO || d.ULTIMA_DATA_MES || d.MES_ANO || "";
+    const volumeAtual = parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0);
+
+    if (!mapaPostosConsolidado[chave]) {
+      mapaPostosConsolidado[chave] = {
+        posto: d.POSTO, municipio: mun, uf: uf, preco: preco,
+        tipo: d.TIPO_OPERACAO, data: dataReg, volumeTotal: volumeAtual
+      };
+    } else {
+      mapaPostosConsolidado[chave].volumeTotal += volumeAtual;
+      if (dataReg && dataReg > mapaPostosConsolidado[chave].data) {
+        mapaPostosConsolidado[chave].data = dataReg;
+        mapaPostosConsolidado[chave].preco = preco;
+      }
+    }
+  });
+
+  const postos = Object.values(mapaPostosConsolidado);
+  
+  aplicarTratativasNosPostos(postos);
+
+  if (postos.length === 0) {
+    alert("Nenhum posto encontrado para a Rede selecionada neste período.");
+    return;
+  }
+
+  const bounds = L.latLngBounds();
+  const controleSobreposicao = {};
+
+  for (const p of postos) {
+    if (!p.municipio || p.municipio === 'ND') continue;
+    const coords = await obterCoordenadasNominatim(p.municipio, p.uf);
+    if (!coords) continue;
+
+    const isDesatualizado = verificarSePrecoDesatualizado(p.data);
+    let corPin = "#94a3b8";
+    let statusTexto = "";
+
+    if (isDesatualizado) {
+      corPin = "#475569";
+      statusTexto = "POSTO DESATUALIZADO";
+    } else {
+      corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
+      statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
+    }
+
+    let raioDinamico = 6;
+    if (p.volumeTotal > 50000) raioDinamico = 13;
+    else if (p.volumeTotal > 15000) raioDinamico = 9;
+
+    const coordKey = `${coords.lat.toFixed(4)}_${coords.lon.toFixed(4)}`;
+    const idxOverlap = controleSobreposicao[coordKey] || 0;
+    controleSobreposicao[coordKey] = idxOverlap + 1;
+
+    let finalLat = coords.lat;
+    let finalLon = coords.lon;
+    
+    if (idxOverlap > 0) {
+      const raioGraus = 0.015;
+      const angulo = idxOverlap * (Math.PI / 3);
+      finalLat += raioGraus * Math.cos(angulo);
+      finalLon += raioGraus * Math.sin(angulo);
+    }
+
+    const marker = L.circleMarker([finalLat, finalLon], {
+      radius: raioDinamico, fillColor: corPin, color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.95
+    }).addTo(leafletMapInstance);
+
+    marker.bindPopup(`
+      <strong style="color:#1c483a;">${p.posto}</strong><br>
+      Cidade: ${p.municipio}/${p.uf}<br>
+      Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b> <span style="font-size:0.6rem; color:#64748b;">(${p.origemPreco})</span><br>
+      Tipo: ${p.tipo}<br>
+      Status: <b>${statusTexto}</b><br>
+      ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
+    `);
+
+    markersPostosLeaflet.push(marker);
+    bounds.extend([finalLat, finalLon]);
   }
 
   if (bounds.isValid()) {
