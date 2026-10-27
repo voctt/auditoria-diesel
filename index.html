@@ -317,8 +317,44 @@
         <div class="row g-3">
           <div class="col-12 col-md-4">
             <div class="card p-3 border-0 bg-light position-relative">
+              
+              <!-- NOVO BLOCO: FILTRO DE UF LIVRE -->
+              <div class="mb-3 border-bottom pb-3">
+                <label class="small fw-bold text-dark mb-1"><i class="bi bi-funnel-fill text-primary me-1"></i> Filtro Livre por Estado (Opcional):</label>
+                <select id="filtroMapaLivreUf" class="form-select form-select-sm" onchange="window.plotarPostosPorUfLivre(this.value)">
+                  <option value="">Selecione uma UF para exibir postos livres...</option>
+                  <option value="AC">Acre (AC)</option>
+                  <option value="AL">Alagoas (AL)</option>
+                  <option value="AP">Amapá (AP)</option>
+                  <option value="AM">Amazonas (AM)</option>
+                  <option value="BA">Bahia (BA)</option>
+                  <option value="CE">Ceará (CE)</option>
+                  <option value="DF">Distrito Federal (DF)</option>
+                  <option value="ES">Espírito Santo (ES)</option>
+                  <option value="GO">Goiás (GO)</option>
+                  <option value="MA">Maranhão (MA)</option>
+                  <option value="MT">Mato Grosso (MT)</option>
+                  <option value="MS">Mato Grosso do Sul (MS)</option>
+                  <option value="MG">Minas Gerais (MG)</option>
+                  <option value="PA">Pará (PA)</option>
+                  <option value="PB">Paraíba (PB)</option>
+                  <option value="PR">Paraná (PR)</option>
+                  <option value="PE">Pernambuco (PE)</option>
+                  <option value="PI">Piauí (PI)</option>
+                  <option value="RJ">Rio de Janeiro (RJ)</option>
+                  <option value="RN">Rio Grande do Norte (RN)</option>
+                  <option value="RS">Rio Grande do Sul (RS)</option>
+                  <option value="RO">Rondônia (RO)</option>
+                  <option value="RR">Roraima (RR)</option>
+                  <option value="SC">Santa Catarina (SC)</option>
+                  <option value="SP">São Paulo (SP)</option>
+                  <option value="SE">Sergipe (SE)</option>
+                  <option value="TO">Tocantins (TO)</option>
+                </select>
+              </div>
+
               <div class="alert alert-info py-2 px-3 small mb-3">
-                <i class="bi bi-info-circle me-1"></i> Digite a cidade (busca instantânea) ou clique no campo e <strong>clique direto no mapa</strong>.
+                <i class="bi bi-info-circle me-1"></i> Ou trace a rota digitando a cidade / clicando direto no mapa.
               </div>
 
               <div id="containerPontosRota">
