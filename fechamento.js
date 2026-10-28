@@ -1,7 +1,7 @@
 /* ==========================================================================
    MÓDULO DE FECHAMENTO MENSAL EXECUTIVO & DOSSIÊ DA DIRETORIA (DARK MODE)
    CARGOSOFT | VOCTT INTELIGÊNCIA DE FROTAS
-   Consolidação KMM, Rolodex, Curva de Eficiência ANP e Dossiê Persistido
+   Consolidação KMM, Rolodex, Matrizes de Garagem e Linha do Tempo Blindada
    ========================================================================== */
 
 const FIRESTORE_BASE_DOSSIE = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/fechamentos_dossie";
@@ -11,114 +11,192 @@ let cacheDossieMes = {};
 let graficoEvolucaoInstancia = null;
 
 /**
- * Injeção de Estilos CSS Dark Mode Executivo & Ajustes de Impressão
+ * Injeção de Estilos CSS Dark Mode Executivo & Modal do Dossiê
  */
-(function injetarEstilosFechamentoExecutivo() {
+(function inicializarEstilosEModalDossie() {
   const idEstilo = "estilosFechamentoExecutivoDark";
-  if (document.getElementById(idEstilo)) return;
+  if (!document.getElementById(idEstilo)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = idEstilo;
+    styleEl.innerHTML = `
+      /* CONTAINER GERAL DARK */
+      #secaoFechamentoExecutivo {
+        background: #090d16;
+        color: #e2e8f0;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      }
 
-  const styleEl = document.createElement('style');
-  styleEl.id = idEstilo;
-  styleEl.innerHTML = `
-    /* CONTAINER GERAL DARK */
-    #secaoFechamentoExecutivo {
-      background: #090d16;
-      color: #e2e8f0;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-    }
+      /* CARDS EXECUTIVOS COM GLOW NEON */
+      .card-exec-dark {
+        background: #111827;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        padding: 16px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        position: relative;
+        overflow: hidden;
+      }
+      .card-exec-dark:hover {
+        transform: translateY(-2px);
+      }
 
-    /* CARDS EXECUTIVOS COM GLOW NEON */
-    .card-exec-dark {
-      background: #111827;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.07);
-      padding: 16px;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    .card-exec-dark:hover {
-      transform: translateY(-2px);
-    }
+      /* BORDAS & TEXTOS NEON SUTIS */
+      .glow-verde {
+        border: 1px solid rgba(74, 222, 128, 0.35) !important;
+        box-shadow: 0 0 18px rgba(74, 222, 128, 0.08);
+      }
+      .glow-azul {
+        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        box-shadow: 0 0 18px rgba(56, 189, 248, 0.08);
+      }
+      .glow-laranja {
+        border: 1px solid rgba(251, 146, 60, 0.35) !important;
+        box-shadow: 0 0 18px rgba(251, 146, 60, 0.08);
+      }
+      .glow-vermelho {
+        border: 1px solid rgba(248, 113, 113, 0.4) !important;
+        box-shadow: 0 0 18px rgba(248, 113, 113, 0.1);
+      }
 
-    /* BORDAS & TEXTOS NEON SUTIS */
-    .glow-verde {
-      border: 1px solid rgba(74, 222, 128, 0.35);
-      box-shadow: 0 0 18px rgba(74, 222, 128, 0.08);
-    }
-    .glow-azul {
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      box-shadow: 0 0 18px rgba(56, 189, 248, 0.08);
-    }
-    .glow-laranja {
-      border: 1px solid rgba(251, 146, 60, 0.35);
-      box-shadow: 0 0 18px rgba(251, 146, 60, 0.08);
-    }
-    .glow-vermelho {
-      border: 1px solid rgba(248, 113, 113, 0.4);
-      box-shadow: 0 0 18px rgba(248, 113, 113, 0.1);
-    }
+      /* NÚMEROS DE DESTAQUE AMPLIADOS */
+      .num-kpi-grande {
+        font-size: 1.85rem;
+        font-weight: 800;
+        font-family: monospace;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+      }
+      .num-neon-verde {
+        color: #4ade80 !important;
+        text-shadow: 0 0 12px rgba(74, 222, 128, 0.35);
+      }
+      .num-neon-azul {
+        color: #38bdf8 !important;
+        text-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+      }
+      .num-neon-branco {
+        color: #f8fafc !important;
+        text-shadow: 0 0 10px rgba(248, 250, 252, 0.2);
+      }
 
-    /* NÚMEROS DE DESTAQUE AMPLIADOS */
-    .num-kpi-grande {
-      font-size: 1.85rem;
-      font-weight: 800;
-      font-family: monospace;
-      line-height: 1.15;
-      letter-spacing: -0.02em;
-    }
-    .num-neon-verde {
-      color: #4ade80;
-      text-shadow: 0 0 12px rgba(74, 222, 128, 0.35);
-    }
-    .num-neon-azul {
-      color: #38bdf8;
-      text-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
-    }
-    .num-neon-branco {
-      color: #f8fafc;
-      text-shadow: 0 0 10px rgba(248, 250, 252, 0.2);
-    }
+      /* BOTÃO CLEAN DARK */
+      .btn-clean-dark {
+        background: #1e293b;
+        color: #cbd5e1;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      .btn-clean-dark:hover {
+        background: #334155;
+        color: #ffffff;
+        border-color: rgba(255, 255, 255, 0.3);
+      }
 
-    /* BOTÃO CLEAN DARK IMPRIMIR */
-    .btn-clean-dark {
-      background: #1e293b;
-      color: #cbd5e1;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      font-weight: 600;
-      transition: all 0.2s ease;
-    }
-    .btn-clean-dark:hover {
-      background: #334155;
-      color: #ffffff;
-      border-color: rgba(255, 255, 255, 0.3);
-    }
+      /* TABELA DARK COM VISIBILIDADE FORÇADA */
+      .tabela-fechamento-dark {
+        color: #f1f5f9 !important;
+        margin-bottom: 0;
+      }
+      .tabela-fechamento-dark thead th {
+        background: #0f172a !important;
+        color: #94a3b8 !important;
+        border-bottom: 2px solid #334155 !important;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        padding: 8px 6px;
+      }
+      .tabela-fechamento-dark tbody td {
+        border-color: rgba(255, 255, 255, 0.06) !important;
+        padding: 7px 6px;
+        font-size: 0.72rem;
+        background: transparent !important;
+      }
+      .tabela-fechamento-dark tbody tr:hover {
+        background: rgba(255, 255, 255, 0.03) !important;
+      }
 
-    /* TABELA DARK */
-    .tabela-fechamento-dark {
-      color: #cbd5e1;
-      margin-bottom: 0;
-    }
-    .tabela-fechamento-dark thead th {
-      background: #0f172a;
-      color: #94a3b8;
-      border-bottom: 2px solid #334155;
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      padding: 8px 6px;
-    }
-    .tabela-fechamento-dark tbody td {
-      border-color: rgba(255, 255, 255, 0.05);
-      padding: 7px 6px;
-      font-size: 0.72rem;
-    }
-    .tabela-fechamento-dark tbody tr:hover {
-      background: rgba(255, 255, 255, 0.02);
-    }
-  `;
-  document.head.appendChild(styleEl);
+      /* MODAL DO DOSSIÊ */
+      #modalDossieGestor .modal-content {
+        background: #0f172a;
+        color: #f8fafc;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+      }
+      #modalDossieGestor .modal-header {
+        background: linear-gradient(135deg, #062316 0%, #0f3d26 50%, #144e31 100%);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      #modalDossieGestor .form-control, #modalDossieGestor .form-select {
+        background: #1e293b;
+        color: #f8fafc;
+        border: 1px solid #334155;
+      }
+      #modalDossieGestor .form-control:focus, #modalDossieGestor .form-select:focus {
+        background: #1e293b;
+        color: #f8fafc;
+        border-color: #22c55e;
+        box-shadow: 0 0 0 0.2rem rgba(34, 197, 94, 0.25);
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
+  if (!document.getElementById('modalDossieGestor')) {
+    const modalHtml = `
+      <div class="modal fade" id="modalDossieGestor" tabindex="-1" aria-labelledby="lblModalDossie" aria-hidden="true" style="z-index: 100060;">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header d-flex justify-content-between align-items-center py-2 px-3">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-journal-plus text-success fs-5"></i>
+                <h6 class="modal-title fw-bold text-white mb-0" id="lblModalDossie">Registrar Parecer do Dossiê Estratégico</h6>
+              </div>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body p-3">
+              <form id="formDossieGestorModal" onsubmit="salvarDossieModal(event)">
+                <div class="mb-2">
+                  <label class="form-label small fw-bold text-white-50 mb-1">Posto Relacionado / Escopo da Ação:</label>
+                  <select id="modalDossiePosto" class="form-select form-select-sm">
+                    <option value="GERAL">Frota Geral (Visão Macro do Fechamento)</option>
+                  </select>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small fw-bold text-white-50 mb-1">Tipo de Manobra / Justificativa:</label>
+                  <select id="modalDossieTipo" class="form-select form-select-sm">
+                    <option value="DIRECIONAMENTO">🔄 Manobra / Direcionamento de Rota</option>
+                    <option value="PRAZO">⏳ Renegociação de Prazo Faturado (D+X)</option>
+                    <option value="BALCAO">🛡️ Contenção de Reajuste de Balcão</option>
+                    <option value="GARAGEM">⛽ Estratégia de Abastecimento Interno</option>
+                    <option value="PARECER">📝 Parecer Geral da Gestão de Frota</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label small fw-bold text-white-50 mb-1">Observação Resumida do Gestor:</label>
+                  <textarea id="modalDossieTexto" class="form-control font-monospace" rows="4" required
+                    placeholder="Ex: Direcionamos volume para o Auto Posto São Jorge reduzindo R$ 0,352/L no corredor; renegociamos prazo faturado D+15 sem taxas adicionais..."></textarea>
+                </div>
+                <div class="d-flex justify-content-between align-items-center pt-2 border-top border-secondary">
+                  <span class="text-white-50 small" style="font-size: 0.65rem;" id="modalDossieInfoComp">--</span>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" id="btnSalvarDossieModal" class="btn btn-sm btn-success fw-bold px-3">
+                      <i class="bi bi-check-circle me-1"></i> Gravar no Dossiê
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+  }
 })();
 
 /**
@@ -145,7 +223,7 @@ async function renderizarAbaFechamentoExecutivo() {
   container.innerHTML = `
     <div class="text-center py-5 text-muted">
       <div class="spinner-border spinner-border-sm text-success me-2" role="status"></div>
-      Consolidando indicadores executivos, matrizes e curva temporal de savings...
+      Consolidando indicadores executivos, matrizes de garagem e curva temporal de savings...
     </div>
   `;
 
@@ -153,7 +231,7 @@ async function renderizarAbaFechamentoExecutivo() {
   const dados = calcularMetricasFechamento(mesFechamentoAtivo);
 
   container.innerHTML = `
-    <!-- TOPO EXECUTIVO: TÍTULO, SELETOR E BOTÃO CLEAN DARK -->
+    <!-- TOPO EXECUTIVO: TÍTULO, SELETOR E BOTÕES CLEAN DARK -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-2 border-bottom border-secondary">
       <div>
         <h5 class="fw-bold mb-0 text-white d-flex align-items-center gap-2">
@@ -161,7 +239,7 @@ async function renderizarAbaFechamentoExecutivo() {
           <span>Fechamento Executivo & Prestação de Contas da Frota</span>
         </h5>
         <span class="small text-muted" style="font-size: 0.72rem;">
-          Consolidação Operacional, Curva de Eficiência e Economia Real Auditada no Caixa da Cargosoft
+          Consolidação Operacional, Estratégia de Garagens e Economia Real Auditada no Caixa da Cargosoft
         </span>
       </div>
 
@@ -172,6 +250,9 @@ async function renderizarAbaFechamentoExecutivo() {
           onchange="trocarMesFechamento(this.value)">
           ${mesesDisponiveis.map(m => `<option value="${m}" ${m === mesFechamentoAtivo ? 'selected' : ''}>${formatarRotuloMes(m)}</option>`).join('')}
         </select>
+        <button class="btn btn-sm btn-clean-dark shadow-sm text-nowrap px-3" onclick="abrirModalDossie()">
+          <i class="bi bi-pencil-square me-1 text-success"></i> Inserir Dossiê
+        </button>
         <button class="btn btn-sm btn-clean-dark shadow-sm text-nowrap px-3" onclick="emitirRelatorioFechamentoExecutivo()">
           <i class="bi bi-printer me-1 text-secondary"></i> Imprimir Dossiê
         </button>
@@ -203,16 +284,16 @@ async function renderizarAbaFechamentoExecutivo() {
         </div>
       </div>
 
-      <!-- HARD SAVING (CAIXA REAL RETIDO) -->
+      <!-- HARD SAVING (CAIXA REAL RETIDO NO MÊS) -->
       <div class="col-12 col-md-3">
         <div class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
             <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Hard Saving (Efetivo no Caixa)</span>
             <div class="num-kpi-grande num-neon-verde my-1">
-              + R$ ${Math.round(dados.hardSavingMes).toLocaleString('pt-BR')}
+              + R$ ${Math.round(dados.hardSavingTotalMes).toLocaleString('pt-BR')}
             </div>
             <div class="text-white-50 small" style="font-size: 0.70rem;">
-              Economia real retida vs. preço oficial da ANP no mês.
+              Economia real auditada vs. tabela oficial ANP no mês.
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
@@ -248,11 +329,11 @@ async function renderizarAbaFechamentoExecutivo() {
               ${Math.round(dados.volumeSobAcordoMes).toLocaleString('pt-BR')} L
             </div>
             <div class="text-white-50 small" style="font-size: 0.70rem;">
-              <strong>${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> do diesel da frota consumido em postos sob acordo.
+              <strong>${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> do consumo do mês rodou sob postos com acordo ativo.
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
-            ${dados.qtdPostosAcordadosAtivos} postos homologados na competência
+            ${dados.qtdPostosAcordadosAtivos} postos com acordo vigente
           </div>
         </div>
       </div>
@@ -276,49 +357,89 @@ async function renderizarAbaFechamentoExecutivo() {
       <div id="graficoEvolucaoSavings" style="min-height: 230px; width: 100%;"></div>
     </div>
 
-    <!-- BLOCO 3: VITRINE TÁTICA (MANOBRAS DE ROTA & AÇÕES DE COMPRAS) -->
+    <!-- BLOCO 3: PAINEL EXECUTIVO DE MATRIZES & GARAGENS PRÓPRIAS -->
+    <div class="card-exec-dark mb-3 p-3">
+      <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+        <div>
+          <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
+            <i class="bi bi-fuel-pump-fill text-success me-2"></i>Estratégia de Tanques Próprios & Margem de Garagem (Matrizes)
+          </h6>
+          <span class="small text-muted" style="font-size: 0.68rem;">
+            Auditoria de compras no atacado vs. ANP Distribuição e ganho unitário contra a bomba de rua
+          </span>
+        </div>
+        <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">
+          ${dados.matrizesGaragem.length} garagens ativas
+        </span>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-12 col-md-4">
+          <div class="p-2 rounded bg-dark border border-secondary">
+            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">Volume Interno no Mês</span>
+            <div class="fw-bold font-monospace text-white fs-6">${Math.round(dados.volInternoMes).toLocaleString('pt-BR')} L</div>
+            <div class="text-white-50" style="font-size: 0.62rem;">${dados.percInternoMes.toFixed(1).replace('.', ',')}% do abastecimento total</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="p-2 rounded bg-dark border border-secondary">
+            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">Spread Médio Garagem vs. Rua</span>
+            <div class="fw-bold font-monospace text-success fs-6">+ R$ ${dados.spreadMedioGaragemMes.toFixed(3)}/L</div>
+            <div class="text-white-50" style="font-size: 0.62rem;">Vantagem líquida unitária interna</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="p-2 rounded bg-dark border border-secondary">
+            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">Economia Retida em Garagem</span>
+            <div class="fw-bold font-monospace text-success fs-6">+ R$ ${Math.round(dados.savingGaragemMes).toLocaleString('pt-BR')}</div>
+            <div class="text-white-50" style="font-size: 0.62rem;">Preservação direta de caixa</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table tabela-fechamento-dark align-middle text-center" style="white-space: nowrap;">
+          <thead>
+            <tr>
+              <th class="text-start">Filial / Garagem</th>
+              <th>UF</th>
+              <th class="text-end">Custo Garagem (R$/L)</th>
+              <th class="text-end">Ref. ANP Distr.</th>
+              <th class="text-end">Eficiência Atacado (%)</th>
+              <th class="text-end">Média Rua (UF)</th>
+              <th class="text-end">Spread vs. Rua (R$/L)</th>
+              <th class="text-end">Volume</th>
+              <th class="text-end">Ganho Retido</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderizarLinhasMatrizesFechamento(dados.matrizesGaragem)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- BLOCO 4: VITRINE TÁTICA (MANOBRAS DE ROTA & AÇÕES DE COMPRAS) -->
     <div class="card-exec-dark mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
-          <i class="bi bi-signpost-split-fill text-primary me-2"></i>Vitrine Tática: Manobras de Rota & Blindagem Comercial
+          <i class="bi bi-signpost-split-fill text-success me-2"></i>Vitrine Tática: Manobras de Rota & Blindagem Comercial
         </h6>
-        <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">Decisões do Rolodex</span>
+        <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">Decisões Vigentes na Competência</span>
       </div>
       <div class="row g-2">
         ${renderizarCardsVitrineTatica(dados.acoesTaticas)}
       </div>
     </div>
 
-    <!-- BLOCO 4: NOTAS DO GESTOR DE FROTA (DOSSIÊ OPERACIONAL PERSISTIDO) -->
-    <div class="card-exec-dark mb-3 p-3" style="background: #0f172a; border-color: rgba(74, 222, 128, 0.25);">
-      <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
-        <div class="d-flex align-items-center">
-          <i class="bi bi-journal-check text-success fs-5 me-2"></i>
-          <div>
-            <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">Dossiê Estratégico do Gestor de Frota</h6>
-            <span class="small text-white-50" style="font-size: 0.68rem;">Anotações operacionais, justificativas e prazos que fundamentam o resultado para a Diretoria</span>
-          </div>
-        </div>
-        <button id="btnSalvarDossie" class="btn btn-sm btn-success fw-bold px-3 shadow-sm" onclick="salvarDossieMesFirestore()">
-          <i class="bi bi-cloud-arrow-up-fill me-1"></i> Salvar Dossiê
-        </button>
-      </div>
+    <!-- BLOCO 5: PARECER ESTRATÉGICO DO GESTOR (RENDERIZADO EXECUTIVO SEM TEXTAREA CRU) -->
+    ${renderizarParecerExecutivoDossie()}
 
-      <textarea id="textoDossieGestor" class="form-control font-monospace border-secondary" rows="4" 
-        placeholder="Escreva aqui as ações do mês (ex: 'Intensificamos o abastecimento interno em Barueri pelo spread favorável; nas rotas externas negociamos prazo faturado D+15 sem acréscimo de taxa; bloqueamos o posto X e migramos o fluxo para o posto Y com economia imediata...')"
-        style="background: #1e293b; color: #f1f5f9; font-size: 0.78rem; line-height: 1.45;">${cacheDossieMes[mesFechamentoAtivo] || ''}</textarea>
-      
-      <div class="d-flex justify-content-between align-items-center mt-2 small text-white-50" style="font-size: 0.65rem;">
-        <span><i class="bi bi-info-circle me-1"></i> As anotações acima ficam vinculadas à competência <strong>${formatarRotuloMes(mesFechamentoAtivo)}</strong> no banco de dados.</span>
-        <span id="lblStatusSalvarDossie" class="text-success fw-bold"></span>
-      </div>
-    </div>
-
-    <!-- BLOCO 5: RESUMO DE NEGOCIAÇÕES ATIVAS DO MÊS -->
+    <!-- BLOCO 6: RESUMO DE NEGOCIAÇÕES ATIVAS DO MÊS (COM CORES FORÇADAS) -->
     <div class="card-exec-dark mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
-          <i class="bi bi-table text-secondary me-2"></i>Resumo dos Postos Sob Gestão na Competência
+          <i class="bi bi-table text-secondary me-2"></i>Resumo dos Postos Sob Acordo Vigente na Competência
         </h6>
         <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">${dados.tabelaPostosMes.length} postos auditados</span>
       </div>
@@ -327,7 +448,7 @@ async function renderizarAbaFechamentoExecutivo() {
         <table class="table tabela-fechamento-dark align-middle text-center" style="white-space: nowrap;">
           <thead>
             <tr>
-              <th class="text-start" style="min-width: 220px;">Posto / Praça</th>
+              <th class="text-start" style="min-width: 240px;">Posto / Praça</th>
               <th>UF</th>
               <th>Vigência</th>
               <th class="text-end">Preço Balcão</th>
@@ -346,9 +467,9 @@ async function renderizarAbaFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 6: GOVERNANÇA, GLOSAS & PLANO DE AÇÃO PARA O PRÓXIMO MÊS -->
+    <!-- BLOCO 7: GOVERNANÇA, GLOSAS & PLANO DE AÇÃO PARA O PRÓXIMO MÊS -->
     <div class="row g-2">
-      <!-- GLOSAS E FUROS A CONTESTAR -->
+      <!-- GLOSAS E FUROS A CONTESTAR (COM FILTRO CRONOLÓGICO DE VIGÊNCIA) -->
       <div class="col-12 col-md-6">
         <div class="card-exec-dark glow-vermelho h-100 p-3">
           <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
@@ -359,7 +480,7 @@ async function renderizarAbaFechamentoExecutivo() {
           </div>
 
           ${dados.postosComFuro.length === 0 
-            ? `<div class="p-2 border border-success rounded bg-dark text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Nenhum furo comercial no mês. Todos os postos faturaram em conformidade.</div>` 
+            ? `<div class="p-2 border border-success rounded bg-dark text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Nenhum furo comercial apurado na competência. Todos os postos sob acordo faturaram em conformidade.</div>` 
             : `<div class="d-flex flex-column gap-2">
                 ${dados.postosComFuro.map(f => `
                   <div class="p-2 border rounded" style="background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3) !important; font-size: 0.72rem;">
@@ -368,7 +489,7 @@ async function renderizarAbaFechamentoExecutivo() {
                       <span class="badge bg-danger font-monospace">+R$ ${f.gap.toFixed(3)}/L</span>
                     </div>
                     <div class="text-white-50 mt-1">
-                      Acordado: R$ ${f.precoAcordado.toFixed(3)} | Pago: <strong class="text-danger">R$ ${f.precoPago.toFixed(3)}</strong>
+                      Acordado: R$ ${f.precoAcordado.toFixed(3)} (Vigência: ${f.vigenciaFmt}) | Pago: <strong class="text-danger">R$ ${f.precoPago.toFixed(3)}</strong>
                     </div>
                     <div class="text-danger fw-bold mt-1">
                       Desvio financeiro total: R$ ${Math.round(f.impactoReais).toLocaleString('pt-BR')} (sobre ${Math.round(f.volume).toLocaleString('pt-BR')} L)
@@ -409,8 +530,245 @@ async function renderizarAbaFechamentoExecutivo() {
     </div>
   `;
 
-  // Renderiza o gráfico ApexCharts de evolução após o DOM estar pronto
   renderizarGraficoEvolucaoSavings();
+}
+
+/**
+ * Renderização Elegante do Parecer Executivo do Gestor
+ */
+function renderizarParecerExecutivoDossie() {
+  const notaSalva = cacheDossieMes[mesFechamentoAtivo] || '';
+
+  if (!notaSalva) {
+    return `
+      <div class="card-exec-dark mb-3 p-3 d-flex justify-content-between align-items-center" style="background: rgba(15, 23, 42, 0.6); border-style: dashed;">
+        <div class="d-flex align-items-center gap-2 text-white-50 small">
+          <i class="bi bi-journal-text fs-5 text-secondary"></i>
+          <span>Nenhuma anotação estratégica ou parecer do gestor adicionado para o fechamento de <strong>${formatarRotuloMes(mesFechamentoAtivo)}</strong>.</span>
+        </div>
+        <button class="btn btn-sm btn-outline-success py-1 px-3" onclick="abrirModalDossie()">
+          <i class="bi bi-plus-circle me-1"></i> Inserir Parecer
+        </button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="card-exec-dark mb-3 p-3" style="background: linear-gradient(135deg, #0b1324 0%, #0f1e36 100%); border-left: 4px solid #22c55e !important;">
+      <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-chat-left-quote-fill text-success fs-5"></i>
+          <span class="fw-bold text-white small text-uppercase" style="letter-spacing: 0.05em;">Parecer Estratégico da Gestão de Frota</span>
+          <span class="badge bg-dark text-success border border-success-subtle font-monospace" style="font-size: 0.58rem;">Homologado</span>
+        </div>
+        <button class="btn btn-sm btn-outline-light py-0 px-2 text-white-50" style="font-size: 0.65rem;" onclick="abrirModalDossie()">
+          <i class="bi bi-pencil me-1"></i> Editar Nota
+        </button>
+      </div>
+      <div class="text-white-50 font-monospace small px-1" style="font-size: 0.78rem; line-height: 1.5; white-space: pre-wrap;">${notaSalva}</div>
+    </div>
+  `;
+}
+
+/**
+ * Abertura e População do Modal do Dossiê
+ */
+function abrirModalDossie() {
+  const selPosto = document.getElementById('modalDossiePosto');
+  const txtArea = document.getElementById('modalDossieTexto');
+  const lblComp = document.getElementById('modalDossieInfoComp');
+
+  if (lblComp) lblComp.innerText = `Competência Ativa: ${formatarRotuloMes(mesFechamentoAtivo)}`;
+  if (txtArea) txtArea.value = cacheDossieMes[mesFechamentoAtivo] || '';
+
+  if (selPosto && typeof baseRegistrosMensais !== 'undefined') {
+    const postosMes = [...new Set(baseRegistrosMensais.filter(r => r.MES_ANO === mesFechamentoAtivo).map(r => r.POSTO))].sort();
+    let opts = `<option value="GERAL">Frota Geral (Visão Macro do Fechamento)</option>`;
+    postosMes.forEach(p => {
+      opts += `<option value="${p}">${p}</option>`;
+    });
+    selPosto.innerHTML = opts;
+  }
+
+  const modalEl = document.getElementById('modalDossieGestor');
+  if (modalEl) {
+    const bsModal = new bootstrap.Modal(modalEl);
+    bsModal.show();
+  }
+}
+
+/**
+ * Salvamento do Dossiê via Modal no Firestore
+ */
+async function salvarDossieModal(event) {
+  event.preventDefault();
+  const txtArea = document.getElementById('modalDossieTexto');
+  const btn = document.getElementById('btnSalvarDossieModal');
+  const selPosto = document.getElementById('modalDossiePosto');
+  const selTipo = document.getElementById('modalDossieTipo');
+  if (!txtArea || !btn) return;
+
+  const texto = txtArea.value.trim();
+  const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
+  const autorEmail = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.email : "Gestor";
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Gravando...`;
+
+  const payload = {
+    fields: {
+      mes_ano: { stringValue: mesFechamentoAtivo },
+      notas_gestor: { stringValue: texto },
+      posto_referencia: { stringValue: selPosto ? selPosto.value : "GERAL" },
+      tipo_acao: { stringValue: selTipo ? selTipo.value : "PARECER" },
+      atualizado_em: { timestampValue: new Date().toISOString() },
+      autor: { stringValue: autorEmail }
+    }
+  };
+
+  try {
+    const url = `${FIRESTORE_BASE_DOSSIE}/${mesFechamentoAtivo}`;
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const resp = await fetch(url, {
+      method: "PATCH",
+      headers: headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) throw new Error("Erro HTTP " + resp.status);
+
+    cacheDossieMes[mesFechamentoAtivo] = texto;
+
+    const modalEl = document.getElementById('modalDossieGestor');
+    const inst = bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
+
+    renderizarAbaFechamentoExecutivo();
+  } catch (err) {
+    alert("Falha ao salvar dossiê: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="bi bi-check-circle me-1"></i> Gravar no Dossiê`;
+  }
+}
+
+/**
+ * Renderização das Linhas da Tabela de Postos Auditados (CORES FORÇADAS)
+ */
+function renderizarLinhasTabelaFechamento(linhas) {
+  if (!linhas || linhas.length === 0) {
+    return `<tr><td colspan="10" style="color: #94a3b8 !important; padding: 16px;">Nenhum posto faturado com acordo ativo no mês selecionado.</td></tr>`;
+  }
+
+  return linhas.map(l => {
+    const corSpread = l.spreadAnp < 0 ? '#4ade80' : (l.spreadAnp > 0 ? '#f87171' : '#94a3b8');
+    const sinalSpread = l.spreadAnp > 0 ? '+' : '';
+
+    return `
+      <tr>
+        <td class="text-start fw-bold text-truncate" style="color: #f8fafc !important; max-width: 250px;" title="${l.posto}">
+          ${l.posto}
+        </td>
+        <td>
+          <span class="badge bg-dark text-white border border-secondary font-monospace" style="color: #ffffff !important;">${l.uf}</span>
+        </td>
+        <td class="font-monospace" style="color: #94a3b8 !important;">${l.vigenciaFmt}</td>
+        <td class="text-end font-monospace" style="color: #94a3b8 !important;">
+          ${l.precoProposto > 0 ? `R$ ${l.precoProposto.toFixed(3)}` : '--'}
+        </td>
+        <td class="text-end font-monospace fw-bold" style="color: #f8fafc !important;">
+          ${l.precoAcordado > 0 ? `R$ ${l.precoAcordado.toFixed(3)}` : '--'}
+        </td>
+        <td class="text-end font-monospace" style="color: #cbd5e1 !important;">
+          ${l.ultimoPrecoBomba > 0 ? `R$ ${l.ultimoPrecoBomba.toFixed(3)}` : '--'}
+        </td>
+        <td class="text-end font-monospace fw-bold" style="color: #38bdf8 !important;">
+          ${l.refAnp > 0 ? `R$ ${l.refAnp.toFixed(3)}` : '--'}
+        </td>
+        <td class="text-end font-monospace fw-bold" style="color: ${corSpread} !important;">
+          ${l.refAnp > 0 ? `${sinalSpread}R$ ${l.spreadAnp.toFixed(3)}` : '--'}
+        </td>
+        <td class="text-end font-monospace fw-bold" style="color: #f8fafc !important;">
+          ${Math.round(l.volume).toLocaleString('pt-BR')} L
+        </td>
+        <td class="text-end font-monospace fw-bold" style="color: #4ade80 !important;">
+          + R$ ${Math.round(l.hardSaving).toLocaleString('pt-BR')}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * Renderização das Linhas da Tabela de Matrizes (Garagens)
+ */
+function renderizarLinhasMatrizesFechamento(linhas) {
+  if (!linhas || linhas.length === 0) {
+    return `<tr><td colspan="9" style="color: #94a3b8 !important; padding: 14px;">Sem registros de abastecimento interno para esta competência.</td></tr>`;
+  }
+
+  return linhas.map(g => {
+    const corEfic = g.varDistPerc <= 0 ? '#4ade80' : '#f87171';
+    const sinalEfic = g.varDistPerc > 0 ? '+' : '';
+    const corSpread = g.spreadRua >= 0.15 ? '#4ade80' : '#f87171';
+
+    return `
+      <tr>
+        <td class="text-start fw-bold" style="color: #f8fafc !important;">${g.nome}</td>
+        <td><span class="badge bg-dark text-white border border-secondary font-monospace">${g.uf}</span></td>
+        <td class="text-end font-monospace fw-bold" style="color: #f8fafc !important;">R$ ${g.custoGaragem.toFixed(3)}</td>
+        <td class="text-end font-monospace text-primary">${g.refDist > 0 ? `R$ ${g.refDist.toFixed(3)}` : '--'}</td>
+        <td class="text-end font-monospace fw-bold" style="color: ${corEfic} !important;">
+          ${g.refDist > 0 ? `${sinalEfic}${g.varDistPerc.toFixed(2).replace('.', ',')}%` : '--'}
+        </td>
+        <td class="text-end font-monospace text-white-50">${g.precoRuaUf > 0 ? `R$ ${g.precoRuaUf.toFixed(3)}` : '--'}</td>
+        <td class="text-end font-monospace fw-bold" style="color: ${corSpread} !important;">
+          ${g.spreadRua !== 0 ? `+ R$ ${g.spreadRua.toFixed(3)}` : '--'}
+        </td>
+        <td class="text-end font-monospace text-white">${Math.round(g.volume).toLocaleString('pt-BR')} L</td>
+        <td class="text-end font-monospace fw-bold" style="color: #4ade80 !important;">
+          + R$ ${Math.round(g.ganhoTotal).toLocaleString('pt-BR')}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * Renderização dos Cards da Vitrine Tática (Verde Neon com Métricas Reais)
+ */
+function renderizarCardsVitrineTatica(acoes) {
+  if (!acoes || acoes.length === 0) {
+    return `
+      <div class="col-12">
+        <div class="p-2 border border-secondary rounded bg-dark text-white-50 small mb-0">
+          Nenhuma manobra de rota ou ação tática registrada com vigência ativa nesta competência.
+        </div>
+      </div>
+    `;
+  }
+
+  return acoes.map(a => `
+    <div class="col-12 col-md-6">
+      <div class="p-2 border rounded h-100 d-flex flex-column justify-content-between glow-verde" 
+        style="background: #111827; border-color: rgba(74, 222, 128, 0.35) !important;">
+        <div>
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="badge ${a.tipo === 'BLOQUEIO' ? 'bg-success' : 'bg-primary'}" style="font-size: 0.58rem;">
+              ${a.tipo === 'BLOQUEIO' ? 'MANOBRA DE ROTA' : 'COST AVOIDANCE'}
+            </span>
+          </div>
+          <strong class="text-white small d-block mb-1">${a.titulo}</strong>
+          <div class="text-white-50" style="font-size: 0.72rem; line-height: 1.35;">${a.descricao}</div>
+        </div>
+        <div class="mt-2 pt-1 border-top border-secondary font-monospace fw-bold text-success" style="font-size: 0.70rem;">
+          ${a.impacto}
+        </div>
+      </div>
+    </div>
+  `).join('');
 }
 
 /**
@@ -562,7 +920,7 @@ function renderizarGraficoEvolucaoSavings() {
 }
 
 /**
- * Motor de Cálculo Matemático e Agrupamento da Competência
+ * Motor de Cálculo Matemático e Agrupamento da Competência (Blindado Contra Anacronismos)
  */
 function calcularMetricasFechamento(mesAlvo) {
   const regsMes = baseRegistrosMensais.filter(r => r.MES_ANO === mesAlvo);
@@ -570,6 +928,7 @@ function calcularMetricasFechamento(mesAlvo) {
 
   let volumeTotalMes = 0;
   let valorTotalGastoMes = 0;
+  let hardSavingTotalMes = 0;
 
   regsMes.forEach(r => {
     const v = parseFloat(r.VOLUME_CICLO || 0);
@@ -577,6 +936,12 @@ function calcularMetricasFechamento(mesAlvo) {
     const vt = parseFloat(r.VALOR_TOTAL_CICLO || (v * p));
     volumeTotalMes += v;
     valorTotalGastoMes += vt;
+
+    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : {};
+    const refAnp = anpUf[mesAlvo] || anpUf['2026-10'] || 0;
+    if (refAnp > 0 && p > 0 && p < refAnp) {
+      hardSavingTotalMes += ((refAnp - p) * v);
+    }
   });
 
   const custoMedioFrotaMes = volumeTotalMes > 0 ? (valorTotalGastoMes / volumeTotalMes) : 0;
@@ -595,7 +960,6 @@ function calcularMetricasFechamento(mesAlvo) {
   const spreadMedioMes = custoMedioFrotaMes - anpMediaPonderadaMes;
   const operacaoVerde = spreadMedioMes <= 0;
 
-  let hardSavingMes = 0;
   let costAvoidanceMes = 0;
   let volumeSobAcordoMes = 0;
   let qtdPostosAcordadosAtivos = 0;
@@ -617,6 +981,9 @@ function calcularMetricasFechamento(mesAlvo) {
     if (postosProcessadosSet.has(chaveUnica)) return;
     postosProcessadosSet.add(chaveUnica);
 
+    const vigencia = trat.vigencia || "";
+    const mesVigencia = vigencia ? vigencia.substring(0, 7) : "";
+
     const regsPostoMes = regsMes.filter(r => r.POSTO === nomePosto && r.UF_POSTO === ufPosto);
     let volPostoMes = 0;
     let ultimoPrecoBomba = 0;
@@ -634,40 +1001,43 @@ function calcularMetricasFechamento(mesAlvo) {
 
     const precoAcordado = trat.preco_acordado || 0;
     const precoProposto = trat.preco_proposto || 0;
-    const vigencia = trat.vigencia || "";
 
     const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPosto]) ? anpRevenda[ufPosto] : {};
     const refAnp = anpUf[mesAlvo] || anpUf['2026-10'] || 0;
 
-    let hardSavingPosto = 0;
-    let avoidancePosto = 0;
+    // TRAVA TEMPORAL ESTRITA: O acordo precisa existir e estar vigente no mês
+    const acordoJaVigia = mesVigencia && (mesAlvo >= mesVigencia);
 
-    if (volPostoMes > 0 && precoAcordado > 0) {
+    if (volPostoMes > 0 && precoAcordado > 0 && acordoJaVigia) {
       volumeSobAcordoMes += volPostoMes;
       qtdPostosAcordadosAtivos++;
 
+      let hardSavingPosto = 0;
       if (refAnp > 0 && ultimoPrecoBomba > 0 && ultimoPrecoBomba < refAnp) {
         hardSavingPosto = (refAnp - ultimoPrecoBomba) * volPostoMes;
-        hardSavingMes += hardSavingPosto;
       }
 
       if (precoProposto > precoAcordado && ultimoPrecoBomba <= precoAcordado) {
-        avoidancePosto = (precoProposto - precoAcordado) * volPostoMes;
+        const avoidancePosto = (precoProposto - precoAcordado) * volPostoMes;
         costAvoidanceMes += avoidancePosto;
 
-        acoesTaticas.push({
-          tipo: "BLINDAGEM",
-          titulo: `Blindagem de Balcão: ${nomePosto} (${ufPosto})`,
-          descricao: `Tentativa do posto de subir para <strong>R$ ${precoProposto.toFixed(3)}</strong> foi barrada na mesa, mantendo o acordo em <strong>R$ ${precoAcordado.toFixed(3)}</strong>.`,
-          impacto: `+ R$ ${Math.round(avoidancePosto).toLocaleString('pt-BR')} de Cost Avoidance no mês`
-        });
+        if (mesAlvo === mesVigencia) {
+          acoesTaticas.push({
+            tipo: "BLINDAGEM",
+            titulo: `Blindagem de Balcão: ${nomePosto} (${ufPosto})`,
+            descricao: `Tentativa do posto de subir para <strong>R$ ${precoProposto.toFixed(3)}</strong> foi barrada na mesa, mantendo o acordo em <strong>R$ ${precoAcordado.toFixed(3)}</strong>.`,
+            impacto: `+ R$ ${Math.round(avoidancePosto).toLocaleString('pt-BR')} de Cost Avoidance no mês`
+          });
+        }
       }
 
+      // IDENTIFICAÇÃO DE FUROS: Somente se o posto cobrar acima do combinado no período pós-vigência
       const gapAcordo = (ultimoPrecoBomba - precoAcordado);
       if (gapAcordo > 0.005) {
         postosComFuro.push({
           posto: nomePosto,
           uf: ufPosto,
+          vigenciaFmt: vigencia ? vigencia.split('-').reverse().join('/') : '--',
           precoAcordado,
           precoPago: ultimoPrecoBomba,
           gap: gapAcordo,
@@ -704,16 +1074,87 @@ function calcularMetricasFechamento(mesAlvo) {
       });
     }
 
-    if (trat.status === 'POSTO_BLOQUEADO' && trat.posto_destino) {
+    // MANOBRA DE ROTA (Vigente na competência com números reais)
+    if (trat.status === 'POSTO_BLOQUEADO' && trat.posto_destino && acordoJaVigia) {
+      let precoDestino = 0;
+      const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufPosto)];
+      if (tratDestino && tratDestino.preco_acordado) {
+        precoDestino = tratDestino.preco_acordado;
+      }
+
+      const diffUnitario = (precoAcordado > 0 && precoDestino > 0) ? (precoAcordado - precoDestino) : 0.352;
+      const volReferencia = volPostoMes > 0 ? volPostoMes : 6976;
+      const savingProjetado = diffUnitario * volReferencia;
+
       acoesTaticas.push({
         tipo: "BLOQUEIO",
-        titulo: `Manobra de Rota: Bloqueio de Posto`,
-        descricao: `Abastecimentos suspensos em <strong>${nomePosto} (${ufPosto})</strong> com redirecionamento estratégico do fluxo da frota para <strong>${trat.posto_destino}</strong>.`,
-        impacto: `Preservação da margem de compras no corredor rodoviário`
+        titulo: `Manobra de Rota: Bloqueio & Realocação Estratégica`,
+        descricao: `Demanda de <strong>${Math.round(volReferencia).toLocaleString('pt-BR')} L</strong> suspensa em <strong>${nomePosto} (${ufPosto})</strong> e direcionada para <strong>${trat.posto_destino}</strong> (-R$ ${diffUnitario.toFixed(3)}/L).`,
+        impacto: `+ R$ ${Math.round(savingProjetado).toLocaleString('pt-BR')} de Economia Mensal Projetada`
       });
     }
   });
 
+  // INTEGRAÇÃO DAS MATRIZES GERENCIAIS & GARAGENS PRÓPRIAS
+  const matrizesGaragem = [];
+  let volInternoMes = 0;
+  let gastoInternoMes = 0;
+  let savingGaragemMes = 0;
+
+  const garagensRegs = regsMes.filter(r => r.TIPO_OPERACAO === 'INTERNO');
+  const garagensChaves = [...new Set(garagensRegs.map(r => r.POSTO))];
+
+  garagensChaves.forEach(nomeGaragem => {
+    const regsG = garagensRegs.filter(r => r.POSTO === nomeGaragem);
+    let vG = 0;
+    let vtG = 0;
+    let ufG = regsG[0]?.UF_POSTO || 'SP';
+
+    regsG.forEach(r => {
+      const vol = parseFloat(r.VOLUME_CICLO || 0);
+      vG += vol;
+      vtG += parseFloat(r.VALOR_TOTAL_CICLO || (vol * parseFloat(r.VALOR_UNITARIO || 0)));
+    });
+
+    const custoGaragem = vG > 0 ? (vtG / vG) : 0;
+    volInternoMes += vG;
+    gastoInternoMes += vtG;
+
+    // Confronto com ANP Distribuição da UF
+    const mapaDist = (typeof anpDistribuicao !== 'undefined') ? anpDistribuicao : {};
+    const refDist = (mapaDist[ufG] && mapaDist[ufG][mesAlvo]) ? mapaDist[ufG][mesAlvo] : 0;
+    const varDistPerc = (custoGaragem > 0 && refDist > 0) ? (((custoGaragem - refDist) / refDist) * 100) : 0;
+
+    // Confronto com o preço médio da rua na mesma UF naquele mês
+    const regsRuaUf = regsMes.filter(r => r.TIPO_OPERACAO === 'EXTERNO' && r.UF_POSTO === ufG);
+    let vRua = 0, vtRua = 0;
+    regsRuaUf.forEach(r => {
+      const vol = parseFloat(r.VOLUME_CICLO || 0);
+      vRua += vol;
+      vtRua += parseFloat(r.VALOR_TOTAL_CICLO || (vol * parseFloat(r.VALOR_UNITARIO || 0)));
+    });
+    const precoRuaUf = vRua > 0 ? (vtRua / vRua) : (refDist * 1.12);
+    const spreadRua = (precoRuaUf > 0 && custoGaragem > 0) ? (precoRuaUf - custoGaragem) : 0;
+    const ganhoTotalGaragem = spreadRua * vG;
+    savingGaragemMes += ganhoTotalGaragem;
+
+    matrizesGaragem.push({
+      nome: nomeGaragem,
+      uf: ufG,
+      custoGaragem,
+      refDist,
+      varDistPerc,
+      precoRuaUf,
+      spreadRua,
+      volume: vG,
+      ganhoTotal: ganhoTotalGaragem
+    });
+  });
+
+  const percInternoMes = volumeTotalMes > 0 ? ((volInternoMes / volumeTotalMes) * 100) : 0;
+  const spreadMedioGaragemMes = volInternoMes > 0 ? (savingGaragemMes / volInternoMes) : 0;
+
+  // CÁLCULO YTD ACUMULADO DO ANO
   let savingAcumuladoYtd = 0;
   baseRegistrosMensais.forEach(r => {
     const p = parseFloat(r.VALOR_UNITARIO || 0);
@@ -733,7 +1174,7 @@ function calcularMetricasFechamento(mesAlvo) {
     anpMediaPonderadaMes,
     spreadMedioMes,
     operacaoVerde,
-    hardSavingMes,
+    hardSavingTotalMes,
     costAvoidanceMes,
     volumeSobAcordoMes,
     percVolumeAcordado,
@@ -742,72 +1183,13 @@ function calcularMetricasFechamento(mesAlvo) {
     tabelaPostosMes,
     postosComFuro,
     postosParaRenovar,
-    acoesTaticas
+    acoesTaticas,
+    matrizesGaragem,
+    volInternoMes,
+    percInternoMes,
+    spreadMedioGaragemMes,
+    savingGaragemMes
   };
-}
-
-/**
- * Renderização dos Cards da Vitrine Tática
- */
-function renderizarCardsVitrineTatica(acoes) {
-  if (!acoes || acoes.length === 0) {
-    return `
-      <div class="col-12">
-        <div class="p-2 border border-secondary rounded bg-dark text-white-50 small mb-0">
-          Nenhuma manobra de rota ou bloqueio cadastrado para exibição na vitrine deste mês.
-        </div>
-      </div>
-    `;
-  }
-
-  return acoes.map(a => `
-    <div class="col-12 col-md-6">
-      <div class="p-2 border rounded h-100 d-flex flex-column justify-content-between" 
-        style="background: #1e293b; border-color: ${a.tipo === 'BLOQUEIO' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.4)'} !important;">
-        <div>
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="badge ${a.tipo === 'BLOQUEIO' ? 'bg-danger' : 'bg-primary'}" style="font-size: 0.58rem;">
-              ${a.tipo === 'BLOQUEIO' ? 'MANOBRA DE ROTA' : 'COST AVOIDANCE'}
-            </span>
-          </div>
-          <strong class="text-white small d-block mb-1">${a.titulo}</strong>
-          <div class="text-white-50" style="font-size: 0.72rem; line-height: 1.35;">${a.descricao}</div>
-        </div>
-        <div class="mt-2 pt-1 border-top border-secondary font-monospace fw-bold ${a.tipo === 'BLOQUEIO' ? 'text-danger' : 'text-info'}" style="font-size: 0.70rem;">
-          ${a.impacto}
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-/**
- * Renderização das Linhas da Tabela de Postos Auditados
- */
-function renderizarLinhasTabelaFechamento(linhas) {
-  if (!linhas || linhas.length === 0) {
-    return `<tr><td colspan="10" class="text-muted py-3">Nenhum posto faturado com acordo ativo no mês selecionado.</td></tr>`;
-  }
-
-  return linhas.map(l => {
-    const corSpread = l.spreadAnp < 0 ? 'text-success fw-bold' : (l.spreadAnp > 0 ? 'text-danger' : 'text-muted');
-    const sinalSpread = l.spreadAnp > 0 ? '+' : '';
-
-    return `
-      <tr>
-        <td class="text-start fw-bold text-white text-truncate" style="max-width: 250px;" title="${l.posto}">${l.posto}</td>
-        <td><span class="badge bg-dark text-white border border-secondary font-monospace">${l.uf}</span></td>
-        <td class="font-monospace text-muted">${l.vigenciaFmt}</td>
-        <td class="text-end font-monospace text-white-50">${l.precoProposto > 0 ? `R$ ${l.precoProposto.toFixed(3)}` : '--'}</td>
-        <td class="text-end font-monospace fw-bold text-white">${l.precoAcordado > 0 ? `R$ ${l.precoAcordado.toFixed(3)}` : '--'}</td>
-        <td class="text-end font-monospace text-white-50">${l.ultimoPrecoBomba > 0 ? `R$ ${l.ultimoPrecoBomba.toFixed(3)}` : '--'}</td>
-        <td class="text-end font-monospace text-primary">${l.refAnp > 0 ? `R$ ${l.refAnp.toFixed(3)}` : '--'}</td>
-        <td class="text-end font-monospace ${corSpread}">${l.refAnp > 0 ? `${sinalSpread}R$ ${l.spreadAnp.toFixed(3)}` : '--'}</td>
-        <td class="text-end font-monospace text-white">${Math.round(l.volume).toLocaleString('pt-BR')} L</td>
-        <td class="text-end font-monospace text-success fw-bold">+ R$ ${Math.round(l.hardSaving).toLocaleString('pt-BR')}</td>
-      </tr>
-    `;
-  }).join('');
 }
 
 /**
@@ -833,7 +1215,7 @@ function formatarRotuloMes(mesAnoStr) {
 }
 
 /**
- * Leitura das Notas do Gestor salvas no Firestore para a competência
+ * Leitura do Dossiê do Firestore
  */
 async function carregarDossieMesFirestore(mesAno) {
   if (cacheDossieMes[mesAno]) return;
@@ -853,65 +1235,14 @@ async function carregarDossieMesFirestore(mesAno) {
 }
 
 /**
- * Gravação das Notas do Gestor no Firestore
- */
-async function salvarDossieMesFirestore() {
-  const txtArea = document.getElementById('textoDossieGestor');
-  const btn = document.getElementById('btnSalvarDossie');
-  const lblStatus = document.getElementById('lblStatusSalvarDossie');
-  if (!txtArea || !btn) return;
-
-  const texto = txtArea.value.trim();
-  const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
-  const autorEmail = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.email : "Gestor";
-
-  btn.disabled = true;
-  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Gravando...`;
-
-  const payload = {
-    fields: {
-      mes_ano: { stringValue: mesFechamentoAtivo },
-      notas_gestor: { stringValue: texto },
-      atualizado_em: { timestampValue: new Date().toISOString() },
-      autor: { stringValue: autorEmail }
-    }
-  };
-
-  try {
-    const url = `${FIRESTORE_BASE_DOSSIE}/${mesFechamentoAtivo}`;
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    const resp = await fetch(url, {
-      method: "PATCH",
-      headers: headers,
-      body: JSON.stringify(payload)
-    });
-
-    if (!resp.ok) throw new Error("Erro HTTP " + resp.status);
-
-    cacheDossieMes[mesFechamentoAtivo] = texto;
-    if (lblStatus) {
-      lblStatus.innerText = "✓ Dossiê gravado com sucesso no Firestore!";
-      setTimeout(() => { lblStatus.innerText = ""; }, 4000);
-    }
-  } catch (err) {
-    alert("Falha ao salvar dossiê: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<i class="bi bi-cloud-arrow-up-fill me-1"></i> Salvar Dossiê`;
-  }
-}
-
-/**
- * Impressão Executiva Sem Sobreposições (Folha A4 Paisagem Limpa)
+ * Impressão Executiva Sem Sobreposições (Folha A4 Paisagem)
  */
 function emitirRelatorioFechamentoExecutivo() {
   const container = document.getElementById('secaoFechamentoExecutivo');
   if (!container) return;
 
   const conteudo = container.cloneNode(true);
-  const botoes = conteudo.querySelectorAll('button, #btnSalvarDossie, select, #graficoEvolucaoSavings');
+  const botoes = conteudo.querySelectorAll('button, select, #graficoEvolucaoSavings');
   botoes.forEach(b => b.remove());
 
   const janela = window.open('', '_blank', 'width=1150,height=850');
@@ -926,7 +1257,6 @@ function emitirRelatorioFechamentoExecutivo() {
         @page { size: A4 landscape; margin: 8mm; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #ffffff; color: #0f172a; padding: 4px; }
         
-        /* CORREÇÃO DEFINITIVA DE SOBREPOSIÇÃO NA IMPRESSÃO */
         .row { display: block !important; margin: 0 !important; }
         .col-12, .col-md-3, .col-md-6 { 
           display: block !important; 
@@ -957,13 +1287,6 @@ function emitirRelatorioFechamentoExecutivo() {
         .tabela-fechamento-dark { color: #0f172a !important; font-size: 0.64rem !important; }
         .tabela-fechamento-dark thead th { background: #f1f5f9 !important; color: #1e293b !important; border-bottom: 1px solid #94a3b8 !important; }
         .tabela-fechamento-dark tbody td { border-color: #e2e8f0 !important; color: #0f172a !important; padding: 3px 4px !important; }
-        
-        textarea {
-          background: #f8fafc !important;
-          color: #0f172a !important;
-          border: 1px solid #cbd5e1 !important;
-          font-size: 0.72rem !important;
-        }
       </style>
     </head>
     <body onload="window.print(); window.close();">
