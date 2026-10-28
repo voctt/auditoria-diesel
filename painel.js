@@ -282,21 +282,24 @@ function alternarModoOperacao(modo) {
   if (modo === 'ROTEIRIZADOR') document.getElementById('btnModoRota')?.classList.add('active');
   if (modo === 'MATRIZES') document.getElementById('btnModoMatrizes')?.classList.add('active');
   if (modo === 'AUDITORIA') document.getElementById('btnModoAuditoria')?.classList.add('active');
+  if (modo === 'FECHAMENTO') document.getElementById('btnModoFechamento')?.classList.add('active');
 
   const gridKpis = document.getElementById('gridKpisPrincipais');
   if (gridKpis) {
-    gridKpis.style.display = (modo === 'AUDITORIA' || modo === 'ROTEIRIZADOR' || modo === 'MATRIZES') ? 'none' : 'flex';
+    gridKpis.style.display = (modo === 'AUDITORIA' || modo === 'ROTEIRIZADOR' || modo === 'MATRIZES' || modo === 'FECHAMENTO') ? 'none' : 'flex';
   }
 
   const painelPrinc = document.getElementById('secaoPainelPrincipal');
   const roteirizador = document.getElementById('secaoRoteirizador');
   const matrizes = document.getElementById('secaoMatrizesGerenciais');
   const auditoria = document.getElementById('secaoAuditoriaComercial');
+  const fechamento = document.getElementById('secaoFechamentoExecutivo');
 
   if (painelPrinc) painelPrinc.style.display = 'none';
   if (roteirizador) roteirizador.style.display = 'none';
   if (matrizes) matrizes.style.display = 'none';
   if (auditoria) auditoria.style.display = 'none';
+  if (fechamento) fechamento.style.display = 'none';
 
   if (modo === 'ROTEIRIZADOR') {
     if (roteirizador) roteirizador.style.display = 'block';
@@ -307,6 +310,9 @@ function alternarModoOperacao(modo) {
   } else if (modo === 'AUDITORIA') {
     if (auditoria) auditoria.style.display = 'block';
     if (typeof renderizarAbaAuditoriaComercial === 'function') renderizarAbaAuditoriaComercial();
+  } else if (modo === 'FECHAMENTO') {
+    if (fechamento) fechamento.style.display = 'block';
+    if (typeof renderizarAbaFechamentoExecutivo === 'function') renderizarAbaFechamentoExecutivo();
   } else {
     if (painelPrinc) painelPrinc.style.display = 'block';
     atualizarTextosHeaderPainel();
@@ -467,7 +473,7 @@ function processarPainel() {
 
   // 2. Filtro dos postos e listagem
   let registrosModo = registros;
-  if (modoAtual !== 'TODOS' && modoAtual !== 'ROTEIRIZADOR' && modoAtual !== 'MATRIZES' && modoAtual !== 'AUDITORIA') {
+  if (modoAtual !== 'TODOS' && modoAtual !== 'ROTEIRIZADOR' && modoAtual !== 'MATRIZES' && modoAtual !== 'AUDITORIA' && modoAtual !== 'FECHAMENTO') {
     registrosModo = registros.filter(d => d.TIPO_OPERACAO === modoAtual);
   }
 
@@ -860,7 +866,6 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     if (p.REF_ANP > 0) {
       const sinal = p.GAP_MERCADO >= 0 ? "+" : "-";
       const corGap = p.GAP_MERCADO > 0.05 ? "text-danger" : "text-success";
-      // Correção da máscara monetária com toLocaleString para utilizar vírgula
       gapHtml = `<span class="${corGap} fw-bold small">${sinal}R$ ${Math.abs(p.GAP_MERCADO).toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} (${sinal}${Math.abs(p.GAP_PERC).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)</span>`;
     }
 
@@ -885,7 +890,6 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     const dadosAnpMes = [];
 
     mesesDisponiveis.forEach((m, mIdx) => {
-      // Agrupa os ciclos do posto no mês específico para achar o Preço Médio ponderado daquele mês para o gráfico
       const ciclosMes = baseRegistrosMensais.filter(r => 
         r.POSTO === p.POSTO && r.UF_POSTO === p.UF_POSTO && r.MES_ANO === m &&
         (p.TIPO_OPERACAO !== 'INTERNO' || r.MUNICIPIO_POSTO === p.MUNICIPIO_POSTO)
@@ -929,8 +933,6 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
 
     const card = document.createElement('div');
     card.className = `card-posto-termometro ${ehZebrado}`;
-    
-    // Tratamento de destruição do tooltip fantasma ao tirar o mouse do card
 
     card.innerHTML = `
       <div class="col-posto-identificacao">
