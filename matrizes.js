@@ -83,11 +83,12 @@ function emitirRelatorioMatrizes() {
       <title>Relatório Executivo - Matrizes Gerenciais de Combustível</title>
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
       <style>
-        @page { size: A4 landscape; margin: 10mm; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #1e293b; padding: 10px; }
-        .table { font-size: 0.68rem !important; }
-        .table th, .table td { padding: 4px 5px !important; }
-        .card { border: 1px solid #e2e8f0 !important; box-shadow: none !important; margin-bottom: 15px !important; }
+        @page { size: A4 landscape; margin: 8mm; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #1e293b; padding: 5px; }
+        .table { font-size: 0.65rem !important; }
+        .table th, .table td { padding: 3px 4px !important; }
+        .card { border: 1px solid #e2e8f0 !important; box-shadow: none !important; margin-bottom: 12px !important; page-break-inside: avoid !important; break-inside: avoid !important; }
+        table { page-break-inside: avoid !important; break-inside: avoid !important; }
         .no-print { display: none !important; }
       </style>
     </head>
@@ -344,8 +345,6 @@ async function calcularMatrizesGerenciais(registros) {
     });
     return qtdTotal;
   }
-
-  // ATENÇÃO: As tabelas HTML abaixo receberam o atributo style="white-space: nowrap;" na tag <table>
 
   // 1. MATRIZ EXECUTIVA EXTERNA (ROTA POR UF)
   let htmlExterna = `
@@ -732,9 +731,10 @@ async function renderizarAbaMatrizes() {
       </div>
     </div>
 
+    <!-- 1. MATRIZ EXTERNA (LARGURA TOTAL 100% PARA RESPIRAR OS 12 MESES) -->
     <div class="row g-3 mb-3">
-      <div class="col-12 col-xl-7">
-        <div class="card p-3 shadow-sm border-0 h-100 bg-white">
+      <div class="col-12">
+        <div class="card p-3 shadow-sm border-0 bg-white">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="d-flex align-items-center">
               <i class="bi bi-graph-down-arrow text-primary fs-5 me-2"></i>
@@ -745,14 +745,17 @@ async function renderizarAbaMatrizes() {
           <div class="table-responsive">
             ${matrizes.htmlExterna}
           </div>
-          <div class="alert alert-light border mt-auto py-2 px-3 small text-muted" style="font-size: 0.72rem;">
+          <div class="alert alert-light border mt-2 py-2 px-3 small text-muted" style="font-size: 0.72rem;">
             <em>💡 <strong>Como interpretar:</strong> Mede o poder de compra da frota na estrada contra a bomba oficial da ANP. Células em <strong>vermelho com ágio</strong> possuem tooltip indicando o <strong>Posto Vilão</strong> que causou o maior sangramento financeiro na praça.</em>
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="col-12 col-xl-5 d-flex flex-column gap-3">
-        <div class="card p-3 shadow-sm border-0 flex-grow-1 bg-white">
+    <!-- 2. MATRIZES INTERNAS E SPREAD LADO A LADO (50% / 50% COM ALTURAS EQUILIBRADAS) -->
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-xl-6">
+        <div class="card p-3 shadow-sm border-0 h-100 bg-white">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="d-flex align-items-center">
               <i class="bi bi-fuel-pump-fill text-success fs-5 me-2"></i>
@@ -763,12 +766,14 @@ async function renderizarAbaMatrizes() {
           <div class="table-responsive">
             ${matrizes.htmlInterna}
           </div>
-          <div class="alert alert-light border mt-1 py-1 px-2 text-muted" style="font-size: 0.69rem;">
+          <div class="alert alert-light border mt-2 py-1 px-2 text-muted" style="font-size: 0.69rem;">
             <em>💡 <strong>Como interpretar:</strong> Eficiência nas compras de atacado das garagens em relação ao Levantamento Oficial de Preços de Distribuição (PDC/ANP). Barueri e Ribeirão Preto agora auditados individualmente.</em>
           </div>
         </div>
+      </div>
 
-        <div class="card p-3 shadow-sm border-0 flex-grow-1 bg-white">
+      <div class="col-12 col-xl-6">
+        <div class="card p-3 shadow-sm border-0 h-100 bg-white">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="d-flex align-items-center">
               <i class="bi bi-cash-stack text-warning fs-5 me-2"></i>
@@ -779,15 +784,17 @@ async function renderizarAbaMatrizes() {
           <div class="table-responsive">
             ${matrizes.htmlSpread}
           </div>
-          <div class="alert alert-light border mt-1 py-1 px-2 text-muted" style="font-size: 0.69rem;">
+          <div class="alert alert-light border mt-2 py-1 px-2 text-muted" style="font-size: 0.69rem;">
             <em>💡 <strong>Como interpretar:</strong> Ganho unitário líquido por abastecer na garagem em vez da rua. Números em <strong>vermelho (abaixo de R$ 0,15/L)</strong> alertam para margem insuficiente.</em>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- 3. DIAGNÓSTICO E RECOMENDAÇÕES ESTRATÉGICAS -->
     ${matrizes.htmlInsights}
 
+    <!-- 4. CONTROLE DE AUDITORIA BRUTA SOB DEMANDA -->
     <div class="d-flex justify-content-center my-3">
       <button id="btnToggleAuditoria" class="btn btn-sm btn-outline-secondary px-4 shadow-sm" onclick="alternarPainelAuditoria()">
         <i class="bi bi-shield-check me-1"></i> Exibir Tabelas de Auditoria Bruta (4)
