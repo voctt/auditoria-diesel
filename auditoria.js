@@ -55,10 +55,10 @@ function atualizarCardsAuditoriaKPIs(aderenciaPerc, savingTotal, desviosQtd, mar
 
   if (subPerda) {
     if (desviosQtd > 0) {
-      subPerda.innerText = `${desviosQtd} postos com cobrança acima da mesa`;
+      subPerda.innerText = `${desviosQtd} postos com cobrança acima do combinado`;
       subPerda.className = "kpi-sub text-danger fw-bold";
     } else {
-      subPerda.innerText = "Nenhuma quebra imediata identificada";
+      subPerda.innerText = "Nenhum furo de preço identificado";
       subPerda.className = "kpi-sub text-success";
     }
   }
@@ -74,23 +74,31 @@ function gerarParecerExecutivoPosto(p) {
   const savingFmt = Math.round(p.savingItem).toLocaleString('pt-BR');
 
   if (p.tipoConformidade === 'CONFORME') {
-    return `Nesta praça, foram auditados <strong>${volFmt} L</strong> faturados em estrita conformidade com o acordo comercial (<strong>R$ ${precoFmt}/L</strong>). Frente à referência média estadual da ANP de <strong>R$ ${anpFmt}/L</strong>, a gestão garantiu um spread competitivo de <strong>${p.gapAnp.toFixed(3)}/L</strong>, retendo <strong>+R$ ${savingFmt}</strong> diretamente no caixa da Cargosoft.`;
+    return `Nesta praça, foram auditados <strong>${volFmt} L</strong> faturados exatamente no preço acordado (<strong>R$ ${precoFmt}/L</strong>). Frente à média estadual da ANP de <strong>R$ ${anpFmt}/L</strong>, a negociação sustentou um spread de <strong>${p.gapAnp.toFixed(3)}/L</strong>, garantindo <strong>+R$ ${savingFmt}</strong> direto no caixa da Cargosoft.`;
   }
 
   if (p.tipoConformidade === 'BLINDADO') {
-    return `O posto acompanhou repasses de mercado da distribuidora após a vigência inicial, atingindo <strong>R$ ${precoFmt}/L</strong>. Contudo, a negociação de volume sustentou a tarifa <strong>R$ ${Math.abs(p.gapAnp).toFixed(3)}/L abaixo da média oficial da ANP (R$ ${anpFmt}/L)</strong>, preservando a margem da parceria e protegendo <strong>+R$ ${savingFmt}</strong> de capital contra o balcão rodoviário.`;
+    return `O posto acompanhou repasses de alta das distribuidoras, chegando a <strong>R$ ${precoFmt}/L</strong>. Porém, o acordo de volume manteve o combustível <strong>R$ ${Math.abs(p.gapAnp).toFixed(3)}/L abaixo da média oficial da ANP (R$ ${anpFmt}/L)</strong>, protegendo <strong>+R$ ${savingFmt}</strong> contra o preço de bomba comum.`;
+  }
+
+  if (p.tipoConformidade === 'EXPIRADO') {
+    return `Alerta de SLA Operacional: Acordo firmado há mais de 30 dias. O posto subiu a bomba para <strong>R$ ${precoFmt}/L</strong> (+R$ ${p.gapAcordo.toFixed(3)}/L acima do acordo inicial). Necessário chamar o gerente para <strong>renovar a negociação</strong> e travar nova tabela.`;
   }
 
   if (p.tipoConformidade === 'QUEBRA') {
     const perdaEstimada = Math.round(p.gapAcordo * p.volumeAuditado).toLocaleString('pt-BR');
-    return `Alerta de Governança: Identificado desvio comercial imediato pós-acordo. O posto cobrou <strong>R$ ${precoFmt}/L</strong> (<strong>+R$ ${p.gapAcordo.toFixed(3)}/L acima da mesa</strong>) logo nos primeiros abastecimentos. Desvio financeiro de <strong>R$ ${perdaEstimada}</strong> passível de contestação e glosa na fatura quinzenal.`;
+    return `Furo Comercial Imediato: O posto cobrou <strong>R$ ${precoFmt}/L</strong> (<strong>+R$ ${p.gapAcordo.toFixed(3)}/L acima do combinado</strong>) logo após o fechamento da tabela. Desvio faturado de <strong>R$ ${perdaEstimada}</strong> passível de contestação e desconto na fatura quinzenal.`;
   }
 
   if (p.tipoConformidade === 'REAJUSTE') {
-    return `Praça sob monitoramento ativo: Reajuste praticado de <strong>R$ ${precoFmt}/L</strong> erodiu a vantagem contratual acordada, aproximando-se do preço médio regional da ANP (<strong>R$ ${anpFmt}/L</strong>). Recomendada reabertura imediata da mesa para repactuação do spread.`;
+    return `Praça em acompanhamento: O posto reajustou para <strong>R$ ${precoFmt}/L</strong>, reduzindo a vantagem negociada frente à ANP (<strong>R$ ${anpFmt}/L</strong>). Recomendado contatar o posto para alinhar a condição comercial.`;
   }
 
-  return `Posto com tratativa cadastrada aguardando registro de consumo pós-vigência para consolidação dos indicadores de performance e saving.`;
+  if (p.tipoConformidade === 'INAUGURAL') {
+    return `Posto com acordo cadastrado e sem histórico prévio recente de abastecimento. Volume de <strong>${volFmt} L</strong> faturado a <strong>R$ ${precoFmt}/L</strong>. Base inaugural para comparação nos próximos fechamentos.`;
+  }
+
+  return `Posto com tratativa cadastrada aguardando registro de consumo pós-vigência para consolidação dos números de auditoria.`;
 }
 
 /**
@@ -113,7 +121,7 @@ function renderizarAbaAuditoriaComercial() {
       <tr>
         <td colspan="11" class="text-center py-5 text-muted">
           <i class="bi bi-journal-x fs-2 d-block mb-2 text-secondary"></i>
-          Nenhuma tratativa comercial foi registrada ainda.<br>
+          Nenhuma negociação foi registrada ainda.<br>
           Acesse o painel principal e clique no botão <strong>Tratativa</strong> em qualquer posto para cadastrar acordos.
         </td>
       </tr>
@@ -135,15 +143,18 @@ function renderizarAbaAuditoriaComercial() {
     const trat = mapaTrat[docId];
     if (!trat) return;
 
+    // Resgate exato dos dados do posto gravados na tratativa (Sem fatiar docId)
     const partesDoc = docId.split('_');
-    const ufDoc = partesDoc[partesDoc.length - 1];
-    const nomeDoc = partesDoc.slice(0, partesDoc.length - 1).join(' ');
+    const ufFallback = partesDoc[partesDoc.length - 1];
+    const nomeFallback = partesDoc.slice(0, partesDoc.length - 1).join(' ');
 
-    // Filtra transações do posto no consolidado KMM
+    const nomePostoAlvo = trat.posto || nomeFallback;
+    const ufPostoAlvo = trat.uf || ufFallback;
+
+    // VÍNCULO ESTRITO E CIRÚRGICO: Exige nome idêntico e mesma UF (Evita cruzar Cariri com Wanderlândia)
     const regsPosto = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais))
       ? baseRegistrosMensais.filter(d => 
-          normalizarTexto(d.POSTO).replace(/[^A-Z0-9]/g, '_').includes(docId.replace(`_${ufDoc}`, '')) ||
-          (d.UF_POSTO === ufDoc && normalizarTexto(d.POSTO).includes(partesDoc[0]))
+          d.POSTO === nomePostoAlvo && d.UF_POSTO === ufPostoAlvo
         )
       : [];
 
@@ -151,32 +162,51 @@ function renderizarAbaAuditoriaComercial() {
     let dataUltimoBomba = "";
     let volumeAuditado = 0;
     let precoBaseHistorico = 0;
+    let dataPrecoBaseHistorico = "";
 
+    const strDataVigencia = trat.vigencia || "";
+
+    // Varredura cronológica precisa das transações do posto
     regsPosto.forEach(r => {
       const p = parseFloat(r.VALOR_UNITARIO || 0);
       const v = parseFloat(r.VOLUME_CICLO || 0);
-      
-      if (r.DATA_FIM_CICLO && r.DATA_FIM_CICLO > dataUltimoBomba) {
-        dataUltimoBomba = r.DATA_FIM_CICLO;
+      const dataCiclo = r.DATA_FIM_CICLO || "";
+
+      if (dataCiclo && dataCiclo > dataUltimoBomba) {
+        dataUltimoBomba = dataCiclo;
         ultimoPrecoBomba = p;
       }
-      if (trat.vigencia && r.DATA_FIM_CICLO && r.DATA_FIM_CICLO.substring(0, 10) >= trat.vigencia) {
+
+      if (strDataVigencia && dataCiclo && dataCiclo.substring(0, 10) >= strDataVigencia) {
         volumeAuditado += v;
-      } else {
-        precoBaseHistorico = p;
+      } else if (strDataVigencia && dataCiclo && dataCiclo.substring(0, 10) < strDataVigencia) {
+        // Encontra o abastecimento pré-acordo mais recente
+        if (dataCiclo > dataPrecoBaseHistorico) {
+          dataPrecoBaseHistorico = dataCiclo;
+          precoBaseHistorico = p;
+        }
       }
     });
 
-    if (precoBaseHistorico === 0) {
-      precoBaseHistorico = trat.preco_acordado > 0 ? (trat.preco_acordado + 0.15) : ultimoPrecoBomba;
+    // VALIDADE DO BASELINE HISTÓRICO: Descarta preços com mais de 45 dias antes da vigência
+    let historicoValido = false;
+    if (precoBaseHistorico > 0 && dataPrecoBaseHistorico && strDataVigencia) {
+      const dtVig = new Date(`${strDataVigencia}T12:00:00Z`);
+      const dtHist = new Date(`${dataPrecoBaseHistorico.substring(0, 10)}T12:00:00Z`);
+      const diasDistancia = Math.round((dtVig - dtHist) / (1000 * 60 * 60 * 24));
+      if (diasDistancia >= 0 && diasDistancia <= 45) {
+        historicoValido = true;
+      } else {
+        precoBaseHistorico = 0; // Descartado por obsolescência
+      }
     }
 
-    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[trat.uf || ufDoc]) ? anpRevenda[trat.uf || ufDoc] : {};
+    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPostoAlvo]) ? anpRevenda[ufPostoAlvo] : {};
     const mesChave = dataUltimoBomba ? dataUltimoBomba.substring(0, 7) : '2026-10';
     const refAnpValor = anpUf[mesChave] || anpUf['2026-10'] || 0;
 
     const precoAcordado = trat.preco_acordado || 0;
-    const strDataVigencia = trat.vigencia || "";
+    const precoProposto = trat.preco_proposto || 0;
     const strDataCompra = (dataUltimoBomba || "").substring(0, 10);
     const ehAbastecimentoPosVigencia = (strDataVigencia && strDataCompra && strDataCompra >= strDataVigencia);
 
@@ -205,16 +235,27 @@ function renderizarAbaAuditoriaComercial() {
     } else {
       gapAcordo = (ultimoPrecoBomba > 0 && precoAcordado > 0) ? (ultimoPrecoBomba - precoAcordado) : 0;
 
-      if (gapAcordo > 0.005) {
-        const dtVig = new Date(`${strDataVigencia}T12:00:00Z`);
-        const dtComp = new Date(`${strDataCompra}T12:00:00Z`);
-        const diasDecorridos = Math.max(0, Math.round((dtComp - dtVig) / (1000 * 60 * 60 * 24)));
+      const dtVig = new Date(`${strDataVigencia}T12:00:00Z`);
+      const dtComp = new Date(`${strDataCompra}T12:00:00Z`);
+      const diasDecorridos = Math.max(0, Math.round((dtComp - dtVig) / (1000 * 60 * 60 * 24)));
 
+      if (gapAcordo > 0.005) {
+        // Posto subiu o valor além do acordo inicial
         if (diasDecorridos <= 2) {
           statusClass = "conf-quebra";
-          statusTexto = `🔴 Quebra Imediata (${diasDecorridos}d)`;
+          statusTexto = `🔴 Furo Imediato (${diasDecorridos}d)`;
           tipoConformidade = "QUEBRA";
           qtdDesviosPosVigencia++;
+        } else if (diasDecorridos > 30) {
+          // ALERTA DE SLA: Acordo vencido há mais de 30 dias que precisa de renovação
+          statusClass = "conf-alerta";
+          statusTexto = `🟠 Acordo Vencido (+${diasDecorridos}d) • Renovar Negociação`;
+          tipoConformidade = "EXPIRADO";
+          qtdDesviosPosVigencia++;
+
+          if (volumeAuditado > 0 && refAnpValor > 0 && gapAnp < -0.05) {
+            savingItem = (refAnpValor - ultimoPrecoBomba) * volumeAuditado;
+          }
         } else if (gapAnp < -0.05) {
           statusClass = "conf-blindado";
           statusTexto = `🔵 Margem Preservada (+${diasDecorridos}d)`;
@@ -232,15 +273,27 @@ function renderizarAbaAuditoriaComercial() {
           qtdDesviosPosVigencia++;
         }
       } else {
+        // Preço faturado está estritamente dentro ou abaixo do acordo
         statusClass = "conf-ok";
         statusTexto = "🟢 Em Conformidade";
         tipoConformidade = "CONFORME";
         totalAbastecimentosConformes++;
 
+        // HIERARQUIA AUDITÁVEL DE SAVING (ZERO NÚMEROS INVENTADOS)
         if (volumeAuditado > 0) {
-          savingItem = (precoBaseHistorico - ultimoPrecoBomba) * volumeAuditado;
-          if (savingItem <= 0 && refAnpValor > 0) {
-            savingItem = (refAnpValor - precoAcordado) * volumeAuditado;
+          if (historicoValido && precoBaseHistorico > ultimoPrecoBomba) {
+            // Cenário A: Desconto sobre compra real recente (<45 dias)
+            savingItem = (precoBaseHistorico - ultimoPrecoBomba) * volumeAuditado;
+          } else if (precoProposto > precoAcordado) {
+            // Cenário B: Cost Avoidance (Aumento ou tabela de balcão barrada)
+            savingItem = (precoProposto - ultimoPrecoBomba) * volumeAuditado;
+          } else if (refAnpValor > 0 && ultimoPrecoBomba < refAnpValor) {
+            // Cenário C: Benchmark oficial contra média da ANP
+            savingItem = (refAnpValor - ultimoPrecoBomba) * volumeAuditado;
+          } else {
+            // Cenário D: Posto novo sem histórico recente e sem tabela informada
+            savingItem = 0;
+            tipoConformidade = "INAUGURAL";
           }
         }
       }
@@ -258,8 +311,8 @@ function renderizarAbaAuditoriaComercial() {
 
     listaAuditoria.push({
       docId,
-      posto: trat.posto || nomeDoc,
-      uf: trat.uf || ufDoc,
+      posto: nomePostoAlvo,
+      uf: ufPostoAlvo,
       statusTexto,
       statusClass,
       tipoConformidade,
@@ -300,7 +353,7 @@ function renderizarAbaAuditoriaComercial() {
   if (buscaTxt) {
     listaFiltrada = listaFiltrada.filter(item => 
       item.posto.toLowerCase().includes(buscaTxt) || 
-      item.uf.toLowerCase().includes(buscaTxt) ||
+      item.uf.toLowerCase().includes(buscaTxt) || 
       item.notas.toLowerCase().includes(buscaTxt)
     );
   }
