@@ -15,7 +15,6 @@ function ordenarTabelaAuditoriaPor(coluna) {
     auditoriaDirecaoOrdenacao = auditoriaDirecaoOrdenacao === "asc" ? "desc" : "asc";
   } else {
     auditoriaColunaOrdenacao = coluna;
-    // Volume e Saving ordenam decrescente por padrão no primeiro clique
     auditoriaDirecaoOrdenacao = (coluna === "volumeAuditado" || coluna === "savingItem") ? "desc" : "asc";
   }
   renderizarAbaAuditoriaComercial();
@@ -39,9 +38,9 @@ function filtrarTabelaAuditoriaTexto() {
 }
 
 /**
- * Atualiza os cards superiores (KPIs de Governança)
+ * Atualiza os cards superiores (KPIs de Governança) com scroll interno de desvios
  */
-function atualizarCardsAuditoriaKPIs(aderenciaPerc, savingTotal, desviosQtd, margemPreservadaQtd) {
+function atualizarCardsAuditoriaKPIs(aderenciaPerc, savingTotal, desviosQtd, margemPreservadaQtd, listaInfratores) {
   const elAderencia = document.getElementById('kpiAuditoriaAderencia');
   const elSaving = document.getElementById('kpiAuditoriaSavingTotal');
   const elDesvios = document.getElementById('kpiAuditoriaDesviosQtd');
@@ -54,9 +53,19 @@ function atualizarCardsAuditoriaKPIs(aderenciaPerc, savingTotal, desviosQtd, mar
   if (elMargem) elMargem.innerText = margemPreservadaQtd;
 
   if (subPerda) {
-    if (desviosQtd > 0) {
-      subPerda.innerText = `${desviosQtd} postos com cobrança acima do combinado`;
-      subPerda.className = "kpi-sub text-danger fw-bold";
+    if (desviosQtd > 0 && Array.isArray(listaInfratores) && listaInfratores.length > 0) {
+      const itensHtml = listaInfratores.map(inf => `
+        <div class="text-truncate text-danger" title="${inf.posto}: +R$ ${inf.gap.toFixed(3)}/L">
+          &bull; <strong>${inf.posto}</strong>: +R$ ${inf.gap.toFixed(3)}/L
+        </div>
+      `).join('');
+
+      subPerda.innerHTML = `
+        <div style="max-height: 44px; overflow-y: auto; font-size: 0.65rem; line-height: 1.25; padding-right: 2px;">
+          ${itensHtml}
+        </div>
+      `;
+      subPerda.className = "kpi-sub";
     } else {
       subPerda.innerText = "Nenhum furo de preço identificado";
       subPerda.className = "kpi-sub text-success";
@@ -72,26 +81,27 @@ function gerarParecerExecutivoPosto(p) {
   const precoFmt = p.ultimoPrecoBomba > 0 ? p.ultimoPrecoBomba.toFixed(3) : p.precoAcordado.toFixed(3);
   const anpFmt = p.refAnpValor > 0 ? p.refAnpValor.toFixed(3) : '--';
   const savingFmt = Math.round(p.savingItem).toLocaleString('pt-BR');
+  const periodoTexto = p.dataIniAuditoria && p.dataFimAuditoria ? `entre <strong>${p.dataIniAuditoria} e ${p.dataFimAuditoria}</strong>` : `no período auditado`;
 
   if (p.tipoConformidade === 'CONFORME') {
-    return `Nesta praça, foram auditados <strong>${volFmt} L</strong> faturados exatamente no preço acordado (<strong>R$ ${precoFmt}/L</strong>). Frente à média estadual da ANP de <strong>R$ ${anpFmt}/L</strong>, a negociação sustentou um spread de <strong>${p.gapAnp.toFixed(3)}/L</strong>, garantindo <strong>+R$ ${savingFmt}</strong> direto no caixa da Cargosoft.`;
+    return `Nesta praça, foram auditados <strong>${volFmt} L</strong> faturados ${periodoTexto} exatamente no preço acordado (<strong>R$ ${precoFmt}/L</strong>). Frente à média estadual da ANP de <strong>R$ ${anpFmt}/L</strong>, a negociação sustentou um spread de <strong>${p.gapAnp.toFixed(3)}/L</strong>, garantindo <strong>+R$ ${savingFmt}</strong> direto no caixa da Cargosoft.`;
   }
 
   if (p.tipoConformidade === 'BLINDADO') {
-    return `O posto acompanhou repasses de alta das distribuidoras, chegando a <strong>R$ ${precoFmt}/L</strong>. Porém, o acordo de volume manteve o combustível <strong>R$ ${Math.abs(p.gapAnp).toFixed(3)}/L abaixo da média oficial da ANP (R$ ${anpFmt}/L)</strong>, protegendo <strong>+R$ ${savingFmt}</strong> contra o preço de bomba comum.`;
+    return `O posto acompanhou repasses de alta das distribuidoras, chegando a <strong>R$ ${precoFmt}/L</strong>. Porém, o acordo de volume manteve o combustível <strong>R$ ${Math.abs(p.gapAnp).toFixed(3)}/L abaixo da média oficial da ANP (R$ ${anpFmt}/L)</strong> ${periodoTexto}, protegendo <strong>+R$ ${savingFmt}</strong> de Cost Avoidance contra o preço de bomba comum.`;
   }
 
   if (p.tipoConformidade === 'EXPIRADO') {
-    return `Alerta de SLA Operacional: Acordo firmado há mais de 30 dias. O posto subiu a bomba para <strong>R$ ${precoFmt}/L</strong> (+R$ ${p.gapAcordo.toFixed(3)}/L acima do acordo inicial). Necessário chamar o gerente para <strong>renovar a negociação</strong> e travar nova tabela.`;
+    return `Alerta de SLA Operacional: Acordo firmado há mais de 30 dias. O posto subiu a bomba para <strong>R$ ${precoFmt}/L</strong> (+R$ ${p.gapAcordo.toFixed(3)}/L acima do acordo inicial). Volume de <strong>${volFmt} L</strong> auditado ${periodoTexto}. Necessário chamar o gerente para <strong>renovar a negociação</strong> e travar nova tabela.`;
   }
 
   if (p.tipoConformidade === 'QUEBRA') {
     const perdaEstimada = Math.round(p.gapAcordo * p.volumeAuditado).toLocaleString('pt-BR');
-    return `Furo Comercial Imediato: O posto cobrou <strong>R$ ${precoFmt}/L</strong> (<strong>+R$ ${p.gapAcordo.toFixed(3)}/L acima do combinado</strong>) logo após o fechamento da tabela. Desvio faturado de <strong>R$ ${perdaEstimada}</strong> passível de contestação e desconto na fatura quinzenal.`;
+    return `Furo Comercial Imediato: O posto cobrou <strong>R$ ${precoFmt}/L</strong> (<strong>+R$ ${p.gapAcordo.toFixed(3)}/L acima do combinado</strong>) logo após o fechamento da tabela. Desvio faturado de <strong>R$ ${perdaEstimada}</strong> ${periodoTexto} passível de contestação e desconto na fatura quinzenal.`;
   }
 
   if (p.tipoConformidade === 'REAJUSTE') {
-    return `Praça em acompanhamento: O posto reajustou para <strong>R$ ${precoFmt}/L</strong>, reduzindo a vantagem negociada frente à ANP (<strong>R$ ${anpFmt}/L</strong>). Recomendado contatar o posto para alinhar a condição comercial.`;
+    return `Praça sob monitoramento ativo: O posto reajustou para <strong>R$ ${precoFmt}/L</strong>, reduzindo a vantagem negociada frente à ANP (<strong>R$ ${anpFmt}/L</strong>). Recomendado contatar o posto para alinhar a condição comercial.`;
   }
 
   if (p.tipoConformidade === 'INAUGURAL') {
@@ -102,7 +112,7 @@ function gerarParecerExecutivoPosto(p) {
 }
 
 /**
- * Motor Principal de Renderização da Aba de Auditoria Comercial
+ * Motor Principal de Renderização da Aba de Auditoria Comercial (Multiciclos & Datas Explícitas)
  */
 function renderizarAbaAuditoriaComercial() {
   const corpoTabela = document.getElementById('corpoTabelaAuditoria');
@@ -128,7 +138,7 @@ function renderizarAbaAuditoriaComercial() {
     `;
     const lblContador = document.getElementById('lblAuditoriaContador');
     if (lblContador) lblContador.innerText = "0 postos com tratativa";
-    atualizarCardsAuditoriaKPIs(0, 0, 0, 0);
+    atualizarCardsAuditoriaKPIs(0, 0, 0, 0, []);
     return;
   }
 
@@ -138,12 +148,12 @@ function renderizarAbaAuditoriaComercial() {
   let totalAbastecimentosConformes = 0;
   let qtdDesviosPosVigencia = 0;
   let qtdMargemPreservada = 0;
+  let listaPostosInfratores = [];
 
   chavesTratativas.forEach(docId => {
     const trat = mapaTrat[docId];
     if (!trat) return;
 
-    // Resgate exato dos dados do posto gravados na tratativa (Sem fatiar docId)
     const partesDoc = docId.split('_');
     const ufFallback = partesDoc[partesDoc.length - 1];
     const nomeFallback = partesDoc.slice(0, partesDoc.length - 1).join(' ');
@@ -151,71 +161,112 @@ function renderizarAbaAuditoriaComercial() {
     const nomePostoAlvo = trat.posto || nomeFallback;
     const ufPostoAlvo = trat.uf || ufFallback;
 
-    // VÍNCULO ESTRITO E CIRÚRGICO: Exige nome idêntico e mesma UF (Evita cruzar Cariri com Wanderlândia)
+    // Vínculo Estrito por Posto e UF
     const regsPosto = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais))
-      ? baseRegistrosMensais.filter(d => 
-          d.POSTO === nomePostoAlvo && d.UF_POSTO === ufPostoAlvo
-        )
+      ? baseRegistrosMensais.filter(d => d.POSTO === nomePostoAlvo && d.UF_POSTO === ufPostoAlvo)
       : [];
+
+    // Montagem da régua multiciclos a partir do histórico do Rolodex
+    let ciclosHistorico = [];
+    if (Array.isArray(trat.historico) && trat.historico.length > 0) {
+      ciclosHistorico = [...trat.historico].filter(h => h.vigencia && h.preco > 0);
+      ciclosHistorico.sort((a, b) => (a.vigencia || '').localeCompare(b.vigencia || ''));
+    }
+
+    if (ciclosHistorico.length === 0 && trat.vigencia && trat.preco_acordado > 0) {
+      ciclosHistorico.push({
+        vigencia: trat.vigencia,
+        preco: trat.preco_acordado,
+        preco_proposto: trat.preco_proposto || 0,
+        status: trat.status || "ACORDO_FECHADO"
+      });
+    }
+
+    const dataPrimeiraVigencia = ciclosHistorico.length > 0 ? ciclosHistorico[0].vigencia : (trat.vigencia || "");
+    const ultimaFichaAtiva = ciclosHistorico.length > 0 ? ciclosHistorico[ciclosHistorico.length - 1] : {
+      vigencia: trat.vigencia || "",
+      preco: trat.preco_acordado || 0,
+      preco_proposto: trat.preco_proposto || 0,
+      status: trat.status || "ACORDO_FECHADO"
+    };
 
     let ultimoPrecoBomba = 0;
     let dataUltimoBomba = "";
-    let volumeAuditado = 0;
+    let dataPrimeiroBombaAuditado = "";
+    let volumeAuditadoTotal = 0;
     let precoBaseHistorico = 0;
     let dataPrecoBaseHistorico = "";
+    let savingAcumuladoPosto = 0;
+    let houveConsumoAuditado = false;
 
-    const strDataVigencia = trat.vigencia || "";
+    // Ordenação cronológica crescente para cálculo por ciclo
+    const transacoesCrescentes = [...regsPosto].sort((a, b) => (a.DATA_FIM_CICLO || '').localeCompare(b.DATA_FIM_CICLO || ''));
 
-    // Varredura cronológica precisa das transações do posto
-    regsPosto.forEach(r => {
+    transacoesCrescentes.forEach(r => {
       const p = parseFloat(r.VALOR_UNITARIO || 0);
       const v = parseFloat(r.VOLUME_CICLO || 0);
-      const dataCiclo = r.DATA_FIM_CICLO || "";
+      const dataCiclo = (r.DATA_FIM_CICLO || '').substring(0, 10);
 
-      if (dataCiclo && dataCiclo > dataUltimoBomba) {
-        dataUltimoBomba = dataCiclo;
+      if (r.DATA_FIM_CICLO && r.DATA_FIM_CICLO > dataUltimoBomba) {
+        dataUltimoBomba = r.DATA_FIM_CICLO;
         ultimoPrecoBomba = p;
       }
 
-      if (strDataVigencia && dataCiclo && dataCiclo.substring(0, 10) >= strDataVigencia) {
-        volumeAuditado += v;
-      } else if (strDataVigencia && dataCiclo && dataCiclo.substring(0, 10) < strDataVigencia) {
-        // Encontra o abastecimento pré-acordo mais recente
-        if (dataCiclo > dataPrecoBaseHistorico) {
-          dataPrecoBaseHistorico = dataCiclo;
+      if (dataPrimeiraVigencia && dataCiclo >= dataPrimeiraVigencia) {
+        houveConsumoAuditado = true;
+        volumeAuditadoTotal += v;
+        if (!dataPrimeiroBombaAuditado || r.DATA_FIM_CICLO < dataPrimeiroBombaAuditado) {
+          dataPrimeiroBombaAuditado = r.DATA_FIM_CICLO;
+        }
+
+        // Localiza a tratativa válida na data exata da transação
+        let cicloVigente = ciclosHistorico[0];
+        for (let i = 0; i < ciclosHistorico.length; i++) {
+          if (dataCiclo >= ciclosHistorico[i].vigencia) {
+            cicloVigente = ciclosHistorico[i];
+          } else {
+            break;
+          }
+        }
+
+        const anpUfObj = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPostoAlvo]) ? anpRevenda[ufPostoAlvo] : {};
+        const anpTransacao = anpUfObj[r.MES_ANO] || anpUfObj['2026-10'] || 0;
+        const precoNegociadoCiclo = cicloVigente ? cicloVigente.preco : trat.preco_acordado;
+        const precoPropostoCiclo = cicloVigente ? cicloVigente.preco_proposto : (trat.preco_proposto || 0);
+
+        // Cálculo do saving da transação
+        let savingLinha = 0;
+        if (precoPropostoCiclo > precoNegociadoCiclo && p <= precoNegociadoCiclo) {
+          savingLinha = (precoPropostoCiclo - p) * v; // Cost Avoidance de tabela
+        } else if (anpTransacao > 0 && p < anpTransacao) {
+          savingLinha = (anpTransacao - p) * v; // Margem protegida vs ANP
+        } else if (precoNegociadoCiclo > 0 && p < precoNegociadoCiclo) {
+          savingLinha = (precoNegociadoCiclo - p) * v;
+        }
+
+        if (savingLinha > 0) {
+          savingAcumuladoPosto += savingLinha;
+        }
+      } else if (dataPrimeiraVigencia && dataCiclo < dataPrimeiraVigencia) {
+        if (r.DATA_FIM_CICLO > dataPrecoBaseHistorico) {
+          dataPrecoBaseHistorico = r.DATA_FIM_CICLO;
           precoBaseHistorico = p;
         }
       }
     });
 
-    // VALIDADE DO BASELINE HISTÓRICO: Descarta preços com mais de 45 dias antes da vigência
-    let historicoValido = false;
-    if (precoBaseHistorico > 0 && dataPrecoBaseHistorico && strDataVigencia) {
-      const dtVig = new Date(`${strDataVigencia}T12:00:00Z`);
-      const dtHist = new Date(`${dataPrecoBaseHistorico.substring(0, 10)}T12:00:00Z`);
-      const diasDistancia = Math.round((dtVig - dtHist) / (1000 * 60 * 60 * 24));
-      if (diasDistancia >= 0 && diasDistancia <= 45) {
-        historicoValido = true;
-      } else {
-        precoBaseHistorico = 0; // Descartado por obsolescência
-      }
-    }
-
     const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPostoAlvo]) ? anpRevenda[ufPostoAlvo] : {};
     const mesChave = dataUltimoBomba ? dataUltimoBomba.substring(0, 7) : '2026-10';
     const refAnpValor = anpUf[mesChave] || anpUf['2026-10'] || 0;
 
-    const precoAcordado = trat.preco_acordado || 0;
-    const precoProposto = trat.preco_proposto || 0;
+    const precoAcordadoAtivo = ultimaFichaAtiva.preco || trat.preco_acordado || 0;
+    const vigenciaAtivaStr = ultimaFichaAtiva.vigencia || trat.vigencia || "";
     const strDataCompra = (dataUltimoBomba || "").substring(0, 10);
-    const ehAbastecimentoPosVigencia = (strDataVigencia && strDataCompra && strDataCompra >= strDataVigencia);
 
     let statusClass = "conf-ok";
     let statusTexto = "🟢 Em Conformidade";
     let tipoConformidade = "CONFORME";
-    let gapAcordo = 0;
-    let savingItem = 0;
-
+    let gapAcordo = (ultimoPrecoBomba > 0 && precoAcordadoAtivo > 0) ? (ultimoPrecoBomba - precoAcordadoAtivo) : 0;
     const gapAnp = (ultimoPrecoBomba > 0 && refAnpValor > 0) ? (ultimoPrecoBomba - refAnpValor) : 0;
 
     if (trat.status === 'POSTO_BLOQUEADO') {
@@ -226,88 +277,64 @@ function renderizarAbaAuditoriaComercial() {
       statusClass = "conf-alerta";
       statusTexto = "🟡 Em Cotação";
       tipoConformidade = "COTACAO";
-    } else if (!ehAbastecimentoPosVigencia) {
+    } else if (!houveConsumoAuditado) {
       statusClass = "conf-espera";
       statusTexto = "⚪ Aguardando Consumo";
       tipoConformidade = "ESPERA";
       gapAcordo = 0;
-      savingItem = 0;
     } else {
-      gapAcordo = (ultimoPrecoBomba > 0 && precoAcordado > 0) ? (ultimoPrecoBomba - precoAcordado) : 0;
-
-      const dtVig = new Date(`${strDataVigencia}T12:00:00Z`);
+      const dtVig = new Date(`${vigenciaAtivaStr}T12:00:00Z`);
       const dtComp = new Date(`${strDataCompra}T12:00:00Z`);
       const diasDecorridos = Math.max(0, Math.round((dtComp - dtVig) / (1000 * 60 * 60 * 24)));
 
       if (gapAcordo > 0.005) {
-        // Posto subiu o valor além do acordo inicial
         if (diasDecorridos <= 2) {
           statusClass = "conf-quebra";
           statusTexto = `🔴 Furo Imediato (${diasDecorridos}d)`;
           tipoConformidade = "QUEBRA";
           qtdDesviosPosVigencia++;
+          listaPostosInfratores.push({ posto: nomePostoAlvo, gap: gapAcordo });
         } else if (diasDecorridos > 30) {
-          // ALERTA DE SLA: Acordo vencido há mais de 30 dias que precisa de renovação
           statusClass = "conf-alerta";
           statusTexto = `🟠 Acordo Vencido (+${diasDecorridos}d) • Renovar Negociação`;
           tipoConformidade = "EXPIRADO";
           qtdDesviosPosVigencia++;
-
-          if (volumeAuditado > 0 && refAnpValor > 0 && gapAnp < -0.05) {
-            savingItem = (refAnpValor - ultimoPrecoBomba) * volumeAuditado;
-          }
+          listaPostosInfratores.push({ posto: nomePostoAlvo, gap: gapAcordo });
         } else if (gapAnp < -0.05) {
           statusClass = "conf-blindado";
           statusTexto = `🔵 Margem Preservada (+${diasDecorridos}d)`;
           tipoConformidade = "BLINDADO";
           qtdMargemPreservada++;
           totalAbastecimentosConformes++;
-
-          if (volumeAuditado > 0 && refAnpValor > 0) {
-            savingItem = (refAnpValor - ultimoPrecoBomba) * volumeAuditado;
-          }
         } else {
           statusClass = "conf-alerta";
           statusTexto = `🟠 Reajuste em Avaliação (+${diasDecorridos}d)`;
           tipoConformidade = "REAJUSTE";
           qtdDesviosPosVigencia++;
+          listaPostosInfratores.push({ posto: nomePostoAlvo, gap: gapAcordo });
         }
       } else {
-        // Preço faturado está estritamente dentro ou abaixo do acordo
         statusClass = "conf-ok";
         statusTexto = "🟢 Em Conformidade";
         tipoConformidade = "CONFORME";
         totalAbastecimentosConformes++;
-
-        // HIERARQUIA AUDITÁVEL DE SAVING (ZERO NÚMEROS INVENTADOS)
-        if (volumeAuditado > 0) {
-          if (historicoValido && precoBaseHistorico > ultimoPrecoBomba) {
-            // Cenário A: Desconto sobre compra real recente (<45 dias)
-            savingItem = (precoBaseHistorico - ultimoPrecoBomba) * volumeAuditado;
-          } else if (precoProposto > precoAcordado) {
-            // Cenário B: Cost Avoidance (Aumento ou tabela de balcão barrada)
-            savingItem = (precoProposto - ultimoPrecoBomba) * volumeAuditado;
-          } else if (refAnpValor > 0 && ultimoPrecoBomba < refAnpValor) {
-            // Cenário C: Benchmark oficial contra média da ANP
-            savingItem = (refAnpValor - ultimoPrecoBomba) * volumeAuditado;
-          } else {
-            // Cenário D: Posto novo sem histórico recente e sem tabela informada
-            savingItem = 0;
-            tipoConformidade = "INAUGURAL";
-          }
-        }
       }
-
       totalAbastecimentosAuditados++;
-      if (savingItem > 0) somaSavingRealizadoTotal += savingItem;
     }
 
-    // Ordenação cronológica estrita da gaveta micro (Mais recente para o mais antigo)
-    const historicoOrdenado = [...regsPosto].sort((a, b) => {
-      const dtA = a.DATA_FIM_CICLO || "";
-      const dtB = b.DATA_FIM_CICLO || "";
-      return dtB.localeCompare(dtA);
-    });
+    if (savingAcumuladoPosto > 0) {
+      somaSavingRealizadoTotal += savingAcumuladoPosto;
+    }
+
+    // Formatação da régua de datas
+    const dtIniFmt = dataPrimeiroBombaAuditado ? formatarDataDiaMes(dataPrimeiroBombaAuditado) : formatarDataDiaMes(dataPrimeiraVigencia);
+    const dtFimFmt = dataUltimoBomba ? formatarDataDiaMes(dataUltimoBomba) : "--/--";
+    const subLegendaPeriodo = houveConsumoAuditado 
+      ? `(${dtIniFmt} a ${dtFimFmt})` 
+      : `(Vigência: ${formatarDataDiaMes(vigenciaAtivaStr)})`;
+
+    // Ordenação cronológica estrita da gaveta micro (Decrescente)
+    const historicoOrdenado = [...regsPosto].sort((a, b) => (b.DATA_FIM_CICLO || '').localeCompare(a.DATA_FIM_CICLO || ''));
 
     listaAuditoria.push({
       docId,
@@ -317,15 +344,18 @@ function renderizarAbaAuditoriaComercial() {
       statusClass,
       tipoConformidade,
       refAnpValor,
-      precoAcordado,
+      precoAcordado: precoAcordadoAtivo,
       ultimoPrecoBomba,
       dataUltimoBomba,
       gapAcordo,
       gapAnp,
-      ehPosVigencia: ehAbastecimentoPosVigencia,
-      vigencia: trat.vigencia || "--",
-      volumeAuditado,
-      savingItem,
+      ehPosVigencia: houveConsumoAuditado,
+      vigencia: vigenciaAtivaStr,
+      dataIniAuditoria: dtIniFmt,
+      dataFimAuditoria: dtFimFmt,
+      subLegendaPeriodo,
+      volumeAuditado: volumeAuditadoTotal,
+      savingItem: savingAcumuladoPosto,
       notas: trat.notas || "",
       historicoTransacoes: historicoOrdenado
     });
@@ -334,9 +364,7 @@ function renderizarAbaAuditoriaComercial() {
   // Filtros de seleção de tela
   let listaFiltrada = listaAuditoria;
 
-  if (ufSel) {
-    listaFiltrada = listaFiltrada.filter(item => item.uf === ufSel);
-  }
+  if (ufSel) listaFiltrada = listaFiltrada.filter(item => item.uf === ufSel);
   if (redeSel) {
     if (redeSel === 'OUTROS') {
       listaFiltrada = listaFiltrada.filter(item => {
@@ -347,9 +375,7 @@ function renderizarAbaAuditoriaComercial() {
       listaFiltrada = listaFiltrada.filter(item => normalizarTexto(item.posto).includes(redeSel));
     }
   }
-  if (statusSel) {
-    listaFiltrada = listaFiltrada.filter(item => item.tipoConformidade === statusSel);
-  }
+  if (statusSel) listaFiltrada = listaFiltrada.filter(item => item.tipoConformidade === statusSel);
   if (buscaTxt) {
     listaFiltrada = listaFiltrada.filter(item => 
       item.posto.toLowerCase().includes(buscaTxt) || 
@@ -378,7 +404,7 @@ function renderizarAbaAuditoriaComercial() {
   if (lblContador) lblContador.innerText = `${listaFiltrada.length} postos auditados`;
 
   const aderenciaPerc = totalAbastecimentosAuditados > 0 ? ((totalAbastecimentosConformes / totalAbastecimentosAuditados) * 100) : 100;
-  atualizarCardsAuditoriaKPIs(aderenciaPerc, somaSavingRealizadoTotal, qtdDesviosPosVigencia, qtdMargemPreservada);
+  atualizarCardsAuditoriaKPIs(aderenciaPerc, somaSavingRealizadoTotal, qtdDesviosPosVigencia, qtdMargemPreservada, listaPostosInfratores);
 
   // Atualização dos indicadores visuais (setinhas) nos cabeçalhos
   atualizarIconesOrdenacaoCabecalho();
@@ -436,14 +462,15 @@ function renderizarAbaAuditoriaComercial() {
       }
     }
 
-    // Linhas da gaveta analítica micro (com dados ordenados do mais novo ao mais velho)
+    // Linhas da gaveta analítica micro
     let linhasMicroHtml = "";
     if (Array.isArray(p.historicoTransacoes) && p.historicoTransacoes.length > 0) {
       linhasMicroHtml = p.historicoTransacoes.map(t => {
         const valorUnitario = parseFloat(t.VALOR_UNITARIO || 0);
         const lts = parseFloat(t.VOLUME_CICLO || 0);
         const dtFmt = formatarDataDiaMes(t.DATA_FIM_CICLO);
-        const ehPos = (p.vigencia && t.DATA_FIM_CICLO && t.DATA_FIM_CICLO.substring(0, 10) >= p.vigencia);
+        const dataCicloStr = (t.DATA_FIM_CICLO || '').substring(0, 10);
+        const ehPos = (p.vigencia && dataCicloStr >= p.vigencia);
         
         const anpMes = (typeof anpRevenda !== 'undefined' && anpRevenda[p.uf] && anpRevenda[p.uf][t.MES_ANO]) 
           ? anpRevenda[p.uf][t.MES_ANO] 
@@ -475,8 +502,9 @@ function renderizarAbaAuditoriaComercial() {
     return `
       <tr>
         <td class="text-start">
-          <span class="fw-bold text-dark d-block text-truncate" style="max-width: 230px;" title="${p.posto}">${p.posto}</span>
-          <span class="small text-muted" style="font-size: 0.65rem;" title="${p.notas}">${p.notas ? p.notas.substring(0, 38) + '...' : 'Sem notas adicionais'}</span>
+          <!-- Nome da razão social completo sem cortes para leitura imediata da diretoria -->
+          <span class="fw-bold text-dark d-block" style="font-size: 0.82rem; line-height: 1.25;" title="${p.posto}">${p.posto}</span>
+          <span class="small text-muted" style="font-size: 0.65rem;" title="${p.notas}">${p.notas ? p.notas.substring(0, 45) + '...' : 'Sem notas adicionais'}</span>
         </td>
         <td><span class="badge-uf">${p.uf}</span></td>
         <td><span class="badge-conformidade ${p.statusClass}">${p.statusTexto}</span></td>
@@ -493,7 +521,8 @@ function renderizarAbaAuditoriaComercial() {
         <td class="text-end">${gapAcordoHtml}</td>
         <td class="text-end">${gapAnpHtml}</td>
         <td class="text-end font-monospace fw-semibold" style="font-size: 0.76rem;">
-          ${p.ehPosVigencia ? Math.round(p.volumeAuditado).toLocaleString('pt-BR') : 0} L
+          <div>${Math.round(p.volumeAuditado).toLocaleString('pt-BR')} L</div>
+          <div class="text-muted font-monospace" style="font-size: 0.58rem; line-height: 1; font-weight: normal;">${p.subLegendaPeriodo}</div>
         </td>
         <td class="text-end">${savingHtml}</td>
         <td class="text-center">
@@ -558,7 +587,7 @@ function renderizarAbaAuditoriaComercial() {
 }
 
 /**
- * Atualiza as setinhas e o cursor nos cabeçalhos clicáveis
+ * Atualiza as setinhas, cursor e tooltip explicativo no cabeçalho
  */
 function atualizarIconesOrdenacaoCabecalho() {
   const mapaColunas = {
@@ -572,14 +601,22 @@ function atualizarIconesOrdenacaoCabecalho() {
   const ths = document.querySelectorAll('.tabela-auditoria thead th');
   if (!ths || ths.length === 0) return;
 
+  // Ajusta o cabeçalho da coluna 8 para explicitar o período pós-acordo com tooltip
+  if (ths[8]) {
+    ths[8].setAttribute('title', 'Soma dos litros abastecidos no KMM a partir do início da vigência do acordo comercial até o último abastecimento registrado.');
+    if (!ths[8].innerHTML.includes('PÓS-ACORDO')) {
+      ths[8].innerHTML = `VOL. AUDITADO <span style="font-size:0.58rem; display:block; opacity:0.8;">(PÓS-ACORDO)</span>`;
+    }
+  }
+
   ths.forEach((th, idx) => {
     th.style.cursor = "pointer";
-    th.title = "Clique para ordenar esta coluna";
+    if (idx !== 8) th.title = "Clique para ordenar esta coluna";
     
     // Remove setinhas antigas
     th.innerHTML = th.innerHTML.replace(/\s*<span class="icone-sort">.*?<\/span>/g, '');
 
-    // Procura se essa coluna é a ativa
+    // Aplica o indicador na coluna ativa
     for (const [col, thIdx] of Object.entries(mapaColunas)) {
       if (thIdx === idx) {
         if (auditoriaColunaOrdenacao === col) {
