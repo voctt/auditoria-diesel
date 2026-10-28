@@ -8,6 +8,20 @@ let auditoriaColunaOrdenacao = "savingItem"; // Padrão: maior saving no topo
 let auditoriaDirecaoOrdenacao = "desc";
 
 /**
+ * Formata strings de data ISO (YYYY-MM-DD ou ISO com timestamp) para DD/MM/AA numérico compacto
+ */
+function formatarDataCompactaDMA(strIso) {
+  if (!strIso) return "--";
+  const limpo = strIso.substring(0, 10);
+  const partes = limpo.split('-');
+  if (partes.length !== 3) return strIso;
+  const dia = partes[2];
+  const mes = partes[1];
+  const anoCurto = partes[0].slice(-2);
+  return `${dia}/${mes}/${anoCurto}`;
+}
+
+/**
  * Alterna a coluna de ordenação ou inverte a direção
  */
 function ordenarTabelaAuditoriaPor(coluna) {
@@ -269,6 +283,9 @@ function renderizarAbaAuditoriaComercial() {
     let gapAcordo = (ultimoPrecoBomba > 0 && precoAcordadoAtivo > 0) ? (ultimoPrecoBomba - precoAcordadoAtivo) : 0;
     const gapAnp = (ultimoPrecoBomba > 0 && refAnpValor > 0) ? (ultimoPrecoBomba - refAnpValor) : 0;
 
+    // REGRA DE OURO TEMPORAL: Se não houve consumo pós-vigência ou a compra for anterior à vigência ativa, aguarda consumo
+    const compraEhAnteriorVigencia = (!strDataCompra || !vigenciaAtivaStr || strDataCompra < vigenciaAtivaStr);
+
     if (trat.status === 'POSTO_BLOQUEADO') {
       statusClass = "conf-quebra";
       statusTexto = "🔴 Posto Bloqueado";
@@ -277,7 +294,7 @@ function renderizarAbaAuditoriaComercial() {
       statusClass = "conf-alerta";
       statusTexto = "🟡 Em Cotação";
       tipoConformidade = "COTACAO";
-    } else if (!houveConsumoAuditado) {
+    } else if (!houveConsumoAuditado || compraEhAnteriorVigencia) {
       statusClass = "conf-espera";
       statusTexto = "⚪ Aguardando Consumo";
       tipoConformidade = "ESPERA";
@@ -285,10 +302,10 @@ function renderizarAbaAuditoriaComercial() {
     } else {
       const dtVig = new Date(`${vigenciaAtivaStr}T12:00:00Z`);
       const dtComp = new Date(`${strDataCompra}T12:00:00Z`);
-      const diasDecorridos = Math.max(0, Math.round((dtComp - dtVig) / (1000 * 60 * 60 * 24)));
+      const diasDecorridos = Math.round((dtComp - dtVig) / (1000 * 60 * 60 * 24));
 
       if (gapAcordo > 0.005) {
-        if (diasDecorridos <= 2) {
+        if (diasDecorridos >= 0 && diasDecorridos <= 2) {
           statusClass = "conf-quebra";
           statusTexto = `🔴 Furo Imediato (${diasDecorridos}d)`;
           tipoConformidade = "QUEBRA";
@@ -329,7 +346,7 @@ function renderizarAbaAuditoriaComercial() {
     // Formatação da régua de datas
     const dtIniFmt = dataPrimeiroBombaAuditado ? formatarDataDiaMes(dataPrimeiroBombaAuditado) : formatarDataDiaMes(dataPrimeiraVigencia);
     const dtFimFmt = dataUltimoBomba ? formatarDataDiaMes(dataUltimoBomba) : "--/--";
-    const subLegendaPeriodo = houveConsumoAuditado 
+    const subLegendaPeriodo = (houveConsumoAuditado && !compraEhAnteriorVigencia)
       ? `(${dtIniFmt} a ${dtFimFmt})` 
       : `(Vigência: ${formatarDataDiaMes(vigenciaAtivaStr)})`;
 
@@ -349,13 +366,13 @@ function renderizarAbaAuditoriaComercial() {
       dataUltimoBomba,
       gapAcordo,
       gapAnp,
-      ehPosVigencia: houveConsumoAuditado,
+      ehPosVigencia: (houveConsumoAuditado && !compraEhAnteriorVigencia),
       vigencia: vigenciaAtivaStr,
       dataIniAuditoria: dtIniFmt,
       dataFimAuditoria: dtFimFmt,
       subLegendaPeriodo,
-      volumeAuditado: volumeAuditadoTotal,
-      savingItem: savingAcumuladoPosto,
+      volumeAuditado: (compraEhAnteriorVigencia ? 0 : volumeAuditadoTotal),
+      savingItem: (compraEhAnteriorVigencia ? 0 : savingAcumuladoPosto),
       notas: trat.notas || "",
       historicoTransacoes: historicoOrdenado
     });
@@ -422,8 +439,8 @@ function renderizarAbaAuditoriaComercial() {
 
   corpoTabela.innerHTML = listaFiltrada.map((p, idx) => {
     const idGaveta = `gaveta-micro-${idx}`;
-    const dataVigenciaFmt = p.vigencia !== '--' ? p.vigencia.split('-').reverse().join('/') : '--';
-    const dataBombaFmt = formatarDataDiaMes(p.dataUltimoBomba);
+    const dataVigenciaFmt = formatarDataCompactaDMA(p.vigencia);
+    const dataBombaFmt = formatarDataCompactaDMA(p.dataUltimoBomba);
 
     const precoAcordadoComVigenciaHtml = `
       <div class="fw-bold font-monospace text-dark" style="font-size: 0.85rem;">
@@ -468,7 +485,7 @@ function renderizarAbaAuditoriaComercial() {
       linhasMicroHtml = p.historicoTransacoes.map(t => {
         const valorUnitario = parseFloat(t.VALOR_UNITARIO || 0);
         const lts = parseFloat(t.VOLUME_CICLO || 0);
-        const dtFmt = formatarDataDiaMes(t.DATA_FIM_CICLO);
+        const dtFmt = formatarDataCompactaDMA(t.DATA_FIM_CICLO);
         const dataCicloStr = (t.DATA_FIM_CICLO || '').substring(0, 10);
         const ehPos = (p.vigencia && dataCicloStr >= p.vigencia);
         
@@ -502,7 +519,6 @@ function renderizarAbaAuditoriaComercial() {
     return `
       <tr>
         <td class="text-start">
-          <!-- Nome da razão social completo sem cortes para leitura imediata da diretoria -->
           <span class="fw-bold text-dark d-block" style="font-size: 0.82rem; line-height: 1.25;" title="${p.posto}">${p.posto}</span>
           <span class="small text-muted" style="font-size: 0.65rem;" title="${p.notas}">${p.notas ? p.notas.substring(0, 45) + '...' : 'Sem notas adicionais'}</span>
         </td>
