@@ -29,6 +29,7 @@
   <script src="matrizes.js"></script>
   <script src="mapa.js"></script>
   <script src="auditoria.js"></script>
+  <script src="fechamento.js"></script>
 </head>
 <body>
   <div class="container-fluid px-0">
@@ -79,6 +80,9 @@
         </button>
         <button class="btn-toggle-tipo" id="btnModoAuditoria" onclick="alternarModoOperacao('AUDITORIA')">
           <i class="bi bi-shield-check me-1"></i> Auditoria Comercial
+        </button>
+        <button class="btn-toggle-tipo" id="btnModoFechamento" onclick="alternarModoOperacao('FECHAMENTO')">
+          <i class="bi bi-briefcase-fill me-1"></i> Fechamento Executivo
         </button>
       </div>
     </div>
@@ -614,6 +618,10 @@
         </table>
       </div>
 
+    </div>
+
+    <!-- SEÇÃO 5: FECHAMENTO EXECUTIVO & DOSSIÊ DA DIRETORIA -->
+    <div id="secaoFechamentoExecutivo" class="panel-box p-3" style="display: none;">
     </div>
 
     <!-- RODAPÉ COM VERSIONAMENTO DISCRETO -->
