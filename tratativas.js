@@ -266,10 +266,13 @@ let postoAtivoTratativa = null;
                             <input type="number" step="0.001" id="campoTratativaPrecoAcordado" class="form-control form-control-sm font-monospace" placeholder="Ex: 6.450" oninput="calcularSpreadTempoReal()">
                           </div>
                           <div class="col-6">
-                            <label class="form-label fw-bold text-muted small mb-1" title="Preço de tabela, repasse pretendido ou bomba sem negociação">
-                              Preço Proposto / Balcão:
+                            <label class="form-label fw-bold text-dark small mb-1" title="Preço pretendido pelo posto ou bomba sem negociação">
+                              Preço Tabela Balcão / Pretendido:
                             </label>
-                            <input type="number" step="0.001" id="campoTratativaPrecoProposto" class="form-control form-control-sm font-monospace" placeholder="Ex: 6.840 (Opcional)" oninput="calcularSpreadTempoReal()">
+                            <input type="number" step="0.001" id="campoTratativaPrecoProposto" class="form-control form-control-sm font-monospace" placeholder="Ex: 6.840 (Se novo ou alta)" oninput="calcularSpreadTempoReal()">
+                            <div class="text-muted" style="font-size: 0.58rem; line-height: 1.1; margin-top: 2px;">
+                              Preencha se o posto tentou reajuste ou for novo sem compras. Se foi desconto comum, deixe vazio.
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -355,7 +358,7 @@ function gerarDocumentIdPosto(posto, uf) {
   return chave.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]/g, "_").toUpperCase();
 }
 
-// 3. Leitura em lote de todas as tratativas do Firestore
+// 3. Leitura em lote de todas as tratativas do Firestore (Garantindo posto, uf e municipio em memória)
 async function carregarTodasTratativasFirestore() {
   try {
     const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
@@ -405,6 +408,9 @@ async function carregarTodasTratativasFirestore() {
         }
 
         mapaTratativasCadastradas[docId] = {
+          posto: f.posto?.stringValue || "",
+          uf: f.uf?.stringValue || "",
+          municipio: f.municipio?.stringValue || "",
           status: f.status?.stringValue || "EM_ABERTO",
           preco_acordado: parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
           preco_proposto: parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
@@ -433,7 +439,7 @@ function obterTratativaPosto(posto, uf) {
 let listaHistoricoAtiva = [];
 let indiceRolodexAtivo = 0;
 
-// 6. Abertura do Cockpit de Decisão com regras de negócio calibradas
+// 6. Abertura do Cockpit de Decisão com agregação real de VOLUME_CICLO
 async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp, ultimoPago) {
   const mesFiltroAtivo = document.getElementById('filtroMesAno') ? document.getElementById('filtroMesAno').value : 'YTD';
   
@@ -446,38 +452,56 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
     const registrosDoPosto = baseRegistrosMensais.filter(d => d.POSTO === nomePosto && d.UF_POSTO === uf);
 
     if (mesFiltroAtivo !== 'YTD') {
-      const regMes = registrosDoPosto.find(d => d.MES_ANO === mesFiltroAtivo);
-      if (regMes) {
-        volumeMesCalculo = parseFloat(regMes.LITROS_MES || 0);
-        ultimoPrecoNaBomba = parseFloat(regMes.ULTIMO_PRECO_MES || regMes.PRECO_MEDIO_MES || 0);
+      const ciclosDoMes = registrosDoPosto.filter(d => d.MES_ANO === mesFiltroAtivo);
+      if (ciclosDoMes.length > 0) {
+        volumeMesCalculo = ciclosDoMes.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0);
+
+        ciclosDoMes.sort((a, b) => (b.DATA_FIM_CICLO || '').localeCompare(a.DATA_FIM_CICLO || ''));
+        const ultCiclo = ciclosDoMes[0];
+        ultimoPrecoNaBomba = parseFloat(ultCiclo.VALOR_UNITARIO || 0);
+
         if (typeof formatarDataDiaMes === 'function') {
-          dataUltimoNaBomba = formatarDataDiaMes(regMes.ULTIMA_DATA_MES);
+          dataUltimoNaBomba = formatarDataDiaMes(ultCiclo.DATA_FIM_CICLO);
         } else {
-          dataUltimoNaBomba = (regMes.ULTIMA_DATA_MES || '').substring(0, 10);
+          dataUltimoNaBomba = (ultCiclo.DATA_FIM_CICLO || '').substring(0, 10);
         }
       }
       subVolumeTexto = `Litragem em ${mesFiltroAtivo}`;
     } else {
-      const mesesComConsumo = registrosDoPosto
-        .filter(d => parseFloat(d.LITROS_MES || 0) > 0)
-        .sort((a, b) => (b.MES_ANO || '').localeCompare(a.MES_ANO || ''))
+      const volPorMes = {};
+      registrosDoPosto.forEach(d => {
+        const m = d.MES_ANO;
+        if (m) {
+          volPorMes[m] = (volPorMes[m] || 0) + parseFloat(d.VOLUME_CICLO || 0);
+        }
+      });
+
+      const mesesComConsumo = Object.keys(volPorMes)
+        .filter(m => volPorMes[m] > 0)
+        .sort()
+        .reverse()
         .slice(0, 3);
 
       if (mesesComConsumo.length > 0) {
-        const somaVolUltimos3 = mesesComConsumo.reduce((acc, c) => acc + parseFloat(c.LITROS_MES || 0), 0);
+        const somaVolUltimos3 = mesesComConsumo.reduce((acc, m) => acc + volPorMes[m], 0);
         volumeMesCalculo = somaVolUltimos3 / mesesComConsumo.length;
         subVolumeTexto = `Média de ${mesesComConsumo.length} ${mesesComConsumo.length === 1 ? 'mês ativo' : 'meses ativos'}`;
       }
 
-      let maxData = "";
+      let ultCicloGeral = null;
       registrosDoPosto.forEach(d => {
-        if (d.ULTIMA_DATA_MES && d.ULTIMA_DATA_MES > maxData) {
-          maxData = d.ULTIMA_DATA_MES;
-          ultimoPrecoNaBomba = parseFloat(d.ULTIMO_PRECO_MES || d.PRECO_MEDIO_MES || 0);
+        if (!ultCicloGeral || (d.DATA_FIM_CICLO || '') > (ultCicloGeral.DATA_FIM_CICLO || '')) {
+          ultCicloGeral = d;
         }
       });
-      if (maxData) {
-        dataUltimoNaBomba = (typeof formatarDataDiaMes === 'function') ? formatarDataDiaMes(maxData) : maxData.substring(0, 10);
+
+      if (ultCicloGeral) {
+        ultimoPrecoNaBomba = parseFloat(ultCicloGeral.VALOR_UNITARIO || 0);
+        if (typeof formatarDataDiaMes === 'function') {
+          dataUltimoNaBomba = formatarDataDiaMes(ultCicloGeral.DATA_FIM_CICLO);
+        } else {
+          dataUltimoNaBomba = (ultCicloGeral.DATA_FIM_CICLO || '').substring(0, 10);
+        }
       }
     }
   }
@@ -558,6 +582,9 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
         }
 
         trat = {
+          posto: f.posto?.stringValue || nomePosto,
+          uf: f.uf?.stringValue || uf,
+          municipio: f.municipio?.stringValue || municipio,
           status: f.status?.stringValue || "ACORDO_FECHADO",
           preco_acordado: parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
           preco_proposto: parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
@@ -633,13 +660,14 @@ function popularSeletorPostosDestino(postoExcluido, uf) {
   const postosCandidatos = {};
   baseRegistrosMensais.forEach(d => {
     if (d.POSTO !== postoExcluido && d.TIPO_OPERACAO === 'EXTERNO') {
-      const preco = parseFloat(d.ULTIMO_PRECO_MES || d.PRECO_MEDIO_MES || 0);
-      if (!postosCandidatos[d.POSTO] || preco < postosCandidatos[d.POSTO].preco) {
+      const preco = parseFloat(d.VALOR_UNITARIO || 0);
+      if (!postosCandidatos[d.POSTO] || (d.DATA_FIM_CICLO || '') > (postosCandidatos[d.POSTO].data || '')) {
         postosCandidatos[d.POSTO] = {
           nome: d.POSTO,
           uf: d.UF_POSTO,
           municipio: d.MUNICIPIO_POSTO,
-          preco: preco
+          preco: preco,
+          data: d.DATA_FIM_CICLO || ''
         };
       }
     }
@@ -672,13 +700,13 @@ function alternarCamposDecisao() {
   calcularSpreadTempoReal();
 }
 
-// 9. Cálculo em tempo real do Spread, Cost Avoidance e Saving Projetado
+// 9. Cálculo em tempo real do Spread, Cost Avoidance e Saving Projetado (Sem inventar números)
 function calcularSpreadTempoReal() {
   if (!postoAtivoTratativa) return;
 
   const status = document.getElementById('campoTratativaStatus').value;
   const precoBase = postoAtivoTratativa.ultimoPago > 0 ? postoAtivoTratativa.ultimoPago : postoAtivoTratativa.precoMedio;
-  const volume = postoAtivoTratativa.volumeMes || 1;
+  const volume = postoAtivoTratativa.volumeMes || 0;
 
   const box = document.getElementById('boxCalculoSpread');
   const lblTitulo = document.getElementById('lblTituloSpread');
@@ -693,41 +721,49 @@ function calcularSpreadTempoReal() {
     const precoProposto = parseFloat(document.getElementById('campoTratativaPrecoProposto').value) || 0;
 
     if (precoAcordado > 0) {
-      // CENÁRIO A: COST AVOIDANCE (Quando o posto pediu um valor maior e você segurou abaixo)
+      // CENÁRIO A: COST AVOIDANCE (Quando o posto pediu um valor maior de balcão e travamos abaixo)
       if (precoProposto > precoAcordado) {
         const diffAvoidance = precoProposto - precoAcordado;
-        const totalAvoidance = diffAvoidance * volume;
+        const totalAvoidance = diffAvoidance * (volume > 0 ? volume : 1);
 
         box.classList.add('modo-avoidance');
         lblTitulo.innerText = "🛡️ Proteção de Caixa (Cost Avoidance)";
         lblDesc.innerHTML = `Alta evitada de <strong>R$ ${diffAvoidance.toFixed(3)}/L</strong> frente ao balcão/proposta pretendida.`;
-        valSpread.innerText = `+ R$ ${Math.round(totalAvoidance).toLocaleString('pt-BR')}`;
+        valSpread.innerText = volume > 0 ? `+ R$ ${Math.round(totalAvoidance).toLocaleString('pt-BR')}` : `R$ ${diffAvoidance.toFixed(3)}/L`;
         valSpread.className = "valor-destaque-spread text-primary";
-        lblSub.innerText = "Custo Evitado Projetado";
+        lblSub.innerText = volume > 0 ? "Custo Evitado Projetado" : "Saving Unitário (Sem volume no mês)";
         return;
       }
 
-      // CENÁRIO B: SPREAD DIRETO VS ÚLTIMO PAGO
+      // CENÁRIO B: SPREAD DIRETO VS ÚLTIMO PAGO (Histórico real)
       if (precoBase > 0) {
         const diffPorLitro = precoBase - precoAcordado;
-        const savingTotal = diffPorLitro * volume;
+        const savingTotal = diffPorLitro * (volume > 0 ? volume : 1);
 
         if (diffPorLitro >= 0) {
           lblTitulo.innerText = "Spread de Redução de Preço";
           lblDesc.innerHTML = `Desconto de <strong>R$ ${diffPorLitro.toFixed(3)}/L</strong> sobre o último preço pago.`;
-          valSpread.innerText = `+ R$ ${Math.round(savingTotal).toLocaleString('pt-BR')}`;
+          valSpread.innerText = volume > 0 ? `+ R$ ${Math.round(savingTotal).toLocaleString('pt-BR')}` : `R$ ${diffPorLitro.toFixed(3)}/L`;
           valSpread.className = "valor-destaque-spread text-success";
-          lblSub.innerText = "Impacto Mensal Estimado";
+          lblSub.innerText = volume > 0 ? "Impacto Mensal Estimado" : "Desconto Unitário (Sem volume no mês)";
         } else {
           box.classList.add('modo-alerta');
           lblTitulo.innerText = "Reajuste Aceito na Mesa";
           lblDesc.innerHTML = `Preço acordado é <strong>R$ ${Math.abs(diffPorLitro).toFixed(3)}/L superior</strong> ao último pago.`;
-          valSpread.innerText = `- R$ ${Math.round(Math.abs(savingTotal)).toLocaleString('pt-BR')}`;
+          valSpread.innerText = volume > 0 ? `- R$ ${Math.round(Math.abs(savingTotal)).toLocaleString('pt-BR')}` : `- R$ ${Math.abs(diffPorLitro).toFixed(3)}/L`;
           valSpread.className = "valor-destaque-spread text-danger";
-          lblSub.innerText = "Acréscimo de Custo";
+          lblSub.innerText = volume > 0 ? "Acréscimo de Custo" : "Acréscimo Unitário";
         }
         return;
       }
+
+      // CENÁRIO C: POSTO NOVO SEM HISTÓRICO E SEM BALCÃO INFORMADO (Zero chute)
+      lblTitulo.innerText = "Base Inaugural";
+      lblDesc.innerHTML = "Posto sem histórico prévio de compras e sem preço balcão preenchido. Saving será apurado após histórico.";
+      valSpread.innerText = "R$ 0,00";
+      valSpread.className = "valor-destaque-spread text-muted";
+      lblSub.innerText = "Sem histórico comparativo";
+      return;
     }
   } else if (status === 'POSTO_BLOQUEADO') {
     const sel = document.getElementById('campoPostoDestinoRealocacao');
@@ -736,13 +772,13 @@ function calcularSpreadTempoReal() {
 
     if (precoDestino > 0 && precoBase > 0) {
       const diffPorLitro = precoBase - precoDestino;
-      const savingTotal = diffPorLitro * volume;
+      const savingTotal = diffPorLitro * (volume > 0 ? volume : 1);
 
       lblTitulo.innerText = "Saving por Realocação de Rota";
       lblDesc.innerHTML = `Migração de volume para posto mais barato (-R$ ${diffPorLitro.toFixed(3)}/L).`;
-      valSpread.innerText = `+ R$ ${Math.round(savingTotal).toLocaleString('pt-BR')}`;
+      valSpread.innerText = volume > 0 ? `+ R$ ${Math.round(savingTotal).toLocaleString('pt-BR')}` : `R$ ${diffPorLitro.toFixed(3)}/L`;
       valSpread.className = "valor-destaque-spread text-success";
-      lblSub.innerText = "Impacto Mensal Estimado";
+      lblSub.innerText = volume > 0 ? "Impacto Mensal Estimado" : "Diferencial Unitário";
       return;
     }
   }
@@ -844,7 +880,7 @@ function renderizarLequeRolodex() {
   container.innerHTML = htmlCards;
 }
 
-// 11. Gravação Completa no Firestore com acúmulo no histórico e vigência
+// 11. Gravação Completa no Firestore com acúmulo no histórico e vigência (Preservando schema exato)
 async function salvarTratativaFirestore(event) {
   event.preventDefault();
   if (!postoAtivoTratativa) return;
@@ -869,6 +905,26 @@ async function salvarTratativaFirestore(event) {
   const autorEmail = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.email : "ADMIN";
   const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
 
+  // Cálculo auditável do saving financeiro projetado para gravação no histórico
+  let savingCalculado = 0;
+  const volCalc = postoAtivoTratativa.volumeMes || 0;
+  const pBase = postoAtivoTratativa.ultimoPago > 0 ? postoAtivoTratativa.ultimoPago : postoAtivoTratativa.precoMedio;
+
+  if (status === 'ACORDO_FECHADO') {
+    if (precoProposto > precoAcordado && precoAcordado > 0) {
+      savingCalculado = (precoProposto - precoAcordado) * volCalc;
+    } else if (pBase > precoAcordado && precoAcordado > 0) {
+      savingCalculado = (pBase - precoAcordado) * volCalc;
+    }
+  } else if (status === 'POSTO_BLOQUEADO') {
+    const sel = document.getElementById('campoPostoDestinoRealocacao');
+    const opt = sel ? sel.options[sel.selectedIndex] : null;
+    const pDest = opt ? parseFloat(opt.dataset.preco || 0) : 0;
+    if (pDest > 0 && pBase > pDest) {
+      savingCalculado = (pBase - pDest) * volCalc;
+    }
+  }
+
   // Nova ficha adicionada no topo do leque Rolodex
   const novaFicha = {
     data: new Date().toISOString(),
@@ -877,7 +933,7 @@ async function salvarTratativaFirestore(event) {
     status: status,
     preco: precoAcordado,
     preco_proposto: precoProposto,
-    saving: 0,
+    saving: savingCalculado,
     notas: notas,
     contato: contato,
     posto_destino: postoDestino
@@ -935,6 +991,9 @@ async function salvarTratativaFirestore(event) {
     if (!resp.ok) throw new Error(`Falha ao gravar no Firestore: HTTP ${resp.status}`);
 
     mapaTratativasCadastradas[docId] = {
+      posto: postoAtivoTratativa.nomePosto,
+      uf: postoAtivoTratativa.uf,
+      municipio: postoAtivoTratativa.municipio || "",
       status,
       vigencia,
       preco_acordado: precoAcordado,
