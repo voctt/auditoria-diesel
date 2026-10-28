@@ -277,7 +277,7 @@ let postoAtivoTratativa = null;
                         </div>
                       </div>
 
-                      <!-- CAMPO CONDICIONAL: REALOCAÇÃO DE POSTO -->
+                      <!-- CAMPO CONDICIONAL: REALOCAÇÃO DE POSTO (COM GRUPOS INTELIGENTES) -->
                       <div class="col-12" id="boxRealocacaoPosto" style="display: none;">
                         <label class="form-label fw-bold text-danger small mb-1">
                           <i class="bi bi-arrow-left-right me-1"></i> Destinar Abastecimentos Para (Posto Alternativo):
@@ -358,7 +358,7 @@ function gerarDocumentIdPosto(posto, uf) {
   return chave.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]/g, "_").toUpperCase();
 }
 
-// 3. Leitura em lote de todas as tratativas do Firestore (Garantindo posto, uf e municipio em memória)
+// 3. Leitura em lote com AUTO-REPARO (Self-Healing de ordem cronológica e cabeçalho ativo)
 async function carregarTodasTratativasFirestore() {
   try {
     const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
@@ -407,18 +407,24 @@ async function carregarTodasTratativasFirestore() {
           });
         }
 
+        // ORDENAÇÃO CRONOLÓGICA ESTRITA (Mais recente no topo)
+        historicoCards.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+
+        // CABEÇALHO ATIVO: Sempre a ficha mais recente no calendário
+        const fichaMaisRecente = historicoCards.length > 0 ? historicoCards[0] : null;
+
         mapaTratativasCadastradas[docId] = {
           posto: f.posto?.stringValue || "",
           uf: f.uf?.stringValue || "",
           municipio: f.municipio?.stringValue || "",
-          status: f.status?.stringValue || "EM_ABERTO",
-          preco_acordado: parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
-          preco_proposto: parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
-          posto_destino: f.posto_destino?.stringValue || "",
-          contato: f.contato?.stringValue || "",
+          status: fichaMaisRecente ? fichaMaisRecente.status : (f.status?.stringValue || "EM_ABERTO"),
+          preco_acordado: fichaMaisRecente ? fichaMaisRecente.preco : parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
+          preco_proposto: fichaMaisRecente ? fichaMaisRecente.preco_proposto : parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
+          posto_destino: fichaMaisRecente ? fichaMaisRecente.posto_destino : (f.posto_destino?.stringValue || ""),
+          contato: f.contato?.stringValue || (fichaMaisRecente ? fichaMaisRecente.contato : ""),
           telefone: f.telefone?.stringValue || "",
-          notas: f.notas?.stringValue || "",
-          vigencia: f.vigencia?.stringValue || "",
+          notas: fichaMaisRecente ? fichaMaisRecente.notas : (f.notas?.stringValue || ""),
+          vigencia: fichaMaisRecente ? fichaMaisRecente.vigencia : (f.vigencia?.stringValue || ""),
           atualizado_em: f.atualizado_em?.timestampValue || "",
           historico: historicoCards
         };
@@ -527,7 +533,8 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
   document.getElementById('modalCtxVolumeMensal').innerText = volumeMesCalculo > 0 ? `${Math.round(volumeMesCalculo).toLocaleString('pt-BR')} L` : '--';
   document.getElementById('modalCtxSubVolume').innerText = subVolumeTexto;
 
-  popularSeletorPostosDestino(nomePosto, uf);
+  // Popula seletor inteligente com recomendação local destacada
+  popularSeletorPostosDestino(nomePosto, uf, ultimoPrecoNaBomba);
 
   const hojeStr = new Date().toISOString().substring(0, 10);
   document.getElementById('campoTratativaVigencia').value = hojeStr;
@@ -581,18 +588,21 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
           });
         }
 
+        historicoResgatado.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+        const fichaAtiva = historicoResgatado[0] || null;
+
         trat = {
           posto: f.posto?.stringValue || nomePosto,
           uf: f.uf?.stringValue || uf,
           municipio: f.municipio?.stringValue || municipio,
-          status: f.status?.stringValue || "ACORDO_FECHADO",
-          preco_acordado: parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
-          preco_proposto: parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
-          posto_destino: f.posto_destino?.stringValue || "",
+          status: fichaAtiva ? fichaAtiva.status : (f.status?.stringValue || "ACORDO_FECHADO"),
+          preco_acordado: fichaAtiva ? fichaAtiva.preco : parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
+          preco_proposto: fichaAtiva ? fichaAtiva.preco_proposto : parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
+          posto_destino: fichaAtiva ? fichaAtiva.posto_destino : (f.posto_destino?.stringValue || ""),
           contato: f.contato?.stringValue || "",
           telefone: f.telefone?.stringValue || "",
-          notas: f.notas?.stringValue || "",
-          vigencia: f.vigencia?.stringValue || hojeStr,
+          notas: fichaAtiva ? fichaAtiva.notas : (f.notas?.stringValue || ""),
+          vigencia: fichaAtiva ? fichaAtiva.vigencia : (f.vigencia?.stringValue || hojeStr),
           atualizado_em: f.atualizado_em?.timestampValue || "",
           historico: historicoResgatado
         };
@@ -603,7 +613,14 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
     }
   }
 
-  listaHistoricoAtiva = (trat && Array.isArray(trat.historico)) ? [...trat.historico] : [];
+  // Ordenação garantida no leque (Mais recente no índice 0)
+  if (trat && Array.isArray(trat.historico)) {
+    trat.historico.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+    listaHistoricoAtiva = [...trat.historico];
+  } else {
+    listaHistoricoAtiva = [];
+  }
+
   indiceRolodexAtivo = 0;
   renderizarLequeRolodex();
 
@@ -650,12 +667,12 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
   }
 }
 
-// 7. Popula a lista de postos para realocação de volume
-function popularSeletorPostosDestino(postoExcluido, uf) {
+// 7. Popula seletor inteligente com recomendação local destacada e ordenação por praça
+function popularSeletorPostosDestino(postoExcluido, ufAlvo, precoBasePosto) {
   const select = document.getElementById('campoPostoDestinoRealocacao');
   select.innerHTML = '<option value="">Selecione o posto substituto no corredor...</option>';
 
-  if (typeof baseRegistrosMensais === 'undefined') return;
+  if (typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais)) return;
 
   const postosCandidatos = {};
   baseRegistrosMensais.forEach(d => {
@@ -673,15 +690,57 @@ function popularSeletorPostosDestino(postoExcluido, uf) {
     }
   });
 
-  Object.values(postosCandidatos)
-    .sort((a, b) => a.preco - b.preco)
-    .forEach(p => {
+  const lista = Object.values(postosCandidatos);
+  const daMesmaUf = lista.filter(p => p.uf === ufAlvo).sort((a, b) => a.preco - b.preco);
+  const deOutrasUfs = lista.filter(p => p.uf !== ufAlvo).sort((a, b) => a.preco - b.preco);
+
+  // 1. TOP RECOMENDADO: Opção mais barata na mesma praça
+  if (daMesmaUf.length > 0) {
+    const melhorLocal = daMesmaUf[0];
+    const diff = precoBasePosto > 0 ? (melhorLocal.preco - precoBasePosto) : 0;
+    const diffTxt = diff < 0 ? ` (Economia: -R$ ${Math.abs(diff).toFixed(3)}/L)` : ` (+R$ ${diff.toFixed(3)}/L)`;
+
+    const grupoRec = document.createElement('optgroup');
+    grupoRec.label = `⭐ RECOMENDADO NA MESMA PRAÇA (${ufAlvo})`;
+    
+    const optRec = document.createElement('option');
+    optRec.value = melhorLocal.nome;
+    optRec.dataset.preco = melhorLocal.preco;
+    optRec.innerText = `⭐ [${melhorLocal.uf}] ${melhorLocal.nome} - R$ ${melhorLocal.preco.toFixed(3)}${diffTxt}`;
+    grupoRec.appendChild(optRec);
+    select.appendChild(grupoRec);
+  }
+
+  // 2. DEMAIS POSTOS DA MESMA UF
+  if (daMesmaUf.length > 0) {
+    const grupoUf = document.createElement('optgroup');
+    grupoUf.label = `📍 POSTOS NA MESMA UF (${ufAlvo})`;
+    daMesmaUf.forEach(p => {
+      const diff = precoBasePosto > 0 ? (p.preco - precoBasePosto) : 0;
+      const diffTxt = diff < 0 ? ` (-R$ ${Math.abs(diff).toFixed(3)}/L)` : ` (+R$ ${diff.toFixed(3)}/L)`;
+      
+      const opt = document.createElement('option');
+      opt.value = p.nome;
+      opt.dataset.preco = p.preco;
+      opt.innerText = `[${p.uf}] ${p.nome} - R$ ${p.preco.toFixed(3)}${diffTxt}`;
+      grupoUf.appendChild(opt);
+    });
+    select.appendChild(grupoUf);
+  }
+
+  // 3. DEMAIS PRAÇAS E CORREDORES
+  if (deOutrasUfs.length > 0) {
+    const grupoOutros = document.createElement('optgroup');
+    grupoOutros.label = `🛣️ OUTRAS PRAÇAS / CORREDORES RODOVIÁRIOS`;
+    deOutrasUfs.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.nome;
       opt.dataset.preco = p.preco;
       opt.innerText = `[${p.uf}] ${p.nome} - R$ ${p.preco.toFixed(3)}`;
-      select.appendChild(opt);
+      grupoOutros.appendChild(opt);
     });
+    select.appendChild(grupoOutros);
+  }
 }
 
 // 8. Alterna visibilidade entre Acordo Direto ou Realocação
@@ -880,7 +939,7 @@ function renderizarLequeRolodex() {
   container.innerHTML = htmlCards;
 }
 
-// 11. Gravação Completa no Firestore com acúmulo no histórico e vigência (Preservando schema exato)
+// 11. Gravação Completa com REORDENAÇÃO CRONOLÓGICA AUTOMÁTICA
 async function salvarTratativaFirestore(event) {
   event.preventDefault();
   if (!postoAtivoTratativa) return;
@@ -925,7 +984,7 @@ async function salvarTratativaFirestore(event) {
     }
   }
 
-  // Nova ficha adicionada no topo do leque Rolodex
+  // Nova ficha criada
   const novaFicha = {
     data: new Date().toISOString(),
     vigencia: vigencia,
@@ -939,9 +998,15 @@ async function salvarTratativaFirestore(event) {
     posto_destino: postoDestino
   };
 
-  const historicoAtualizado = [novaFicha, ...listaHistoricoAtiva].slice(0, 15);
+  // REORDENAÇÃO CRONOLÓGICA ESTRITA DO HISTÓRICO (Vigência Decrescente)
+  const historicoAtualizado = [novaFicha, ...listaHistoricoAtiva];
+  historicoAtualizado.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+  const historicoLimitado = historicoAtualizado.slice(0, 15);
 
-  const arrayHistoricoFirestore = historicoAtualizado.map(h => ({
+  // A ficha ATIVA da raiz é SEMPRE a que possui a data de vigência mais recente no calendário
+  const fichaMaisRecente = historicoLimitado[0];
+
+  const arrayHistoricoFirestore = historicoLimitado.map(h => ({
     mapValue: {
       fields: {
         data: { stringValue: h.data },
@@ -963,14 +1028,14 @@ async function salvarTratativaFirestore(event) {
       posto: { stringValue: postoAtivoTratativa.nomePosto },
       uf: { stringValue: postoAtivoTratativa.uf },
       municipio: { stringValue: postoAtivoTratativa.municipio || "" },
-      status: { stringValue: status },
-      vigencia: { stringValue: vigencia },
-      preco_acordado: { doubleValue: precoAcordado },
-      preco_proposto: { doubleValue: precoProposto },
-      posto_destino: { stringValue: postoDestino },
-      contato: { stringValue: contato },
+      status: { stringValue: fichaMaisRecente.status },
+      vigencia: { stringValue: fichaMaisRecente.vigencia },
+      preco_acordado: { doubleValue: fichaMaisRecente.preco },
+      preco_proposto: { doubleValue: fichaMaisRecente.preco_proposto || 0 },
+      posto_destino: { stringValue: fichaMaisRecente.posto_destino || "" },
+      contato: { stringValue: contato || fichaMaisRecente.contato || "" },
       telefone: { stringValue: telefone },
-      notas: { stringValue: notas },
+      notas: { stringValue: fichaMaisRecente.notas || "" },
       atualizado_em: { timestampValue: new Date().toISOString() },
       autor: { stringValue: autorEmail },
       historico: { arrayValue: { values: arrayHistoricoFirestore } }
@@ -994,16 +1059,16 @@ async function salvarTratativaFirestore(event) {
       posto: postoAtivoTratativa.nomePosto,
       uf: postoAtivoTratativa.uf,
       municipio: postoAtivoTratativa.municipio || "",
-      status,
-      vigencia,
-      preco_acordado: precoAcordado,
-      preco_proposto: precoProposto,
-      posto_destino: postoDestino,
-      contato,
+      status: fichaMaisRecente.status,
+      vigencia: fichaMaisRecente.vigencia,
+      preco_acordado: fichaMaisRecente.preco,
+      preco_proposto: fichaMaisRecente.preco_proposto || 0,
+      posto_destino: fichaMaisRecente.posto_destino || "",
+      contato: contato || fichaMaisRecente.contato || "",
       telefone,
-      notas,
+      notas: fichaMaisRecente.notas || "",
       atualizado_em: new Date().toISOString(),
-      historico: historicoAtualizado
+      historico: historicoLimitado
     };
 
     txtBtn.innerHTML = `<i class="bi bi-check-all me-1"></i> Decisão Gravada!`;
@@ -1026,5 +1091,32 @@ async function salvarTratativaFirestore(event) {
       txtBtn.innerHTML = `<i class="bi bi-check-circle me-1"></i> Gravar Decisão`;
       spinner.style.display = 'none';
     }, 800);
+  }
+}
+
+// 12. Script Utilitário Global para Consolidar e Sincronizar o Histórico do Firestore
+async function sanearBaseRolodexFirestore() {
+  console.log("Iniciando saneamento e reordenação cronológica da base do Rolodex...");
+  const chaves = Object.keys(mapaTratativasCadastradas);
+  let corrigidos = 0;
+
+  for (const docId of chaves) {
+    const trat = mapaTratativasCadastradas[docId];
+    if (trat && Array.isArray(trat.historico) && trat.historico.length > 1) {
+      trat.historico.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+      const maisRecente = trat.historico[0];
+
+      if (trat.vigencia !== maisRecente.vigencia || trat.preco_acordado !== maisRecente.preco) {
+        trat.vigencia = maisRecente.vigencia;
+        trat.preco_acordado = maisRecente.preco;
+        trat.status = maisRecente.status;
+        corrigidos++;
+      }
+    }
+  }
+
+  console.log(`Saneamento concluído! ${corrigidos} postos reorganizados com base na vigência mais recente.`);
+  if (typeof renderizarAbaAuditoriaComercial === 'function') {
+    renderizarAbaAuditoriaComercial();
   }
 }
