@@ -443,6 +443,18 @@ body {
   color: #ffffff;
   border-color: var(--cargosoft-green);
 }
+.btn-tratativa.tratativa-recente,
+.btn-tratativa.tratativa-recente:hover {
+  background: #e8f5e9;
+  border-color: #81c784;
+  color: #1b5e20;
+}
+.btn-tratativa.tratativa-atrasada,
+.btn-tratativa.tratativa-atrasada:hover {
+  background: #fff3e0;
+  border-color: #ffb74d;
+  color: #8a4b08;
+}
 
 .legend-indicator {
   display: inline-block;

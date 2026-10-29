@@ -884,6 +884,24 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     }
 
     const dataUltimoFormatada = formatarDataDiaMes(p.DATA_MAIS_RECENTE);
+    const tratativaAtual = typeof obterTratativaPosto === 'function'
+      ? obterTratativaPosto(p.POSTO, p.UF_POSTO)
+      : null;
+    let classeBotaoTratativa = '';
+    let tituloBotaoTratativa = 'Registrar tratativa';
+
+    if (tratativaAtual?.vigencia) {
+      const dataVigencia = tratativaAtual.vigencia.substring(0, 10);
+      const dataVigenciaMs = Date.parse(`${dataVigencia}T00:00:00Z`);
+
+      if (Number.isFinite(dataVigenciaMs) && new Date(dataVigenciaMs).toISOString().substring(0, 10) === dataVigencia) {
+        const agora = new Date();
+        const hojeMs = Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate());
+        const diasDesdeTratativa = Math.floor((hojeMs - dataVigenciaMs) / 86400000);
+        classeBotaoTratativa = diasDesdeTratativa > 25 ? 'tratativa-atrasada' : 'tratativa-recente';
+        tituloBotaoTratativa = `Última tratativa registrada há ${diasDesdeTratativa} dias`;
+      }
+    }
 
     const indicesAbastecidos = [];
     const dadosKmmMes = [];
@@ -990,7 +1008,7 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
         </div>
 
         <div class="col-m-btn">
-          <button class="btn-tratativa" onclick="abrirModalTratativa('${p.POSTO.replace(/'/g, "\\'")}', '${p.UF_POSTO}', '${(p.MUNICIPIO_POSTO || '').replace(/'/g, "\\'")}', ${p.PRECO_MEDIO_EXIBICAO}, ${p.REF_ANP}, ${p.ULTIMO_PRECO})">
+          <button class="btn-tratativa ${classeBotaoTratativa}" title="${tituloBotaoTratativa}" onclick="abrirModalTratativa('${p.POSTO.replace(/'/g, "\\'")}', '${p.UF_POSTO}', '${(p.MUNICIPIO_POSTO || '').replace(/'/g, "\\'")}', ${p.PRECO_MEDIO_EXIBICAO}, ${p.REF_ANP}, ${p.ULTIMO_PRECO})">
             <i class="bi bi-journal-check"></i> Tratativa
           </button>
         </div>
