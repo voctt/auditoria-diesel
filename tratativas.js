@@ -262,7 +262,12 @@ let postoAtivoTratativa = null;
                       <div class="col-12" id="boxPrecoAcordado">
                         <div class="row g-2">
                           <div class="col-6">
-                            <label class="form-label fw-bold text-dark small mb-1">Preço Negociado (R$/L):</label>
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
+                              <label class="form-label fw-bold text-dark small mb-0" for="campoTratativaPrecoAcordado">Preço Negociado (R$/L):</label>
+                              <button type="button" id="btnUsarUltimoPagoTratativa" class="btn btn-sm btn-outline-primary py-0" onclick="preencherTratativaComUltimoPago()" title="Preencher com o último valor pago e a data de hoje" disabled>
+                                <i class="bi bi-arrow-down-circle me-1"></i> Usar último pago
+                              </button>
+                            </div>
                             <input type="number" step="0.001" id="campoTratativaPrecoAcordado" class="form-control form-control-sm font-monospace" placeholder="Ex: 6.450" oninput="calcularSpreadTempoReal()">
                           </div>
                           <div class="col-6">
@@ -532,6 +537,7 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
   document.getElementById('modalCtxRefAnp').innerText = refAnp > 0 ? `R$ ${refAnp.toFixed(3)}` : '--';
   document.getElementById('modalCtxVolumeMensal').innerText = volumeMesCalculo > 0 ? `${Math.round(volumeMesCalculo).toLocaleString('pt-BR')} L` : '--';
   document.getElementById('modalCtxSubVolume').innerText = subVolumeTexto;
+  document.getElementById('btnUsarUltimoPagoTratativa').disabled = !(ultimoPrecoNaBomba > 0);
 
   // Popula seletor inteligente com recomendação local destacada
   popularSeletorPostosDestino(nomePosto, uf, ultimoPrecoNaBomba);
@@ -653,18 +659,33 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
   const ehAdmin = emailLogado.toLowerCase().includes("willian") || emailLogado.toLowerCase().includes("thayane");
 
   const btnSalvar = document.getElementById('btnSalvarTratativa');
+  const btnUsarUltimoPago = document.getElementById('btnUsarUltimoPagoTratativa');
   const alertaPermissao = document.getElementById('alertaPermissaoTratativa');
   const campos = document.querySelectorAll('#formTratativaDiesel input, #formTratativaDiesel select, #formTratativaDiesel textarea');
 
   if (ehAdmin) {
     alertaPermissao.style.display = 'none';
     btnSalvar.style.display = 'inline-block';
+    btnUsarUltimoPago.style.display = 'inline-block';
     campos.forEach(c => c.removeAttribute('disabled'));
   } else {
     alertaPermissao.style.display = 'block';
     btnSalvar.style.display = 'none';
+    btnUsarUltimoPago.style.display = 'none';
     campos.forEach(c => c.setAttribute('disabled', 'disabled'));
   }
+}
+
+function preencherTratativaComUltimoPago() {
+  const precoUltimoPago = parseFloat(postoAtivoTratativa?.ultimoPago || 0);
+  if (!(precoUltimoPago > 0)) return;
+
+  const hoje = new Date();
+  const hojeLocal = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+
+  document.getElementById('campoTratativaPrecoAcordado').value = precoUltimoPago.toFixed(3);
+  document.getElementById('campoTratativaVigencia').value = hojeLocal;
+  calcularSpreadTempoReal();
 }
 
 // 7. Popula seletor inteligente com recomendação local destacada e ordenação por praça
