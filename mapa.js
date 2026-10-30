@@ -33,6 +33,8 @@ let postosSugeridosUltimaRota = [];
 
 // Cache de Geocodificação Automática
 const cacheGeocodificacao = {};
+let filaGeocodificacaoNominatim = Promise.resolve();
+let ultimaConsultaNominatim = 0;
 
 // =========================================================================
 // 1. MINI MAPA LEAFLET: IDENTIDADE INSTITUCIONAL CARGOSOFT & VOCTT
@@ -330,31 +332,66 @@ function aplicarTratativasNosPostos(postos) {
 // -------------------------------------------------------------------------
 async function obterCoordenadasNominatim(municipio, uf) {
   if (!municipio || !uf) return null;
-  const chave = `${normalizarTextoBusca(municipio)}_${normalizarTextoBusca(uf)}`;
+  const municipioNormalizado = normalizarTextoComparacao(municipio).replace(/\s+/g, ' ');
+  const ufNormalizada = normalizarTextoComparacao(uf);
+  const chave = `${municipioNormalizado}_${ufNormalizada}`;
   
   const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
-  const achadaLocal = listaCidadesRef.find(c => normalizarTextoBusca(c.nome).includes(normalizarTextoBusca(municipio)));
-  if (achadaLocal) return { lat: achadaLocal.lat, lon: achadaLocal.lon };
+  const achadaLocal = listaCidadesRef.find(c => {
+    const [nomeCidade, ufCidade] = String(c.nome || '').split(',').map(parte => parte.trim());
+    return normalizarTextoComparacao(nomeCidade).replace(/\s+/g, ' ') === municipioNormalizado &&
+      normalizarTextoComparacao(ufCidade) === ufNormalizada;
+  });
+  if (achadaLocal) return { lat: Number(achadaLocal.lat), lon: Number(achadaLocal.lon) };
 
   if (cacheGeocodificacao[chave] !== undefined) return cacheGeocodificacao[chave];
 
+  const query = encodeURIComponent(`${municipio.trim()}, ${ufNormalizada}, Brasil`);
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`;
+  let liberarFila;
+  const turnoAtual = new Promise(resolve => { liberarFila = resolve; });
+  const turnoAnterior = filaGeocodificacaoNominatim;
+  filaGeocodificacaoNominatim = turnoAtual;
+
+  await turnoAnterior;
   try {
-    await new Promise(r => setTimeout(r, 600)); 
-    const query = encodeURIComponent(`${municipio}, ${uf}, Brasil`);
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`;
-    const resp = await fetch(url, { headers: { 'User-Agent': 'VOCTT-Logistics-Consulting/1.0' } });
-    const data = await resp.json();
-    
-    if (data && data.length > 0) {
-      const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-      cacheGeocodificacao[chave] = coords;
-      return coords;
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      const intervaloRestante = 1000 - (Date.now() - ultimaConsultaNominatim);
+      if (intervaloRestante > 0) {
+        await new Promise(resolve => setTimeout(resolve, intervaloRestante));
+      }
+      ultimaConsultaNominatim = Date.now();
+
+      try {
+        const resp = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+        if (!resp.ok) {
+          if ((resp.status === 429 || resp.status >= 500) && tentativa === 0) continue;
+          throw new Error(`Nominatim respondeu ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        if (data && data.length > 0) {
+          const coords = { lat: Number(data[0].lat), lon: Number(data[0].lon) };
+          if (Number.isFinite(coords.lat) && Number.isFinite(coords.lon)) {
+            cacheGeocodificacao[chave] = coords;
+            return coords;
+          }
+        }
+
+        cacheGeocodificacao[chave] = null;
+        return null;
+      } catch (e) {
+        if (tentativa === 1) {
+          console.warn(`Aviso: Falha ao geocodificar ${municipio}-${uf}.`, e);
+        }
+      }
     }
   } catch(e) {
     console.warn(`Aviso: Falha ao geocodificar ${municipio}-${uf}.`, e);
+  } finally {
+    liberarFila();
   }
-  
-  cacheGeocodificacao[chave] = null;
+
   return null;
 }
 
@@ -870,7 +907,7 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   const mapaPostosConsolidado = {};
   
   registrosRef.forEach(d => {
-    if((d.UF_POSTO || '').trim().toUpperCase() !== ufSelecionada) return;
+    if (normalizarTextoComparacao(d.UF_POSTO || '') !== normalizarTextoComparacao(ufSelecionada)) return;
 
     const nome = (d.POSTO || '').trim();
     const mun = (d.MUNICIPIO_POSTO || '').trim().toUpperCase();
@@ -995,7 +1032,7 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
   const mapaPostosConsolidado = {};
   
   registrosRef.forEach(d => {
-    if(!d.POSTO || !d.POSTO.toUpperCase().includes(redeSelecionada.toUpperCase())) return;
+    if (!normalizarTextoComparacao(d.POSTO || '').includes(normalizarTextoComparacao(redeSelecionada))) return;
 
     const nome = d.POSTO.trim();
     const mun = (d.MUNICIPIO_POSTO || '').trim().toUpperCase();
