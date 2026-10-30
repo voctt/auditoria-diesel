@@ -26,6 +26,7 @@ let dadosGeoJsonBr = null;
 // Variáveis de controlo do Roteirizador de Postos
 let leafletMapInstance = null;
 let routingControlInstance = null;
+let coordenadasRotaAtual = [];
 let markersPostosLeaflet = [];
 let markersApoioLeaflet = [];
 let postosApoioPendentes = [];
@@ -659,6 +660,43 @@ function atualizarMarcadoresWaypoints() {
   });
 }
 
+function criarMarcadorPosto(coords, cor, raioDinamico = 9) {
+  const tamanhoIcone = Math.round(20 + (raioDinamico - 6) * 1.2);
+  const distanciaPin = 16;
+  let iconAnchor = [tamanhoIcone / 2, tamanhoIcone / 2];
+
+  if (leafletMapInstance && markersWaypoints.length > 0) {
+    const pontoPosto = leafletMapInstance.latLngToLayerPoint(coords);
+    let waypointMaisProximo = null;
+    let menorDistancia = Infinity;
+
+    markersWaypoints.forEach(marker => {
+      const pontoWaypoint = leafletMapInstance.latLngToLayerPoint(marker.getLatLng());
+      const distancia = pontoPosto.distanceTo(pontoWaypoint);
+      if (distancia < menorDistancia) {
+        menorDistancia = distancia;
+        waypointMaisProximo = pontoWaypoint;
+      }
+    });
+
+    if (waypointMaisProximo && menorDistancia < 34) {
+      const ficaADireita = pontoPosto.x >= waypointMaisProximo.x;
+      iconAnchor = ficaADireita
+        ? [-distanciaPin, tamanhoIcone / 2]
+        : [tamanhoIcone + distanciaPin, tamanhoIcone / 2];
+    }
+  }
+
+  const icon = L.divIcon({
+    className: 'leaflet-posto-marker',
+    html: `<i class="bi bi-fuel-pump-fill" style="--posto-marker-color: ${cor}; --posto-marker-size: ${Math.round(tamanhoIcone * 0.85)}px;"></i>`,
+    iconSize: [tamanhoIcone, tamanhoIcone],
+    iconAnchor
+  });
+
+  return L.marker(coords, { icon, riseOnHover: true }).addTo(leafletMapInstance);
+}
+
 function obterCoordenadasItem(itemEl) {
   const hidden = itemEl.querySelector('.hidden-coord-rota');
   const input = itemEl.querySelector('.input-cidade-rota');
@@ -704,6 +742,7 @@ function calcularRotaLeaflet() {
     return;
   }
 
+  coordenadasRotaAtual = [];
   if (routingControlInstance) {
     leafletMapInstance.removeControl(routingControlInstance);
   }
@@ -721,6 +760,7 @@ function calcularRotaLeaflet() {
   routingControlInstance.on('routesfound', async function(e) {
     if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     const routeCoords = e.routes[0].coordinates;
+    coordenadasRotaAtual = routeCoords;
     await plotarPostosComDuploRaio(routeCoords);
   });
 }
@@ -737,6 +777,7 @@ function limparRoteirizador() {
   }
 
   routingControlInstance = null;
+  coordenadasRotaAtual = [];
   markersPostosLeaflet = [];
   markersApoioLeaflet = [];
   postosApoioPendentes = [];
@@ -798,7 +839,7 @@ function alternarPostosApoioRota() {
   const exibir = !mostrarPostosApoioRota;
   if (exibir) {
     postosApoioPendentes.forEach(posto => {
-      const marker = L.circleMarker(posto.coords, posto.opcoes).addTo(leafletMapInstance);
+      const marker = criarMarcadorPosto(posto.coords, posto.cor, posto.raio);
       marker.bindPopup(posto.popup);
       markersApoioLeaflet.push(marker);
     });
@@ -974,15 +1015,6 @@ async function plotarPostosComDuploRaio(routeCoords) {
         finalLon += raioGraus * Math.sin(angulo);
       }
 
-      const opcoesMarker = {
-        radius: raioDinamico,
-        fillColor: corPin,
-        color: "#ffffff",
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.95
-      };
-
       const popupPosto = `
         <strong style="color:#1c483a;">${p.posto}</strong><br>
         Cidade: ${p.municipio}/${p.uf}<br>
@@ -997,7 +1029,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
       `;
 
       if (menorDist <= 200) {
-        const marker = L.circleMarker([finalLat, finalLon], opcoesMarker).addTo(leafletMapInstance);
+        const marker = criarMarcadorPosto([finalLat, finalLon], corPin, raioDinamico);
         marker.bindPopup(popupPosto);
         markersPostosLeaflet.push(marker);
         postosSugeridosUltimaRota.push({
@@ -1005,7 +1037,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
           distancia: Math.round(menorDist), tipo: p.tipo, desatualizado: isDesatualizado, origemPreco: p.origemPreco
         });
       } else {
-        postosApoioPendentes.push({ coords: [finalLat, finalLon], opcoes: opcoesMarker, popup: popupPosto });
+        postosApoioPendentes.push({ coords: [finalLat, finalLon], cor: corPin, raio: raioDinamico, popup: popupPosto });
       }
     }
   }
@@ -1133,9 +1165,7 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
       finalLon += raioGraus * Math.sin(angulo);
     }
 
-    const marker = L.circleMarker([finalLat, finalLon], {
-      radius: raioDinamico, fillColor: corPin, color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.95
-    }).addTo(leafletMapInstance);
+    const marker = criarMarcadorPosto([finalLat, finalLon], corPin, raioDinamico);
 
     marker.bindPopup(`
       <strong style="color:#1c483a;">${p.posto}</strong><br>
@@ -1264,9 +1294,7 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
       finalLon += raioGraus * Math.sin(angulo);
     }
 
-    const marker = L.circleMarker([finalLat, finalLon], {
-      radius: raioDinamico, fillColor: corPin, color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.95
-    }).addTo(leafletMapInstance);
+    const marker = criarMarcadorPosto([finalLat, finalLon], corPin, raioDinamico);
 
     marker.bindPopup(`
       <strong style="color:#1c483a;">${p.posto}</strong><br>
@@ -1304,10 +1332,37 @@ function imprimirRoteiroViagem() {
 
   linhas.forEach(linha => linha.classList.toggle('linha-selecionada-impressao', linhasMarcadas.includes(linha)));
   area.style.display = "block";
+
+  const estadoMapaAntesImpressao = leafletMapInstance ? {
+    centro: leafletMapInstance.getCenter(),
+    zoom: leafletMapInstance.getZoom()
+  } : null;
+  const boundsRota = coordenadasRotaAtual.length > 0
+    ? L.latLngBounds(coordenadasRotaAtual.map(ponto => [ponto.lat, ponto.lng]))
+    : null;
+
   window.addEventListener('afterprint', () => {
     linhas.forEach(linha => linha.classList.remove('linha-selecionada-impressao'));
+    if (leafletMapInstance && estadoMapaAntesImpressao) {
+      requestAnimationFrame(() => {
+        leafletMapInstance.invalidateSize({ pan: false });
+        leafletMapInstance.setView(estadoMapaAntesImpressao.centro, estadoMapaAntesImpressao.zoom, { animate: false });
+      });
+    }
   }, { once: true });
-  window.print();
+
+  requestAnimationFrame(() => {
+    if (leafletMapInstance && boundsRota && boundsRota.isValid()) {
+      leafletMapInstance.invalidateSize({ pan: false });
+      leafletMapInstance.fitBounds(boundsRota, {
+        padding: [24, 24],
+        maxZoom: 8,
+        animate: false
+      });
+    }
+
+    requestAnimationFrame(() => window.print());
+  });
 }
 
 function renderizarTabelaPostosSugeridos() {
