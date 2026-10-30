@@ -559,17 +559,18 @@ body.preparando-impressao-roteiro #mapLeaflet {
 body.preparando-impressao-roteiro #areaImpressaoRoteiro {
   display: block !important;
   position: absolute !important;
-  top: 8mm;
+  left: 8mm;
   right: 8mm;
+  bottom: 8mm;
   z-index: 1000;
-  width: 44%;
-  max-height: 178mm;
-  overflow: auto;
+  width: auto;
+  max-height: 62%;
+  overflow: visible;
   margin: 0 !important;
   padding: 3mm !important;
   border: 1px solid rgba(148, 163, 184, 0.55) !important;
   border-radius: 4px !important;
-  background: rgba(255, 255, 255, 0.91) !important;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.80) 58%, rgba(255, 255, 255, 0.64) 100%) !important;
   box-shadow: 0 2mm 6mm rgba(15, 23, 42, 0.12) !important;
   backdrop-filter: blur(2px);
 }
@@ -732,10 +733,12 @@ body.preparando-impressao-roteiro #mapLeaflet .leaflet-tile {
   #secaoRoteirizador .row > .col-md-8 { display: contents !important; }
   #mapLeaflet { display: block !important; position: absolute !important; inset: 0; width: 100% !important; height: 194mm !important; border-radius: 0 !important; page-break-inside: avoid; break-inside: avoid; }
   #mapLeaflet .leaflet-control-container { display: none !important; }
-  #areaImpressaoRoteiro { display: block !important; position: absolute !important; top: 8mm; right: 8mm; z-index: 1000; width: 44%; max-height: 178mm; overflow: auto; margin: 0 !important; padding: 3mm !important; border: 1px solid rgba(148, 163, 184, 0.55) !important; border-radius: 4px !important; background: rgba(255, 255, 255, 0.91) !important; box-shadow: 0 2mm 6mm rgba(15, 23, 42, 0.12) !important; backdrop-filter: blur(2px); }
+  #areaImpressaoRoteiro { display: block !important; position: absolute !important; left: 8mm; right: 8mm; bottom: 8mm; z-index: 1000; width: auto; max-height: 62%; overflow: visible; margin: 0 !important; padding: 3mm !important; border: 1px solid rgba(148, 163, 184, 0.55) !important; border-radius: 4px !important; background: linear-gradient(90deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.80) 58%, rgba(255, 255, 255, 0.64) 100%) !important; box-shadow: 0 2mm 6mm rgba(15, 23, 42, 0.12) !important; backdrop-filter: blur(2px); }
   #areaImpressaoRoteiro > h6 { margin: 0 0 2mm !important; padding: 0 0 1.5mm !important; font-size: 10pt !important; }
   #controlesSelecaoPostos { display: none !important; }
-  #tabelaPostosSugeridos { width: 100% !important; margin: 0 !important; }
+  #tabelaPostosSugeridos { width: 100% !important; margin: 0 !important; --bs-table-bg: transparent; background: transparent !important; }
+  #tabelaPostosSugeridos tbody td { background-color: rgba(255, 255, 255, 0.50) !important; }
+  #tabelaPostosSugeridos thead th { background-color: rgba(33, 37, 41, 0.88) !important; }
   #tabelaPostosSugeridos .coluna-selecao-posto { display: none !important; }
   #tabelaPostosSugeridos tbody tr:not(.linha-selecionada-impressao) { display: none !important; }
   #tabelaPostosSugeridos tr { page-break-inside: avoid; break-inside: avoid; }
