@@ -673,6 +673,7 @@ body {
   #mapLeaflet .leaflet-control-container { display: none !important; }
   #areaImpressaoRoteiro { display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
   #areaImpressaoRoteiro > h6 { margin: 2mm 0 !important; padding: 0 0 1mm !important; }
+  #controlesSelecaoPostos { display: none !important; }
   #tabelaPostosSugeridos { width: 100% !important; margin: 0 !important; }
   #tabelaPostosSugeridos .coluna-selecao-posto { display: none !important; }
   #tabelaPostosSugeridos tbody tr:not(.linha-selecionada-impressao) { display: none !important; }
