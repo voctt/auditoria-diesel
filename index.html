@@ -312,6 +312,9 @@
           <div class="small text-muted">Trace a rota da viagem, filtre os postos no corredor logístico e gere o roteiro para o motorista</div>
         </div>
         <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="limparRoteirizador()" title="Limpar rota e filtros">
+            <i class="bi bi-eraser me-1"></i> Limpar
+          </button>
           <button class="btn btn-sm btn-outline-primary fw-bold" onclick="imprimirRoteiroViagem()">
             <i class="bi bi-printer me-1"></i> Imprimir Roteiro de Abastecimento
           </button>
@@ -402,7 +405,7 @@
                 </button>
               </div>
 
-              <button class="btn btn-sm btn-success fw-bold w-100 py-2 shadow-sm mb-3" onclick="calcularRotaLeaflet()">
+              <button id="btnCalcularRotaLeaflet" class="btn btn-sm btn-success fw-bold w-100 py-2 shadow-sm mb-3" onclick="calcularRotaLeaflet()">
                 <i class="bi bi-signpost-2-fill me-1"></i> Traçar Rota & Mapear Postos
               </button>
 

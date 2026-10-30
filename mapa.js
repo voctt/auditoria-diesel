@@ -30,6 +30,7 @@ let markersPostosLeaflet = [];
 let markersWaypoints = [];
 let campoFocoAtivo = null;
 let postosSugeridosUltimaRota = [];
+let versaoOperacaoRoteirizador = 0;
 
 // Cache de Geocodificação Automática
 const cacheGeocodificacao = {};
@@ -682,6 +683,7 @@ function calcularRotaLeaflet() {
   campoFocoAtivo = null;
 
   if (!leafletMapInstance) return;
+  const versaoOperacao = ++versaoOperacaoRoteirizador;
 
   const itens = Array.from(document.querySelectorAll('#containerPontosRota .ponto-rota-item'));
   const waypointsDisponiveis = itens.map((item, indice) => ({
@@ -713,9 +715,57 @@ function calcularRotaLeaflet() {
   }).addTo(leafletMapInstance);
 
   routingControlInstance.on('routesfound', async function(e) {
+    if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     const routeCoords = e.routes[0].coordinates;
     await plotarPostosComDuploRaio(routeCoords);
   });
+}
+
+function limparRoteirizador() {
+  versaoOperacaoRoteirizador++;
+
+  if (leafletMapInstance) {
+    if (routingControlInstance) leafletMapInstance.removeControl(routingControlInstance);
+    markersPostosLeaflet.forEach(marker => leafletMapInstance.removeLayer(marker));
+    markersWaypoints.forEach(marker => leafletMapInstance.removeLayer(marker));
+    leafletMapInstance.setView([-20.0, -48.0], 5);
+  }
+
+  routingControlInstance = null;
+  markersPostosLeaflet = [];
+  markersWaypoints = [];
+  postosSugeridosUltimaRota = [];
+  campoFocoAtivo = null;
+
+  const itensRota = Array.from(document.querySelectorAll('#containerPontosRota .ponto-rota-item'));
+  itensRota.slice(1, -1).forEach(item => item.remove());
+  document.querySelectorAll('.input-cidade-rota').forEach(input => {
+    input.value = '';
+    input.classList.remove('foco-ativo');
+  });
+  document.querySelectorAll('.hidden-coord-rota').forEach(input => { input.value = ''; });
+  document.querySelectorAll('.autocomplete-list').forEach(lista => {
+    lista.innerHTML = '';
+    lista.style.display = 'none';
+  });
+
+  const filtroUf = document.getElementById('filtroMapaLivreUf');
+  const filtroRede = document.getElementById('filtroMapaLivreRede');
+  if (filtroUf) filtroUf.value = '';
+  if (filtroRede) filtroRede.value = '';
+
+  const areaImpressao = document.getElementById('areaImpressaoRoteiro');
+  const conteudoImpresso = document.getElementById('conteudoRoteiroImpresso');
+  if (areaImpressao) areaImpressao.style.display = 'none';
+  if (conteudoImpresso) conteudoImpresso.innerHTML = '';
+
+  const botaoRota = document.getElementById('btnCalcularRotaLeaflet');
+  if (botaoRota) {
+    botaoRota.disabled = false;
+    botaoRota.innerHTML = '<i class="bi bi-signpost-2-fill me-1"></i> Traçar Rota & Mapear Postos';
+  }
+
+  renumerarRotulos();
 }
 
 function formatarNomeCidadeParada(nomeCidade) {
@@ -779,6 +829,7 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
 // -------------------------------------------------------------------------
 async function plotarPostosComDuploRaio(routeCoords) {
   if (!leafletMapInstance) return;
+  const versaoOperacao = ++versaoOperacaoRoteirizador;
   markersPostosLeaflet.forEach(m => leafletMapInstance.removeLayer(m));
   markersPostosLeaflet = [];
   postosSugeridosUltimaRota = [];
@@ -823,7 +874,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
     amostraRota.push(routeCoords[i]);
   }
 
-  const btnRota = document.querySelector('button[onclick="calcularRotaLeaflet()"]');
+  const btnRota = document.getElementById('btnCalcularRotaLeaflet');
   const textoOriginalBtn = btnRota ? btnRota.innerHTML : '';
   if (btnRota) {
      btnRota.disabled = true;
@@ -836,6 +887,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
     if (!p.municipio || p.municipio === 'ND') continue;
 
     const coords = await obterCoordenadasNominatim(p.municipio, p.uf);
+    if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     if (!coords) continue;
 
     let menorDist = Infinity;
@@ -927,6 +979,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
 // -------------------------------------------------------------------------
 window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   if (!leafletMapInstance) return;
+  const versaoOperacao = ++versaoOperacaoRoteirizador;
 
   document.getElementById('filtroMapaLivreRede').value = "";
 
@@ -993,6 +1046,7 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
   for (const p of postos) {
     if (!p.municipio || p.municipio === 'ND') continue;
     const coords = await obterCoordenadasNominatim(p.municipio, p.uf);
+    if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     if (!coords) continue;
 
     const isDesatualizado = verificarSePrecoDesatualizado(p.data);
@@ -1052,6 +1106,7 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
 // -------------------------------------------------------------------------
 window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
   if (!leafletMapInstance) return;
+  const versaoOperacao = ++versaoOperacaoRoteirizador;
 
   document.getElementById('filtroMapaLivreUf').value = "";
 
@@ -1118,6 +1173,7 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
   for (const p of postos) {
     if (!p.municipio || p.municipio === 'ND') continue;
     const coords = await obterCoordenadasNominatim(p.municipio, p.uf);
+    if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     if (!coords) continue;
 
     const isDesatualizado = verificarSePrecoDesatualizado(p.data);
