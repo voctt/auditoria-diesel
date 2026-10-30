@@ -291,6 +291,56 @@ function calcularDistanciaKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+function prepararSegmentosRota(routeCoords) {
+  const segmentos = [];
+  let kmAcumulados = 0;
+
+  for (let indice = 0; indice < routeCoords.length - 1; indice++) {
+    const inicio = routeCoords[indice];
+    const fim = routeCoords[indice + 1];
+    const comprimentoKm = calcularDistanciaKm(inicio.lat, inicio.lng, fim.lat, fim.lng);
+    if (comprimentoKm === 0) continue;
+
+    segmentos.push({ inicio, fim, comprimentoKm, kmInicial: kmAcumulados });
+    kmAcumulados += comprimentoKm;
+  }
+
+  return segmentos;
+}
+
+function calcularPosicaoPostoNaRota(coords, segmentos) {
+  let menorDistanciaKm = Infinity;
+  let kmNaRota = 0;
+
+  segmentos.forEach(segmento => {
+    const latitudeMedia = (segmento.inicio.lat + segmento.fim.lat + coords.lat) / 3 * Math.PI / 180;
+    const escalaLongitude = 111.32 * Math.cos(latitudeMedia);
+    const escalaLatitude = 111.32;
+    const inicioX = segmento.inicio.lng * escalaLongitude;
+    const inicioY = segmento.inicio.lat * escalaLatitude;
+    const vetorX = (segmento.fim.lng - segmento.inicio.lng) * escalaLongitude;
+    const vetorY = (segmento.fim.lat - segmento.inicio.lat) * escalaLatitude;
+    const postoX = coords.lon * escalaLongitude;
+    const postoY = coords.lat * escalaLatitude;
+    const comprimentoQuadrado = vetorX ** 2 + vetorY ** 2;
+    const fracao = Math.max(0, Math.min(1,
+      ((postoX - inicioX) * vetorX + (postoY - inicioY) * vetorY) / comprimentoQuadrado
+    ));
+    const pontoProjetado = {
+      lat: segmento.inicio.lat + (segmento.fim.lat - segmento.inicio.lat) * fracao,
+      lon: segmento.inicio.lng + (segmento.fim.lng - segmento.inicio.lng) * fracao
+    };
+    const distanciaKm = calcularDistanciaKm(coords.lat, coords.lon, pontoProjetado.lat, pontoProjetado.lon);
+
+    if (distanciaKm < menorDistanciaKm) {
+      menorDistanciaKm = distanciaKm;
+      kmNaRota = segmento.kmInicial + segmento.comprimentoKm * fracao;
+    }
+  });
+
+  return { distanciaKm: menorDistanciaKm, kmNaRota };
+}
+
 // Lógica de Auditoria Temporal do Preço (+30 dias)
 function verificarSePrecoDesatualizado(dataString) {
   if (!dataString) return true;
@@ -955,11 +1005,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
   // Aplica o cruzamento das tratativas para sobrepor preço/data
   aplicarTratativasNosPostos(postos);
 
-  const amostraRota = [];
-  const passo = Math.max(1, Math.floor(routeCoords.length / 80));
-  for (let i = 0; i < routeCoords.length; i += passo) {
-    amostraRota.push(routeCoords[i]);
-  }
+  const segmentosRota = prepararSegmentosRota(routeCoords);
 
   const btnRota = document.getElementById('btnCalcularRotaLeaflet');
   const textoOriginalBtn = btnRota ? btnRota.innerHTML : '';
@@ -977,11 +1023,8 @@ async function plotarPostosComDuploRaio(routeCoords) {
     if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     if (!coords) continue;
 
-    let menorDist = Infinity;
-    for (const pt of amostraRota) {
-      const d = calcularDistanciaKm(coords.lat, coords.lon, pt.lat, pt.lng);
-      if (d < menorDist) menorDist = d;
-    }
+    const posicaoNaRota = calcularPosicaoPostoNaRota(coords, segmentosRota);
+    const menorDist = posicaoNaRota.distanciaKm;
 
     if (menorDist <= 400) {
       const isDesatualizado = verificarSePrecoDesatualizado(p.data);
@@ -1022,7 +1065,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
         Tipo: ${p.tipo}<br>
         Status: <b>${statusTexto}</b><br>
         ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
-        <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota</span>
+        <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota<br>~${Math.round(posicaoNaRota.kmNaRota)} km percorridos desde a origem</span>
         <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${`${p.municipio}, ${p.uf}`.replace(/'/g, "\\'")}', ${coords.lat}, ${coords.lon})">
           ➕ Incluir na Rota
         </button>
@@ -1034,7 +1077,8 @@ async function plotarPostosComDuploRaio(routeCoords) {
         markersPostosLeaflet.push(marker);
         postosSugeridosUltimaRota.push({
           posto: p.posto, cidade: `${p.municipio}/${p.uf}`, preco: p.preco,
-          distancia: Math.round(menorDist), tipo: p.tipo, desatualizado: isDesatualizado, origemPreco: p.origemPreco
+          distancia: Math.round(menorDist), kmNaRota: Math.round(posicaoNaRota.kmNaRota),
+          tipo: p.tipo, desatualizado: isDesatualizado, origemPreco: p.origemPreco
         });
       } else {
         postosApoioPendentes.push({ coords: [finalLat, finalLon], cor: corPin, raio: raioDinamico, popup: popupPosto });
@@ -1043,6 +1087,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
   }
 
   postosSugeridosUltimaRota.sort((a, b) => {
+    if (a.kmNaRota !== b.kmNaRota) return a.kmNaRota - b.kmNaRota;
     if (a.distancia !== b.distancia) return a.distancia - b.distancia;
     return a.preco - b.preco;
   });
@@ -1314,7 +1359,40 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
   }
 };
 
-function imprimirRoteiroViagem() {
+function aguardarTilesDoMapa(timeoutMs = 8000) {
+  if (!leafletMapInstance) return Promise.resolve();
+
+  const camadasTiles = [];
+  leafletMapInstance.eachLayer(camada => {
+    if (camada instanceof L.TileLayer) camadasTiles.push(camada);
+  });
+  if (camadasTiles.length === 0) return Promise.resolve();
+
+  return new Promise(resolve => {
+    let pendentes = 0;
+    let finalizado = false;
+    const concluir = () => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(temporizador);
+      resolve();
+    };
+    const temporizador = setTimeout(concluir, timeoutMs);
+
+    camadasTiles.forEach(camada => {
+      if (!camada.isLoading()) return;
+      pendentes++;
+      camada.once('load', () => {
+        pendentes--;
+        if (pendentes === 0) concluir();
+      });
+    });
+
+    if (pendentes === 0) requestAnimationFrame(() => setTimeout(concluir, 200));
+  });
+}
+
+async function imprimirRoteiroViagem() {
   if (postosSugeridosUltimaRota.length === 0) {
     alert("Trace uma rota primeiro para mapear os postos antes de imprimir.");
     return;
@@ -1341,27 +1419,37 @@ function imprimirRoteiroViagem() {
     ? L.latLngBounds(coordenadasRotaAtual.map(ponto => [ponto.lat, ponto.lng]))
     : null;
 
-  window.addEventListener('afterprint', () => {
+  let impressaoRestaurada = false;
+  const restaurarTela = () => {
+    if (impressaoRestaurada) return;
+    impressaoRestaurada = true;
     linhas.forEach(linha => linha.classList.remove('linha-selecionada-impressao'));
+    document.body.classList.remove('preparando-impressao-roteiro');
     if (leafletMapInstance && estadoMapaAntesImpressao) {
       requestAnimationFrame(() => {
         leafletMapInstance.invalidateSize({ pan: false });
         leafletMapInstance.setView(estadoMapaAntesImpressao.centro, estadoMapaAntesImpressao.zoom, { animate: false });
       });
     }
-  }, { once: true });
+  };
+  window.addEventListener('afterprint', restaurarTela, { once: true });
 
-  requestAnimationFrame(() => {
+  document.body.classList.add('preparando-impressao-roteiro');
+  requestAnimationFrame(async () => {
     if (leafletMapInstance && boundsRota && boundsRota.isValid()) {
       leafletMapInstance.invalidateSize({ pan: false });
       leafletMapInstance.fitBounds(boundsRota, {
-        padding: [24, 24],
-        maxZoom: 8,
+        padding: [28, 28],
+        maxZoom: 7,
         animate: false
       });
+      await aguardarTilesDoMapa();
     }
 
-    requestAnimationFrame(() => window.print());
+    requestAnimationFrame(() => {
+      window.print();
+      restaurarTela();
+    });
   });
 }
 
@@ -1378,6 +1466,7 @@ function renderizarTabelaPostosSugeridos() {
           <th>Posto / Bandeira</th>
           <th>Cidade / UF</th>
           <th>Preço Base Registrado</th>
+          <th>Km na Rota</th>
           <th>Desvio da Rota</th>
           <th>Operação</th>
         </tr>
@@ -1393,6 +1482,7 @@ function renderizarTabelaPostosSugeridos() {
         <td><b>${p.posto}</b></td>
         <td>${p.cidade}</td>
         <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} <span style="font-size:0.8em; color:#6c757d;">(${p.origemPreco})</span>${alertaPreco}</td>
+        <td>${p.kmNaRota.toLocaleString('pt-BR')} km</td>
         <td>${p.distancia} km</td>
         <td>${p.tipo}</td>
       </tr>

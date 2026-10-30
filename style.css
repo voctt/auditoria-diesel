@@ -536,6 +536,34 @@ body {
   border-radius: 8px;
   z-index: 5;
 }
+body.preparando-impressao-roteiro #secaoRoteirizador > .p-3 { padding: 0 !important; }
+body.preparando-impressao-roteiro #secaoRoteirizador .row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 6mm !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+body.preparando-impressao-roteiro #secaoRoteirizador .row > .col-md-4 { display: none !important; }
+body.preparando-impressao-roteiro #secaoRoteirizador .row > .col-md-8 { display: contents !important; }
+body.preparando-impressao-roteiro #mapLeaflet {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100% !important;
+  height: 185mm !important;
+  border-radius: 0 !important;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+body.preparando-impressao-roteiro #areaImpressaoRoteiro {
+  display: block !important;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
 .leaflet-posto-marker {
   background: transparent;
   border: 0;
@@ -672,18 +700,19 @@ body {
 }
 
 @media print {
-  @page { size: A4 landscape; margin: 10mm; }
+  @page { size: A4 landscape; margin: 8mm; }
   body { background: #ffffff !important; padding: 0 !important; }
   body > .container-fluid > *:not(#secaoRoteirizador) { display: none !important; }
   #secaoRoteirizador { display: block !important; border: none !important; margin: 0 !important; padding: 0 !important; }
   #secaoRoteirizador > *:not(.p-3),
   #secaoRoteirizador .row > .col-md-4 { display: none !important; }
-  #secaoRoteirizador > .p-3,
-  #secaoRoteirizador .row,
-  #secaoRoteirizador .col-md-8 { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
-  #mapLeaflet { display: block !important; width: 100% !important; height: 95mm !important; border-radius: 0 !important; page-break-inside: avoid; break-inside: avoid; }
+  #secaoRoteirizador > .p-3 { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  #secaoRoteirizador .row { display: grid !important; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 6mm !important; width: 100% !important; margin: 0 !important; }
+  #secaoRoteirizador .row > .col-md-4 { display: none !important; }
+  #secaoRoteirizador .row > .col-md-8 { display: contents !important; }
+  #mapLeaflet { display: block !important; grid-column: 1; grid-row: 1; width: 100% !important; height: 185mm !important; border-radius: 0 !important; page-break-inside: avoid; break-inside: avoid; }
   #mapLeaflet .leaflet-control-container { display: none !important; }
-  #areaImpressaoRoteiro { display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+  #areaImpressaoRoteiro { display: block !important; grid-column: 2; grid-row: 1; min-width: 0; margin: 0 !important; padding: 0 !important; border: 0 !important; }
   #areaImpressaoRoteiro > h6 { margin: 2mm 0 !important; padding: 0 0 1mm !important; }
   #controlesSelecaoPostos { display: none !important; }
   #tabelaPostosSugeridos { width: 100% !important; margin: 0 !important; }
@@ -691,7 +720,10 @@ body {
   #tabelaPostosSugeridos tbody tr:not(.linha-selecionada-impressao) { display: none !important; }
   #tabelaPostosSugeridos tr { page-break-inside: avoid; break-inside: avoid; }
   #tabelaPostosSugeridos thead { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .leaflet-tile { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  #mapLeaflet .leaflet-pane,
+  #mapLeaflet .leaflet-layer,
+  #mapLeaflet .leaflet-tile-container,
+  #mapLeaflet .leaflet-tile { visibility: visible !important; opacity: 1 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   button, .btn, footer, .footer, .rodape, .panel-header { display: none !important; }
 }
 
