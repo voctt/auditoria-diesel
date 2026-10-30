@@ -660,10 +660,26 @@ body {
 }
 
 @media print {
+  @page { size: A4 landscape; margin: 10mm; }
   body { background: #ffffff !important; padding: 0 !important; }
-  .header-bar, .cockpit-bar-mestre, .card-kpi, .card-tabela-resumo, .map-container, #secaoPainelPrincipal, #secaoMatrizesGerenciais, #secaoAuditoriaComercial, #btnSincronizar { display: none !important; }
-  #secaoRoteirizador { display: block !important; border: none !important; }
-  #areaImpressaoRoteiro { display: block !important; }
+  body > .container-fluid > *:not(#secaoRoteirizador) { display: none !important; }
+  #secaoRoteirizador { display: block !important; border: none !important; margin: 0 !important; padding: 0 !important; }
+  #secaoRoteirizador > *:not(.p-3),
+  #secaoRoteirizador .row > .col-md-4 { display: none !important; }
+  #secaoRoteirizador > .p-3,
+  #secaoRoteirizador .row,
+  #secaoRoteirizador .col-md-8 { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  #mapLeaflet { display: block !important; width: 100% !important; height: 95mm !important; border-radius: 0 !important; page-break-inside: avoid; break-inside: avoid; }
+  #mapLeaflet .leaflet-control-container { display: none !important; }
+  #areaImpressaoRoteiro { display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+  #areaImpressaoRoteiro > h6 { margin: 2mm 0 !important; padding: 0 0 1mm !important; }
+  #tabelaPostosSugeridos { width: 100% !important; margin: 0 !important; }
+  #tabelaPostosSugeridos .coluna-selecao-posto { display: none !important; }
+  #tabelaPostosSugeridos tbody tr:not(.linha-selecionada-impressao) { display: none !important; }
+  #tabelaPostosSugeridos tr { page-break-inside: avoid; break-inside: avoid; }
+  #tabelaPostosSugeridos thead { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .leaflet-tile { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  button, .btn, footer, .footer, .rodape, .panel-header { display: none !important; }
 }
 
 /* ==========================================================================

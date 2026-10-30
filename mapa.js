@@ -526,28 +526,48 @@ function avancarParaProximoCampo() {
   }
 }
 
+function ordenarWaypointsPorProjecao(pontos, origem, destino) {
+  if (!origem || !destino || pontos.length <= 2) return pontos;
+
+  const latitudeMedia = (origem[0] + destino[0]) / 2 * Math.PI / 180;
+  const escalaLongitude = Math.cos(latitudeMedia);
+  const vetorRota = {
+    x: (destino[1] - origem[1]) * escalaLongitude,
+    y: destino[0] - origem[0]
+  };
+  const comprimentoRota = vetorRota.x ** 2 + vetorRota.y ** 2;
+  if (comprimentoRota === 0) return pontos;
+
+  const projetar = ponto => {
+    const vetorPonto = {
+      x: (ponto.coords[1] - origem[1]) * escalaLongitude,
+      y: ponto.coords[0] - origem[0]
+    };
+    return (vetorPonto.x * vetorRota.x + vetorPonto.y * vetorRota.y) / comprimentoRota;
+  };
+  const intermediarias = pontos.slice(1, -1).sort((a, b) => projetar(a) - projetar(b));
+  return [pontos[0], ...intermediarias, pontos[pontos.length - 1]];
+}
+
 function atualizarMarcadoresWaypoints() {
   if (!leafletMapInstance) return;
   markersWaypoints.forEach(m => leafletMapInstance.removeLayer(m));
   markersWaypoints = [];
 
-  const itens = document.querySelectorAll('#containerPontosRota .ponto-rota-item');
-  itens.forEach((it, idx) => {
-    const hidden = it.querySelector('.hidden-coord-rota');
-    const input = it.querySelector('.input-cidade-rota');
-    if (hidden.value) {
-      const [lat, lon] = hidden.value.split(',').map(Number);
-      const cor = idx === 0 ? "#16a34a" : (idx === itens.length - 1 ? "#dc2626" : "#2563eb");
-      const m = L.circleMarker([lat, lon], {
-        radius: 8,
-        fillColor: cor,
-        color: "#ffffff",
-        weight: 2,
-        fillOpacity: 1
-      }).addTo(leafletMapInstance);
-      m.bindPopup(`<b>${idx + 1}. ${input.value}</b>`);
-      markersWaypoints.push(m);
-    }
+  const itens = Array.from(document.querySelectorAll('#containerPontosRota .ponto-rota-item'));
+  const pontos = itens.map((item, indice) => ({
+    indice,
+    item,
+    coords: obterCoordenadasItem(item)
+  })).filter(ponto => ponto.coords);
+  const origem = itens.length > 0 ? obterCoordenadasItem(itens[0]) : null;
+  const destino = itens.length > 1 ? obterCoordenadasItem(itens[itens.length - 1]) : null;
+
+  ordenarWaypointsPorProjecao(pontos, origem, destino).forEach((ponto, indice) => {
+    const input = ponto.item.querySelector('.input-cidade-rota');
+    const m = L.marker(ponto.coords).addTo(leafletMapInstance);
+    m.bindPopup(`<b>${indice + 1}. ${input.value}</b>`);
+    markersWaypoints.push(m);
   });
 }
 
@@ -580,15 +600,15 @@ function calcularRotaLeaflet() {
 
   if (!leafletMapInstance) return;
 
-  const itens = document.querySelectorAll('#containerPontosRota .ponto-rota-item');
-  const waypoints = [];
-
-  itens.forEach(it => {
-    const coords = obterCoordenadasItem(it);
-    if (coords) {
-      waypoints.push(L.latLng(coords[0], coords[1]));
-    }
-  });
+  const itens = Array.from(document.querySelectorAll('#containerPontosRota .ponto-rota-item'));
+  const waypointsDisponiveis = itens.map((item, indice) => ({
+    indice,
+    coords: obterCoordenadasItem(item)
+  })).filter(ponto => ponto.coords);
+  const origem = itens.length > 0 ? obterCoordenadasItem(itens[0]) : null;
+  const destino = itens.length > 1 ? obterCoordenadasItem(itens[itens.length - 1]) : null;
+  const waypointsOrdenados = ordenarWaypointsPorProjecao(waypointsDisponiveis, origem, destino);
+  const waypoints = waypointsOrdenados.map(ponto => L.latLng(ponto.coords[0], ponto.coords[1]));
 
   if (waypoints.length < 2) {
     alert("Preencha ao menos uma Cidade de Origem e uma Cidade de Destino válidas.");
@@ -613,6 +633,27 @@ function calcularRotaLeaflet() {
     const routeCoords = e.routes[0].coordinates;
     await plotarPostosComDuploRaio(routeCoords);
   });
+}
+
+function formatarNomeCidadeParada(nomeCidade) {
+  const partes = String(nomeCidade || '').split(/[\/,]/).map(parte => parte.trim());
+  const nome = partes[0] || '';
+  const uf = (partes[1] || '').toUpperCase();
+  const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
+  const cidadeCadastrada = listaCidadesRef.find(cidade => {
+    const nomeCadastrado = String(cidade.nome || '').split(',')[0].trim();
+    return normalizarTextoBusca(nomeCadastrado) === normalizarTextoBusca(nome);
+  });
+
+  if (cidadeCadastrada) return cidadeCadastrada.nome;
+
+  const conectivos = new Set(['da', 'das', 'de', 'do', 'dos', 'e']);
+  const nomeFormatado = nome.toLocaleLowerCase('pt-BR').split(/\s+/).map((palavra, indice) => {
+    if (indice > 0 && conectivos.has(palavra)) return palavra;
+    return palavra.charAt(0).toLocaleUpperCase('pt-BR') + palavra.slice(1);
+  }).join(' ');
+
+  return uf ? `${nomeFormatado}, ${uf}` : nomeFormatado;
 }
 
 window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
@@ -642,7 +683,7 @@ window.adicionarPostoComoParada = function(nomeCidade, lat, lon) {
   if (campoVazio) {
     const input = campoVazio.querySelector('.input-cidade-rota');
     const hidden = campoVazio.querySelector('.hidden-coord-rota');
-    input.value = nomeCidade;
+    input.value = formatarNomeCidadeParada(nomeCidade);
     hidden.value = `${lat},${lon}`;
     
     atualizarMarcadoresWaypoints();
@@ -658,6 +699,8 @@ async function plotarPostosComDuploRaio(routeCoords) {
   markersPostosLeaflet.forEach(m => leafletMapInstance.removeLayer(m));
   markersPostosLeaflet = [];
   postosSugeridosUltimaRota = [];
+  const areaImpressao = document.getElementById('areaImpressaoRoteiro');
+  if (areaImpressao) areaImpressao.style.display = 'none';
 
   const registrosRef = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
 
@@ -767,7 +810,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
         Status: <b>${statusTexto}</b><br>
         ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
         <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota</span>
-        <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${p.municipio.replace(/'/g, "\\'")}', ${coords.lat}, ${coords.lon})">
+        <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${`${p.municipio}, ${p.uf}`.replace(/'/g, "\\'")}', ${coords.lat}, ${coords.lon})">
           ➕ Incluir na Rota
         </button>
       `);
@@ -787,6 +830,8 @@ async function plotarPostosComDuploRaio(routeCoords) {
     if (a.distancia !== b.distancia) return a.distancia - b.distancia;
     return a.preco - b.preco;
   });
+
+  renderizarTabelaPostosSugeridos();
 
   if (btnRota) {
      btnRota.disabled = false;
@@ -1050,14 +1095,34 @@ function imprimirRoteiroViagem() {
     return;
   }
 
+  const area = document.getElementById('areaImpressaoRoteiro');
+  if (!area) return;
+
+  const linhas = Array.from(document.querySelectorAll('#tabelaPostosSugeridos tbody tr'));
+  const linhasMarcadas = linhas.filter(linha => linha.querySelector('.checkbox-posto-roteiro')?.checked);
+  if (linhasMarcadas.length === 0) {
+    alert("Marque ao menos um posto para imprimir o roteiro.");
+    return;
+  }
+
+  linhas.forEach(linha => linha.classList.toggle('linha-selecionada-impressao', linhasMarcadas.includes(linha)));
+  area.style.display = "block";
+  window.addEventListener('afterprint', () => {
+    linhas.forEach(linha => linha.classList.remove('linha-selecionada-impressao'));
+  }, { once: true });
+  window.print();
+}
+
+function renderizarTabelaPostosSugeridos() {
   const container = document.getElementById('conteudoRoteiroImpresso');
   const area = document.getElementById('areaImpressaoRoteiro');
   if (!container || !area) return;
 
   let htmlTabela = `
-    <table class="table table-sm table-bordered mt-2 small">
+    <table id="tabelaPostosSugeridos" class="table table-sm table-bordered mt-2 small">
       <thead class="table-dark">
         <tr>
+          <th class="coluna-selecao-posto"><span class="visually-hidden">Incluir no roteiro</span></th>
           <th>Posto / Bandeira</th>
           <th>Cidade / UF</th>
           <th>Preço Base Registrado</th>
@@ -1072,6 +1137,7 @@ function imprimirRoteiroViagem() {
     const alertaPreco = p.desatualizado ? `<br><span style="color:#dc2626; font-size:0.7em;">(Preço Desatualizado)</span>` : '';
     htmlTabela += `
       <tr>
+        <td class="coluna-selecao-posto"><input class="form-check-input checkbox-posto-roteiro" type="checkbox" checked aria-label="Incluir ${p.posto} no roteiro"></td>
         <td><b>${p.posto}</b></td>
         <td>${p.cidade}</td>
         <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} <span style="font-size:0.8em; color:#6c757d;">(${p.origemPreco})</span>${alertaPreco}</td>
@@ -1084,5 +1150,4 @@ function imprimirRoteiroViagem() {
   htmlTabela += `</tbody></table>`;
   container.innerHTML = htmlTabela;
   area.style.display = "block";
-  window.print();
 }
