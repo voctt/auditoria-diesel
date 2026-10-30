@@ -191,6 +191,7 @@ const baseCidadesBrasil = [
   { nome: "Teixeira de Freitas, BA", lat: -17.5361, lon: -39.7422 },
   { nome: "Luís Eduardo Magalhães, BA", lat: -12.0958, lon: -45.7958 },
   { nome: "Barreiras, BA", lat: -12.1528, lon: -44.9961 },
+  { nome: "Catolândia, BA", lat: -12.2769146, lon: -44.7202727 },
   { nome: "Juazeiro, BA", lat: -9.4136, lon: -40.5036 },
   { nome: "Paulo Afonso, BA", lat: -9.4067, lon: -38.2147 },
 

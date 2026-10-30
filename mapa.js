@@ -35,6 +35,18 @@ let postosSugeridosUltimaRota = [];
 const cacheGeocodificacao = {};
 let filaGeocodificacaoNominatim = Promise.resolve();
 let ultimaConsultaNominatim = 0;
+const chaveCacheGeocodificacao = 'voctt-geocodificacao-nominatim-v1';
+
+try {
+  const cachePersistido = JSON.parse(localStorage.getItem(chaveCacheGeocodificacao) || '{}');
+  Object.entries(cachePersistido).forEach(([chave, coords]) => {
+    if (Number.isFinite(Number(coords?.lat)) && Number.isFinite(Number(coords?.lon))) {
+      cacheGeocodificacao[chave] = { lat: Number(coords.lat), lon: Number(coords.lon) };
+    }
+  });
+} catch (e) {
+  // O roteirizador segue sem cache persistente se o armazenamento do navegador estiver indisponível.
+}
 
 // =========================================================================
 // 1. MINI MAPA LEAFLET: IDENTIDADE INSTITUCIONAL CARGOSOFT & VOCTT
@@ -330,19 +342,53 @@ function aplicarTratativasNosPostos(postos) {
 // -------------------------------------------------------------------------
 // GEOCODIFICAÇÃO AUTOMÁTICA (Nominatim)
 // -------------------------------------------------------------------------
+function obterCoordenadasCidadeLocal(municipio, uf) {
+  const municipioNormalizado = normalizarTextoComparacao(municipio).replace(/\s+/g, ' ');
+  const ufNormalizada = normalizarTextoComparacao(uf);
+  const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
+  const cidade = listaCidadesRef.find(item => {
+    const [nomeCidade, ufCidade] = String(item.nome || '').split(',').map(parte => parte.trim());
+    return normalizarTextoComparacao(nomeCidade).replace(/\s+/g, ' ') === municipioNormalizado &&
+      normalizarTextoComparacao(ufCidade) === ufNormalizada;
+  });
+
+  return cidade ? { lat: Number(cidade.lat), lon: Number(cidade.lon) } : null;
+}
+
+function priorizarPostosComCoordenadasLocais(postos) {
+  const comCoordenadasLocais = [];
+  const dependentesDeGeocodificacao = [];
+
+  postos.forEach(posto => {
+    if (obterCoordenadasCidadeLocal(posto.municipio, posto.uf)) {
+      comCoordenadasLocais.push(posto);
+    } else {
+      dependentesDeGeocodificacao.push(posto);
+    }
+  });
+
+  return [...comCoordenadasLocais, ...dependentesDeGeocodificacao];
+}
+
+function persistirCoordenadasGeocodificadas(chave, coords) {
+  cacheGeocodificacao[chave] = coords;
+  try {
+    const cachePersistido = JSON.parse(localStorage.getItem(chaveCacheGeocodificacao) || '{}');
+    cachePersistido[chave] = coords;
+    localStorage.setItem(chaveCacheGeocodificacao, JSON.stringify(cachePersistido));
+  } catch (e) {
+    // O cache em memória continua disponível durante a sessão.
+  }
+}
+
 async function obterCoordenadasNominatim(municipio, uf) {
   if (!municipio || !uf) return null;
   const municipioNormalizado = normalizarTextoComparacao(municipio).replace(/\s+/g, ' ');
   const ufNormalizada = normalizarTextoComparacao(uf);
   const chave = `${municipioNormalizado}_${ufNormalizada}`;
-  
-  const listaCidadesRef = (typeof listaCidades !== 'undefined' && Array.isArray(listaCidades)) ? listaCidades : [];
-  const achadaLocal = listaCidadesRef.find(c => {
-    const [nomeCidade, ufCidade] = String(c.nome || '').split(',').map(parte => parte.trim());
-    return normalizarTextoComparacao(nomeCidade).replace(/\s+/g, ' ') === municipioNormalizado &&
-      normalizarTextoComparacao(ufCidade) === ufNormalizada;
-  });
-  if (achadaLocal) return { lat: Number(achadaLocal.lat), lon: Number(achadaLocal.lon) };
+
+  const coordenadasLocais = obterCoordenadasCidadeLocal(municipio, uf);
+  if (coordenadasLocais) return coordenadasLocais;
 
   if (cacheGeocodificacao[chave] !== undefined) return cacheGeocodificacao[chave];
 
@@ -373,7 +419,7 @@ async function obterCoordenadasNominatim(municipio, uf) {
         if (data && data.length > 0) {
           const coords = { lat: Number(data[0].lat), lon: Number(data[0].lon) };
           if (Number.isFinite(coords.lat) && Number.isFinite(coords.lon)) {
-            cacheGeocodificacao[chave] = coords;
+            persistirCoordenadasGeocodificadas(chave, coords);
             return coords;
           }
         }
@@ -766,7 +812,7 @@ async function plotarPostosComDuploRaio(routeCoords) {
     }
   });
 
-  const postos = Object.values(mapaPostosConsolidado);
+  const postos = priorizarPostosComCoordenadasLocais(Object.values(mapaPostosConsolidado));
   
   // Aplica o cruzamento das tratativas para sobrepor preço/data
   aplicarTratativasNosPostos(postos);
@@ -932,7 +978,7 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
     }
   });
 
-  const postos = Object.values(mapaPostosConsolidado);
+  const postos = priorizarPostosComCoordenadasLocais(Object.values(mapaPostosConsolidado));
   
   aplicarTratativasNosPostos(postos);
 
@@ -1057,7 +1103,7 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
     }
   });
 
-  const postos = Object.values(mapaPostosConsolidado);
+  const postos = priorizarPostosComCoordenadasLocais(Object.values(mapaPostosConsolidado));
   
   aplicarTratativasNosPostos(postos);
 
