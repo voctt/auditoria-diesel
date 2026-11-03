@@ -1076,21 +1076,68 @@ function calcularMetricasFechamento(mesAlvo) {
 
     // MANOBRA DE ROTA (Vigente na competência com números reais)
     if (trat.status === 'POSTO_BLOQUEADO' && trat.posto_destino && acordoJaVigia) {
-      let precoDestino = 0;
       const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufPosto)];
-      if (tratDestino && tratDestino.preco_acordado) {
-        precoDestino = tratDestino.preco_acordado;
-      }
+      const vigenciaDestino = tratDestino?.vigencia || '';
+      const destinoJaVigora = vigenciaDestino && mesAlvo >= vigenciaDestino.substring(0, 7);
+      const precoDestino = tratDestino?.status === 'ACORDO_FECHADO' && destinoJaVigora
+        ? parseFloat(tratDestino.preco_acordado || 0)
+        : 0;
 
-      const diffUnitario = (precoAcordado > 0 && precoDestino > 0) ? (precoAcordado - precoDestino) : 0.352;
-      const volReferencia = volPostoMes > 0 ? volPostoMes : 6976;
-      const savingProjetado = diffUnitario * volReferencia;
+      const historicoOrigem = baseRegistrosMensais.filter(r =>
+        r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO <= mesAlvo
+      );
+      const mesesComVolume = [...new Set(historicoOrigem
+        .filter(r => parseFloat(r.VOLUME_CICLO || 0) > 0)
+        .map(r => r.MES_ANO)
+      )].sort();
+      const mesVolumeReferencia = mesesComVolume[mesesComVolume.length - 1] || '';
+      const registrosVolumeReferencia = historicoOrigem.filter(r => r.MES_ANO === mesVolumeReferencia);
+      let volumeReferencia = 0;
+      let valorOrigemReferencia = 0;
+      let precoOrigemCompleto = registrosVolumeReferencia.length > 0;
+
+      registrosVolumeReferencia.forEach(r => {
+        const volume = parseFloat(r.VOLUME_CICLO || 0);
+        const preco = parseFloat(r.VALOR_UNITARIO || 0);
+        if (volume > 0) {
+          volumeReferencia += volume;
+          if (preco > 0) {
+            valorOrigemReferencia += volume * preco;
+          } else {
+            precoOrigemCompleto = false;
+          }
+        }
+      });
+
+      const precoOrigem = volumeReferencia > 0 && precoOrigemCompleto
+        ? valorOrigemReferencia / volumeReferencia
+        : 0;
+      const diffUnitario = precoOrigem > 0 && precoDestino > 0
+        ? precoOrigem - precoDestino
+        : null;
+      const savingProjetado = diffUnitario !== null ? diffUnitario * volumeReferencia : 0;
+      const mesVolumeFmt = mesVolumeReferencia ? mesVolumeReferencia.split('-').reverse().join('/') : '';
+      const volumeFmt = Math.round(volumeReferencia).toLocaleString('pt-BR');
+
+      let descricaoManobra;
+      let impactoManobra;
+      if (volumeReferencia <= 0) {
+        descricaoManobra = `Sem volume histórico registrado para <strong>${nomePosto} (${ufPosto})</strong> até ${mesAlvo}.`;
+        impactoManobra = 'Saving não calculado: volume real indisponível';
+      } else if (diffUnitario === null) {
+        descricaoManobra = `Último volume real: <strong>${volumeFmt} L</strong> em ${mesVolumeFmt}, suspenso em <strong>${nomePosto} (${ufPosto})</strong> e destinado para <strong>${trat.posto_destino}</strong>.`;
+        impactoManobra = 'Saving não calculado: preço real da origem ou preço negociado vigente do destino indisponível';
+      } else {
+        descricaoManobra = `Volume real de <strong>${volumeFmt} L</strong> (${mesVolumeFmt}) projetado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${trat.posto_destino}</strong>; preço médio pago na origem R$ ${precoOrigem.toFixed(3)}/L e preço negociado no destino R$ ${precoDestino.toFixed(3)}/L.`;
+        const tipoImpacto = savingProjetado >= 0 ? 'Economia Mensal Projetada' : 'Acréscimo Mensal Projetado';
+        impactoManobra = `${savingProjetado >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingProjetado)).toLocaleString('pt-BR')} de ${tipoImpacto}`;
+      }
 
       acoesTaticas.push({
         tipo: "BLOQUEIO",
         titulo: `Manobra de Rota: Bloqueio & Realocação Estratégica`,
-        descricao: `Demanda de <strong>${Math.round(volReferencia).toLocaleString('pt-BR')} L</strong> suspensa em <strong>${nomePosto} (${ufPosto})</strong> e direcionada para <strong>${trat.posto_destino}</strong> (-R$ ${diffUnitario.toFixed(3)}/L).`,
-        impacto: `+ R$ ${Math.round(savingProjetado).toLocaleString('pt-BR')} de Economia Mensal Projetada`
+        descricao: descricaoManobra,
+        impacto: impactoManobra
       });
     }
   });
