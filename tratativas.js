@@ -287,9 +287,22 @@ let postoAtivoTratativa = null;
                         <label class="form-label fw-bold text-danger small mb-1">
                           <i class="bi bi-arrow-left-right me-1"></i> Destinar Abastecimentos Para (Posto Alternativo):
                         </label>
-                        <select id="campoPostoDestinoRealocacao" class="form-select form-select-sm" onchange="calcularSpreadTempoReal()">
+                        <select id="campoPostoDestinoRealocacao" class="form-select form-select-sm" onchange="limparPrecoTratativaDestino(); calcularSpreadTempoReal()">
                           <option value="">Selecione o posto substituto no corredor...</option>
                         </select>
+                        <div class="row g-2 mt-1">
+                          <div class="col-6">
+                            <label class="form-label fw-bold text-dark small mb-1" for="campoPrecoPostoDestino">Preço negociado no destino (R$/L):</label>
+                            <input type="number" min="0" step="0.001" id="campoPrecoPostoDestino" class="form-control form-control-sm font-monospace" placeholder="Opcional, se negociado agora" oninput="calcularSpreadTempoReal()">
+                          </div>
+                          <div class="col-6">
+                            <label class="form-label fw-bold text-dark small mb-1" for="campoVigenciaPrecoDestino">Início da vigência do preço:</label>
+                            <input type="date" id="campoVigenciaPrecoDestino" class="form-control form-control-sm font-monospace" onchange="calcularSpreadTempoReal()">
+                          </div>
+                          <div class="col-12 text-muted" style="font-size: 0.62rem;">
+                            Preencha os dois campos para registrar também o acordo no histórico do posto destino. Sem preço, o bloqueio é salvo e o saving fica pendente.
+                          </div>
+                        </div>
                       </div>
 
                       <!-- BOX INTELIGENTE DE CÁLCULO DE SPREAD / SAVING PROJETADO -->
@@ -394,7 +407,8 @@ async function carregarTodasTratativasFirestore() {
               saving: parseFloat(m.saving?.doubleValue || m.saving?.integerValue || 0),
               notas: m.notas?.stringValue || "",
               contato: m.contato?.stringValue || "",
-              posto_destino: m.posto_destino?.stringValue || ""
+              posto_destino: m.posto_destino?.stringValue || "",
+              posto_destino_uf: m.posto_destino_uf?.stringValue || ""
             };
           });
         } else if (f.atualizado_em) {
@@ -408,12 +422,13 @@ async function carregarTodasTratativasFirestore() {
             saving: 0,
             notas: f.notas?.stringValue || "",
             contato: f.contato?.stringValue || "",
-            posto_destino: f.posto_destino?.stringValue || ""
+            posto_destino: f.posto_destino?.stringValue || "",
+            posto_destino_uf: f.posto_destino_uf?.stringValue || ""
           });
         }
 
         // ORDENAÇÃO CRONOLÓGICA ESTRITA (Mais recente no topo)
-        historicoCards.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+        historicoCards.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
 
         // CABEÇALHO ATIVO: Sempre a ficha mais recente no calendário
         const fichaMaisRecente = historicoCards.length > 0 ? historicoCards[0] : null;
@@ -426,6 +441,7 @@ async function carregarTodasTratativasFirestore() {
           preco_acordado: fichaMaisRecente ? fichaMaisRecente.preco : parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
           preco_proposto: fichaMaisRecente ? fichaMaisRecente.preco_proposto : parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
           posto_destino: fichaMaisRecente ? fichaMaisRecente.posto_destino : (f.posto_destino?.stringValue || ""),
+          posto_destino_uf: fichaMaisRecente ? fichaMaisRecente.posto_destino_uf : (f.posto_destino_uf?.stringValue || ""),
           contato: f.contato?.stringValue || (fichaMaisRecente ? fichaMaisRecente.contato : ""),
           telefone: f.telefone?.stringValue || "",
           notas: fichaMaisRecente ? fichaMaisRecente.notas : (f.notas?.stringValue || ""),
@@ -576,7 +592,8 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
               saving: parseFloat(m.saving?.doubleValue || m.saving?.integerValue || 0),
               notas: m.notas?.stringValue || "",
               contato: m.contato?.stringValue || "",
-              posto_destino: m.posto_destino?.stringValue || ""
+              posto_destino: m.posto_destino?.stringValue || "",
+              posto_destino_uf: m.posto_destino_uf?.stringValue || ""
             };
           });
         } else if (f.atualizado_em || f.preco_acordado) {
@@ -590,11 +607,12 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
             saving: 0,
             notas: f.notas?.stringValue || "",
             contato: f.contato?.stringValue || "",
-            posto_destino: f.posto_destino?.stringValue || ""
+            posto_destino: f.posto_destino?.stringValue || "",
+            posto_destino_uf: f.posto_destino_uf?.stringValue || ""
           });
         }
 
-        historicoResgatado.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+        historicoResgatado.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
         const fichaAtiva = historicoResgatado[0] || null;
 
         trat = {
@@ -605,6 +623,7 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
           preco_acordado: fichaAtiva ? fichaAtiva.preco : parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
           preco_proposto: fichaAtiva ? fichaAtiva.preco_proposto : parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
           posto_destino: fichaAtiva ? fichaAtiva.posto_destino : (f.posto_destino?.stringValue || ""),
+          posto_destino_uf: fichaAtiva ? fichaAtiva.posto_destino_uf : (f.posto_destino_uf?.stringValue || ""),
           contato: f.contato?.stringValue || "",
           telefone: f.telefone?.stringValue || "",
           notas: fichaAtiva ? fichaAtiva.notas : (f.notas?.stringValue || ""),
@@ -726,8 +745,9 @@ function popularSeletorPostosDestino(postoExcluido, ufAlvo, precoBasePosto) {
     
     const optRec = document.createElement('option');
     optRec.value = melhorLocal.nome;
-    optRec.dataset.preco = melhorLocal.preco;
-    optRec.innerText = `⭐ [${melhorLocal.uf}] ${melhorLocal.nome} - R$ ${melhorLocal.preco.toFixed(3)}${diffTxt}`;
+    optRec.dataset.uf = melhorLocal.uf;
+    optRec.dataset.municipio = melhorLocal.municipio || '';
+    optRec.innerText = `⭐ [${melhorLocal.uf}] ${melhorLocal.nome} - Últ. pago R$ ${melhorLocal.preco.toFixed(3)}${diffTxt}`;
     grupoRec.appendChild(optRec);
     select.appendChild(grupoRec);
   }
@@ -742,8 +762,9 @@ function popularSeletorPostosDestino(postoExcluido, ufAlvo, precoBasePosto) {
       
       const opt = document.createElement('option');
       opt.value = p.nome;
-      opt.dataset.preco = p.preco;
-      opt.innerText = `[${p.uf}] ${p.nome} - R$ ${p.preco.toFixed(3)}${diffTxt}`;
+      opt.dataset.uf = p.uf;
+      opt.dataset.municipio = p.municipio || '';
+      opt.innerText = `[${p.uf}] ${p.nome} - Últ. pago R$ ${p.preco.toFixed(3)}${diffTxt}`;
       grupoUf.appendChild(opt);
     });
     select.appendChild(grupoUf);
@@ -756,8 +777,9 @@ function popularSeletorPostosDestino(postoExcluido, ufAlvo, precoBasePosto) {
     deOutrasUfs.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.nome;
-      opt.dataset.preco = p.preco;
-      opt.innerText = `[${p.uf}] ${p.nome} - R$ ${p.preco.toFixed(3)}`;
+      opt.dataset.uf = p.uf;
+      opt.dataset.municipio = p.municipio || '';
+      opt.innerText = `[${p.uf}] ${p.nome} - Últ. pago R$ ${p.preco.toFixed(3)}`;
       grupoOutros.appendChild(opt);
     });
     select.appendChild(grupoOutros);
@@ -778,6 +800,68 @@ function alternarCamposDecisao() {
     boxRealocacao.style.display = 'none';
   }
   calcularSpreadTempoReal();
+}
+
+function limparPrecoTratativaDestino() {
+  document.getElementById('campoPrecoPostoDestino').value = '';
+  document.getElementById('campoVigenciaPrecoDestino').value = '';
+}
+
+function obterMesLimiteTratativa() {
+  const filtro = document.getElementById('filtroMesAno')?.value;
+  if (filtro && filtro !== 'YTD') return filtro;
+
+  const hoje = new Date();
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function obterReferenciaVolumeTratativa(nomePosto, uf, mesLimite) {
+  const registros = baseRegistrosMensais.filter(r =>
+    r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO <= mesLimite && parseFloat(r.VOLUME_CICLO || 0) > 0
+  );
+  const meses = [...new Set(registros.map(r => r.MES_ANO))].sort();
+  const mes = meses[meses.length - 1] || '';
+  const registrosMes = registros.filter(r => r.MES_ANO === mes);
+  let volume = 0;
+  let valor = 0;
+  let precoCompleto = registrosMes.length > 0;
+
+  registrosMes.forEach(r => {
+    const litros = parseFloat(r.VOLUME_CICLO || 0);
+    const preco = parseFloat(r.VALOR_UNITARIO || 0);
+    volume += litros;
+    if (preco > 0) {
+      valor += litros * preco;
+    } else {
+      precoCompleto = false;
+    }
+  });
+
+  return {
+    mes,
+    volume,
+    preco: volume > 0 && precoCompleto ? valor / volume : 0
+  };
+}
+
+function obterPrecoAcordadoDestinoTratativa(nomePosto, uf, mesLimite) {
+  const tratDestino = mapaTratativasCadastradas[gerarDocumentIdPosto(nomePosto, uf)];
+  const acordos = (tratDestino?.historico || []).filter(h =>
+    h.status === 'ACORDO_FECHADO' && h.preco > 0 && h.vigencia && h.vigencia.substring(0, 7) <= mesLimite
+  );
+
+  if (!tratDestino?.historico?.length && tratDestino?.status === 'ACORDO_FECHADO' && tratDestino.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesLimite) {
+    acordos.push({ preco: tratDestino.preco_acordado, vigencia: tratDestino.vigencia });
+  }
+
+  const precoInformado = parseFloat(document.getElementById('campoPrecoPostoDestino').value || 0);
+  const vigenciaInformada = document.getElementById('campoVigenciaPrecoDestino').value || '';
+  if (precoInformado > 0 && vigenciaInformada && vigenciaInformada.substring(0, 7) <= mesLimite) {
+    acordos.push({ preco: precoInformado, vigencia: vigenciaInformada, data: new Date().toISOString() });
+  }
+
+  acordos.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
+  return acordos[0]?.preco || 0;
 }
 
 // 9. Cálculo em tempo real do Spread, Cost Avoidance e Saving Projetado (Sem inventar números)
@@ -848,17 +932,26 @@ function calcularSpreadTempoReal() {
   } else if (status === 'POSTO_BLOQUEADO') {
     const sel = document.getElementById('campoPostoDestinoRealocacao');
     const opt = sel.options[sel.selectedIndex];
-    const precoDestino = opt ? parseFloat(opt.dataset.preco || 0) : 0;
-
-    if (precoDestino > 0 && precoBase > 0) {
-      const diffPorLitro = precoBase - precoDestino;
-      const savingTotal = diffPorLitro * (volume > 0 ? volume : 1);
+    if (opt?.value) {
+      const destinoUf = opt.dataset.uf || postoAtivoTratativa.uf;
+      const mesLimite = obterMesLimiteTratativa();
+      const referencia = obterReferenciaVolumeTratativa(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf, mesLimite);
+      const precoDestino = obterPrecoAcordadoDestinoTratativa(opt.value, destinoUf, mesLimite);
 
       lblTitulo.innerText = "Saving por Realocação de Rota";
-      lblDesc.innerHTML = `Migração de volume para posto mais barato (-R$ ${diffPorLitro.toFixed(3)}/L).`;
-      valSpread.innerText = volume > 0 ? `+ R$ ${Math.round(savingTotal).toLocaleString('pt-BR')}` : `R$ ${diffPorLitro.toFixed(3)}/L`;
-      valSpread.className = "valor-destaque-spread text-success";
-      lblSub.innerText = volume > 0 ? "Impacto Mensal Estimado" : "Diferencial Unitário";
+      if (referencia.volume > 0 && referencia.preco > 0 && precoDestino > 0) {
+        const savingTotal = (referencia.preco - precoDestino) * referencia.volume;
+        const mesFmt = referencia.mes.split('-').reverse().join('/');
+        lblDesc.innerHTML = `${Math.round(referencia.volume).toLocaleString('pt-BR')} L de ${mesFmt}: R$ ${referencia.preco.toFixed(3)}/L na origem e R$ ${precoDestino.toFixed(3)}/L no destino.`;
+        valSpread.innerText = `${savingTotal >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingTotal)).toLocaleString('pt-BR')}`;
+        valSpread.className = `valor-destaque-spread ${savingTotal >= 0 ? 'text-success' : 'text-danger'}`;
+        lblSub.innerText = savingTotal >= 0 ? "Saving mensal projetado" : "Acréscimo mensal projetado";
+      } else {
+        lblDesc.innerText = "Informe um acordo vigente no destino; também é necessário haver volume e preço reais na origem.";
+        valSpread.innerText = "Não calculado";
+        valSpread.className = "valor-destaque-spread text-muted";
+        lblSub.innerText = "Dados reais insuficientes";
+      }
       return;
     }
   }
@@ -965,6 +1058,25 @@ async function salvarTratativaFirestore(event) {
   event.preventDefault();
   if (!postoAtivoTratativa) return;
 
+  const docId = gerarDocumentIdPosto(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf);
+  const status = document.getElementById('campoTratativaStatus').value;
+  const vigencia = document.getElementById('campoTratativaVigencia').value || new Date().toISOString().substring(0, 10);
+  const precoAcordado = parseFloat(document.getElementById('campoTratativaPrecoAcordado').value) || 0;
+  const precoProposto = parseFloat(document.getElementById('campoTratativaPrecoProposto').value) || 0;
+  const postoDestino = document.getElementById('campoPostoDestinoRealocacao').value;
+  const optDestino = document.getElementById('campoPostoDestinoRealocacao').selectedOptions[0];
+  const postoDestinoUf = optDestino?.dataset.uf || postoAtivoTratativa.uf;
+  const precoDestinoNegociado = parseFloat(document.getElementById('campoPrecoPostoDestino').value) || 0;
+  const vigenciaPrecoDestino = document.getElementById('campoVigenciaPrecoDestino').value || '';
+  if (status === 'POSTO_BLOQUEADO' && !postoDestino) {
+    alert('Selecione o posto destino para registrar o bloqueio.');
+    return;
+  }
+  if (status === 'POSTO_BLOQUEADO' && ((precoDestinoNegociado > 0) !== Boolean(vigenciaPrecoDestino))) {
+    alert('Para registrar o acordo no destino, informe o preço negociado e o início da vigência.');
+    return;
+  }
+
   const btn = document.getElementById('btnSalvarTratativa');
   const txtBtn = document.getElementById('txtBtnSalvarTratativa');
   const spinner = document.getElementById('spinnerBtnSalvarTratativa');
@@ -973,12 +1085,6 @@ async function salvarTratativaFirestore(event) {
   txtBtn.innerText = "A gravar decisão...";
   spinner.style.display = 'inline-block';
 
-  const docId = gerarDocumentIdPosto(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf);
-  const status = document.getElementById('campoTratativaStatus').value;
-  const vigencia = document.getElementById('campoTratativaVigencia').value || new Date().toISOString().substring(0, 10);
-  const precoAcordado = parseFloat(document.getElementById('campoTratativaPrecoAcordado').value) || 0;
-  const precoProposto = parseFloat(document.getElementById('campoTratativaPrecoProposto').value) || 0;
-  const postoDestino = document.getElementById('campoPostoDestinoRealocacao').value;
   const contato = document.getElementById('campoTratativaContato').value.trim();
   const telefone = document.getElementById('campoTratativaTelefone').value.trim();
   const notas = document.getElementById('campoTratativaNotas').value.trim();
@@ -997,17 +1103,19 @@ async function salvarTratativaFirestore(event) {
       savingCalculado = (pBase - precoAcordado) * volCalc;
     }
   } else if (status === 'POSTO_BLOQUEADO') {
-    const sel = document.getElementById('campoPostoDestinoRealocacao');
-    const opt = sel ? sel.options[sel.selectedIndex] : null;
-    const pDest = opt ? parseFloat(opt.dataset.preco || 0) : 0;
-    if (pDest > 0 && pBase > pDest) {
-      savingCalculado = (pBase - pDest) * volCalc;
+    const mesLimite = obterMesLimiteTratativa();
+    const referencia = obterReferenciaVolumeTratativa(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf, mesLimite);
+    const pOrigem = referencia.preco;
+    const pDestino = obterPrecoAcordadoDestinoTratativa(postoDestino, postoDestinoUf, mesLimite);
+    if (referencia.volume > 0 && pOrigem > 0 && pDestino > 0) {
+      savingCalculado = (pOrigem - pDestino) * referencia.volume;
     }
   }
 
   // Nova ficha criada
+  const dataRegistro = new Date().toISOString();
   const novaFicha = {
-    data: new Date().toISOString(),
+    data: dataRegistro,
     vigencia: vigencia,
     autor: autorEmail,
     status: status,
@@ -1016,7 +1124,8 @@ async function salvarTratativaFirestore(event) {
     saving: savingCalculado,
     notas: notas,
     contato: contato,
-    posto_destino: postoDestino
+    posto_destino: postoDestino,
+    posto_destino_uf: status === 'POSTO_BLOQUEADO' ? postoDestinoUf : ''
   };
 
   // REORDENAÇÃO CRONOLÓGICA ESTRITA DO HISTÓRICO (Vigência Decrescente)
@@ -1039,7 +1148,8 @@ async function salvarTratativaFirestore(event) {
         saving: { doubleValue: h.saving },
         notas: { stringValue: h.notas },
         contato: { stringValue: h.contato },
-        posto_destino: { stringValue: h.posto_destino }
+        posto_destino: { stringValue: h.posto_destino },
+        posto_destino_uf: { stringValue: h.posto_destino_uf || '' }
       }
     }
   }));
@@ -1054,6 +1164,7 @@ async function salvarTratativaFirestore(event) {
       preco_acordado: { doubleValue: fichaMaisRecente.preco },
       preco_proposto: { doubleValue: fichaMaisRecente.preco_proposto || 0 },
       posto_destino: { stringValue: fichaMaisRecente.posto_destino || "" },
+      posto_destino_uf: { stringValue: fichaMaisRecente.posto_destino_uf || "" },
       contato: { stringValue: contato || fichaMaisRecente.contato || "" },
       telefone: { stringValue: telefone },
       notas: { stringValue: fichaMaisRecente.notas || "" },
@@ -1063,10 +1174,108 @@ async function salvarTratativaFirestore(event) {
     }
   };
 
+  let payloadDestino = null;
+  let historicoDestinoLimitado = [];
+  let fichaMaisRecenteDestino = null;
+  let acordoDestinoGravado = false;
+  let decisaoOrigemGravada = false;
+  if (status === 'POSTO_BLOQUEADO' && precoDestinoNegociado > 0 && vigenciaPrecoDestino) {
+    const docIdDestino = gerarDocumentIdPosto(postoDestino, postoDestinoUf);
+    const tratDestino = mapaTratativasCadastradas[docIdDestino] || {};
+    const notaDestino = `Acordo registrado pela realocação de ${postoAtivoTratativa.nomePosto} (${postoAtivoTratativa.uf})`;
+    const fichaDestinoExistente = (tratDestino.historico || []).find(h =>
+      h.status === 'ACORDO_FECHADO' && h.vigencia === vigenciaPrecoDestino && h.preco === precoDestinoNegociado && h.notas === notaDestino
+    );
+
+    if (!fichaDestinoExistente) {
+      const novaFichaDestino = {
+        data: dataRegistro,
+        vigencia: vigenciaPrecoDestino,
+        autor: autorEmail,
+        status: 'ACORDO_FECHADO',
+        preco: precoDestinoNegociado,
+        preco_proposto: 0,
+        saving: 0,
+        notas: notaDestino,
+        contato: '',
+        posto_destino: '',
+        posto_destino_uf: ''
+      };
+      historicoDestinoLimitado = [novaFichaDestino, ...(tratDestino.historico || [])]
+        .sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''))
+        .slice(0, 15);
+      fichaMaisRecenteDestino = historicoDestinoLimitado[0];
+      const arrayHistoricoDestino = historicoDestinoLimitado.map(h => ({
+        mapValue: {
+          fields: {
+            data: { stringValue: h.data || '' },
+            vigencia: { stringValue: h.vigencia || '' },
+            autor: { stringValue: h.autor || '' },
+            status: { stringValue: h.status || 'EM_ABERTO' },
+            preco: { doubleValue: h.preco || 0 },
+            preco_proposto: { doubleValue: h.preco_proposto || 0 },
+            saving: { doubleValue: h.saving || 0 },
+            notas: { stringValue: h.notas || '' },
+            contato: { stringValue: h.contato || '' },
+            posto_destino: { stringValue: h.posto_destino || '' },
+            posto_destino_uf: { stringValue: h.posto_destino_uf || '' }
+          }
+        }
+      }));
+      payloadDestino = {
+        fields: {
+          posto: { stringValue: postoDestino },
+          uf: { stringValue: postoDestinoUf },
+          municipio: { stringValue: optDestino?.dataset.municipio || tratDestino.municipio || '' },
+          status: { stringValue: fichaMaisRecenteDestino.status },
+          vigencia: { stringValue: fichaMaisRecenteDestino.vigencia },
+          preco_acordado: { doubleValue: fichaMaisRecenteDestino.preco },
+          preco_proposto: { doubleValue: fichaMaisRecenteDestino.preco_proposto || 0 },
+          posto_destino: { stringValue: fichaMaisRecenteDestino.posto_destino || '' },
+          posto_destino_uf: { stringValue: fichaMaisRecenteDestino.posto_destino_uf || '' },
+          contato: { stringValue: tratDestino.contato || '' },
+          telefone: { stringValue: tratDestino.telefone || '' },
+          notas: { stringValue: fichaMaisRecenteDestino.notas || '' },
+          atualizado_em: { timestampValue: dataRegistro },
+          autor: { stringValue: autorEmail },
+          historico: { arrayValue: { values: arrayHistoricoDestino } }
+        }
+      };
+    }
+  }
+
   try {
     const url = `${FIRESTORE_BASE_TRATATIVAS}/${docId}`;
     const headers = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    if (payloadDestino && fichaMaisRecenteDestino) {
+      const docIdDestino = gerarDocumentIdPosto(postoDestino, postoDestinoUf);
+      const respDestino = await fetch(`${FIRESTORE_BASE_TRATATIVAS}/${docIdDestino}`, {
+        method: 'PATCH',
+        headers: headers,
+        body: JSON.stringify(payloadDestino)
+      });
+      if (!respDestino.ok) throw new Error(`Falha ao registrar o acordo no posto destino: HTTP ${respDestino.status}`);
+
+      acordoDestinoGravado = true;
+      mapaTratativasCadastradas[docIdDestino] = {
+        posto: postoDestino,
+        uf: postoDestinoUf,
+        municipio: optDestino?.dataset.municipio || '',
+        status: fichaMaisRecenteDestino.status,
+        vigencia: fichaMaisRecenteDestino.vigencia,
+        preco_acordado: fichaMaisRecenteDestino.preco,
+        preco_proposto: fichaMaisRecenteDestino.preco_proposto || 0,
+        posto_destino: '',
+        posto_destino_uf: '',
+        contato: '',
+        telefone: '',
+        notas: fichaMaisRecenteDestino.notas || '',
+        atualizado_em: dataRegistro,
+        historico: historicoDestinoLimitado
+      };
+    }
 
     const resp = await fetch(url, {
       method: "PATCH",
@@ -1085,12 +1294,14 @@ async function salvarTratativaFirestore(event) {
       preco_acordado: fichaMaisRecente.preco,
       preco_proposto: fichaMaisRecente.preco_proposto || 0,
       posto_destino: fichaMaisRecente.posto_destino || "",
+      posto_destino_uf: fichaMaisRecente.posto_destino_uf || "",
       contato: contato || fichaMaisRecente.contato || "",
       telefone,
       notas: fichaMaisRecente.notas || "",
       atualizado_em: new Date().toISOString(),
       historico: historicoLimitado
     };
+    decisaoOrigemGravada = true;
 
     txtBtn.innerHTML = `<i class="bi bi-check-all me-1"></i> Decisão Gravada!`;
 
@@ -1105,7 +1316,15 @@ async function salvarTratativaFirestore(event) {
     }, 600);
 
   } catch (err) {
-    alert("Erro ao gravar tratativa: " + err.message);
+    if (decisaoOrigemGravada && payloadDestino) {
+      alert(`Bloqueio salvo, mas não foi possível registrar o acordo no posto destino. ${err.message}`);
+      if (typeof processarPainel === 'function') processarPainel();
+    } else if (acordoDestinoGravado) {
+      alert(`Acordo do posto destino salvo, mas o bloqueio na origem falhou. Você pode tentar novamente sem duplicar o acordo. ${err.message}`);
+      if (typeof processarPainel === 'function') processarPainel();
+    } else {
+      alert("Erro ao gravar tratativa: " + err.message);
+    }
   } finally {
     setTimeout(() => {
       btn.disabled = false;

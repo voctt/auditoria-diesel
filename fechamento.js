@@ -1076,12 +1076,17 @@ function calcularMetricasFechamento(mesAlvo) {
 
     // MANOBRA DE ROTA (Vigente na competência com números reais)
     if (trat.status === 'POSTO_BLOQUEADO' && trat.posto_destino && acordoJaVigia) {
-      const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufPosto)];
-      const vigenciaDestino = tratDestino?.vigencia || '';
-      const destinoJaVigora = vigenciaDestino && mesAlvo >= vigenciaDestino.substring(0, 7);
-      const precoDestino = tratDestino?.status === 'ACORDO_FECHADO' && destinoJaVigora
-        ? parseFloat(tratDestino.preco_acordado || 0)
-        : 0;
+      const ufDestino = trat.posto_destino_uf || ufPosto;
+      const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufDestino)];
+      const acordosDestinoVigentes = (tratDestino?.historico || []).filter(h =>
+        h.status === 'ACORDO_FECHADO' && h.preco > 0 && h.vigencia && h.vigencia.substring(0, 7) <= mesAlvo
+      ).sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
+      const acordoDestinoVigente = acordosDestinoVigentes[0] || (
+        !tratDestino?.historico?.length && tratDestino?.status === 'ACORDO_FECHADO' && tratDestino.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesAlvo
+          ? { preco: tratDestino.preco_acordado, vigencia: tratDestino.vigencia }
+          : null
+      );
+      const precoDestino = parseFloat(acordoDestinoVigente?.preco || 0);
 
       const historicoOrigem = baseRegistrosMensais.filter(r =>
         r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO <= mesAlvo
@@ -1128,7 +1133,8 @@ function calcularMetricasFechamento(mesAlvo) {
         descricaoManobra = `Último volume real: <strong>${volumeFmt} L</strong> em ${mesVolumeFmt}, suspenso em <strong>${nomePosto} (${ufPosto})</strong> e destinado para <strong>${trat.posto_destino}</strong>.`;
         impactoManobra = 'Saving não calculado: preço real da origem ou preço negociado vigente do destino indisponível';
       } else {
-        descricaoManobra = `Volume real de <strong>${volumeFmt} L</strong> (${mesVolumeFmt}) projetado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${trat.posto_destino}</strong>; preço médio pago na origem R$ ${precoOrigem.toFixed(3)}/L e preço negociado no destino R$ ${precoDestino.toFixed(3)}/L.`;
+        const vigenciaDestinoFmt = acordoDestinoVigente.vigencia.split('-').reverse().join('/');
+        descricaoManobra = `Volume real de <strong>${volumeFmt} L</strong> (${mesVolumeFmt}) projetado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${trat.posto_destino} (${ufDestino})</strong>; preço médio pago na origem R$ ${precoOrigem.toFixed(3)}/L e preço negociado vigente no destino R$ ${precoDestino.toFixed(3)}/L desde ${vigenciaDestinoFmt}.`;
         const tipoImpacto = savingProjetado >= 0 ? 'Economia Mensal Projetada' : 'Acréscimo Mensal Projetado';
         impactoManobra = `${savingProjetado >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingProjetado)).toLocaleString('pt-BR')} de ${tipoImpacto}`;
       }
