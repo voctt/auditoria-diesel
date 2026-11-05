@@ -273,9 +273,11 @@ async function renderizarAbaFechamentoExecutivo() {
               ${dados.operacaoVerde ? 'OPERAÇÃO NO VERDE' : 'ALERTA DE ÁGIO'}
             </div>
             <div class="text-white-50 small" style="font-size: 0.70rem; line-height: 1.3;">
-              ${dados.operacaoVerde 
-                ? `Preço médio da frota ficou <strong>R$ ${Math.abs(dados.spreadMedioMes).toFixed(3)}/L abaixo da média oficial ANP</strong>.` 
-                : `Diesel comprado R$ ${dados.spreadMedioMes.toFixed(3)}/L acima da ANP na média.`}
+              ${dados.anpMediaPonderadaMes > 0 
+                ? (dados.operacaoVerde 
+                  ? `Preço médio da frota ficou <strong>R$ ${Math.abs(dados.spreadMedioMes).toFixed(3)}/L abaixo da média oficial ANP</strong>.` 
+                  : `Diesel comprado R$ ${dados.spreadMedioMes.toFixed(3)}/L acima da ANP na média.`)
+                : `Tabela oficial ANP não disponível para esta competência.`}
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
@@ -432,10 +434,10 @@ async function renderizarAbaFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 5: PARECER ESTRATÉGICO DO GESTOR (RENDERIZADO EXECUTIVO SEM TEXTAREA CRU) -->
+    <!-- BLOCO 5: PARECER ESTRATÉGICO DO GESTOR -->
     ${renderizarParecerExecutivoDossie()}
 
-    <!-- BLOCO 6: RESUMO DE NEGOCIAÇÕES ATIVAS DO MÊS (COM CORES FORÇADAS) -->
+    <!-- BLOCO 6: RESUMO DE NEGOCIAÇÕES ATIVAS DO MÊS -->
     <div class="card-exec-dark mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
@@ -469,7 +471,7 @@ async function renderizarAbaFechamentoExecutivo() {
 
     <!-- BLOCO 7: GOVERNANÇA, GLOSAS & PLANO DE AÇÃO PARA O PRÓXIMO MÊS -->
     <div class="row g-2">
-      <!-- GLOSAS E FUROS A CONTESTAR (COM FILTRO CRONOLÓGICO DE VIGÊNCIA) -->
+      <!-- GLOSAS E FUROS A CONTESTAR -->
       <div class="col-12 col-md-6">
         <div class="card-exec-dark glow-vermelho h-100 p-3">
           <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
@@ -655,7 +657,7 @@ async function salvarDossieModal(event) {
 }
 
 /**
- * Renderização das Linhas da Tabela de Postos Auditados (CORES FORÇADAS)
+ * Renderização das Linhas da Tabela de Postos Auditados
  */
 function renderizarLinhasTabelaFechamento(linhas) {
   if (!linhas || linhas.length === 0) {
@@ -663,7 +665,7 @@ function renderizarLinhasTabelaFechamento(linhas) {
   }
 
   return linhas.map(l => {
-    const corSpread = l.spreadAnp < 0 ? '#4ade80' : (l.spreadAnp > 0 ? '#f87171' : '#94a3b8');
+    const corSpread = l.refAnp > 0 ? (l.spreadAnp < 0 ? '#4ade80' : (l.spreadAnp > 0 ? '#f87171' : '#94a3b8')) : '#94a3b8';
     const sinalSpread = l.spreadAnp > 0 ? '+' : '';
 
     return `
@@ -685,7 +687,7 @@ function renderizarLinhasTabelaFechamento(linhas) {
           ${l.ultimoPrecoBomba > 0 ? `R$ ${l.ultimoPrecoBomba.toFixed(3)}` : '--'}
         </td>
         <td class="text-end font-monospace fw-bold" style="color: #38bdf8 !important;">
-          ${l.refAnp > 0 ? `R$ ${l.refAnp.toFixed(3)}` : '--'}
+          ${l.refAnp > 0 ? `R$ ${l.refAnp.toFixed(3)}` : '<span class="badge bg-secondary font-monospace" style="font-size:0.55rem;">Sem ANP</span>'}
         </td>
         <td class="text-end font-monospace fw-bold" style="color: ${corSpread} !important;">
           ${l.refAnp > 0 ? `${sinalSpread}R$ ${l.spreadAnp.toFixed(3)}` : '--'}
@@ -694,7 +696,7 @@ function renderizarLinhasTabelaFechamento(linhas) {
           ${Math.round(l.volume).toLocaleString('pt-BR')} L
         </td>
         <td class="text-end font-monospace fw-bold" style="color: #4ade80 !important;">
-          + R$ ${Math.round(l.hardSaving).toLocaleString('pt-BR')}
+          ${l.hardSaving > 0 ? `+ R$ ${Math.round(l.hardSaving).toLocaleString('pt-BR')}` : '--'}
         </td>
       </tr>
     `;
@@ -703,6 +705,7 @@ function renderizarLinhasTabelaFechamento(linhas) {
 
 /**
  * Renderização das Linhas da Tabela de Matrizes (Garagens)
+ * (Com badge explícita de estimativa caso não haja abastecimento na rua na UF)
  */
 function renderizarLinhasMatrizesFechamento(linhas) {
   if (!linhas || linhas.length === 0) {
@@ -710,20 +713,38 @@ function renderizarLinhasMatrizesFechamento(linhas) {
   }
 
   return linhas.map(g => {
-    const corEfic = g.varDistPerc <= 0 ? '#4ade80' : '#f87171';
+    const corEfic = g.refDist > 0 ? (g.varDistPerc <= 0 ? '#4ade80' : '#f87171') : '#94a3b8';
     const sinalEfic = g.varDistPerc > 0 ? '+' : '';
     const corSpread = g.spreadRua >= 0.15 ? '#4ade80' : '#f87171';
+
+    let celulaRuaHtml = '';
+    if (g.precoRuaUf > 0) {
+      if (g.estimadoRua) {
+        celulaRuaHtml = `
+          <div class="d-flex flex-column align-items-end">
+            <span class="font-monospace text-warning">R$ ${g.precoRuaUf.toFixed(3)}</span>
+            <span class="badge bg-warning text-dark border border-warning-subtle" style="font-size: 0.50rem;" title="Sem compras na rua nesta UF. Estimativa técnica calculada sobre ANP Distribuição (+12%)">
+              ⚠️ Estimado (Sem Compra na Rua)
+            </span>
+          </div>
+        `;
+      } else {
+        celulaRuaHtml = `<span class="font-monospace text-white">${g.precoRuaUf > 0 ? `R$ ${g.precoRuaUf.toFixed(3)}` : '--'}</span>`;
+      }
+    } else {
+      celulaRuaHtml = `<span class="text-white-50 font-monospace">--</span>`;
+    }
 
     return `
       <tr>
         <td class="text-start fw-bold" style="color: #f8fafc !important;">${g.nome}</td>
         <td><span class="badge bg-dark text-white border border-secondary font-monospace">${g.uf}</span></td>
         <td class="text-end font-monospace fw-bold" style="color: #f8fafc !important;">R$ ${g.custoGaragem.toFixed(3)}</td>
-        <td class="text-end font-monospace text-primary">${g.refDist > 0 ? `R$ ${g.refDist.toFixed(3)}` : '--'}</td>
+        <td class="text-end font-monospace text-primary">${g.refDist > 0 ? `R$ ${g.refDist.toFixed(3)}` : '<span class="text-white-50 font-monospace" style="font-size:0.60rem;">--</span>'}</td>
         <td class="text-end font-monospace fw-bold" style="color: ${corEfic} !important;">
           ${g.refDist > 0 ? `${sinalEfic}${g.varDistPerc.toFixed(2).replace('.', ',')}%` : '--'}
         </td>
-        <td class="text-end font-monospace text-white-50">${g.precoRuaUf > 0 ? `R$ ${g.precoRuaUf.toFixed(3)}` : '--'}</td>
+        <td class="text-end">${celulaRuaHtml}</td>
         <td class="text-end font-monospace fw-bold" style="color: ${corSpread} !important;">
           ${g.spreadRua !== 0 ? `+ R$ ${g.spreadRua.toFixed(3)}` : '--'}
         </td>
@@ -737,7 +758,7 @@ function renderizarLinhasMatrizesFechamento(linhas) {
 }
 
 /**
- * Renderização dos Cards da Vitrine Tática (Verde Neon com Métricas Reais)
+ * Renderização dos Cards da Vitrine Tática
  */
 function renderizarCardsVitrineTatica(acoes) {
   if (!acoes || acoes.length === 0) {
@@ -750,25 +771,32 @@ function renderizarCardsVitrineTatica(acoes) {
     `;
   }
 
-  return acoes.map(a => `
-    <div class="col-12 col-md-6">
-      <div class="p-2 border rounded h-100 d-flex flex-column justify-content-between glow-verde" 
-        style="background: #111827; border-color: rgba(74, 222, 128, 0.35) !important;">
-        <div>
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="badge ${a.tipo === 'BLOQUEIO' ? 'bg-success' : 'bg-primary'}" style="font-size: 0.58rem;">
-              ${a.tipo === 'BLOQUEIO' ? 'MANOBRA DE ROTA' : 'COST AVOIDANCE'}
-            </span>
+  return acoes.map(a => {
+    const ehNegativo = a.impacto.includes('- R$') || a.impacto.includes('Acréscimo');
+    const classeGlow = ehNegativo ? 'glow-vermelho' : 'glow-verde';
+    const corBorda = ehNegativo ? 'rgba(248, 113, 113, 0.4) !important' : 'rgba(74, 222, 128, 0.35) !important';
+    const corTexto = ehNegativo ? 'text-danger' : 'text-success';
+
+    return `
+      <div class="col-12 col-md-6">
+        <div class="p-2 border rounded h-100 d-flex flex-column justify-content-between ${classeGlow}" 
+          style="background: #111827; border-color: ${corBorda};">
+          <div>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="badge ${a.tipo === 'BLOQUEIO' ? (ehNegativo ? 'bg-danger' : 'bg-success') : 'bg-primary'}" style="font-size: 0.58rem;">
+                ${a.tipo === 'BLOQUEIO' ? 'MANOBRA DE ROTA' : 'COST AVOIDANCE'}
+              </span>
+            </div>
+            <strong class="text-white small d-block mb-1">${a.titulo}</strong>
+            <div class="text-white-50" style="font-size: 0.72rem; line-height: 1.35;">${a.descricao}</div>
           </div>
-          <strong class="text-white small d-block mb-1">${a.titulo}</strong>
-          <div class="text-white-50" style="font-size: 0.72rem; line-height: 1.35;">${a.descricao}</div>
-        </div>
-        <div class="mt-2 pt-1 border-top border-secondary font-monospace fw-bold ${a.impacto.includes('-') ? 'text-danger' : 'text-success'}" style="font-size: 0.70rem;">
-          ${a.impacto}
+          <div class="mt-2 pt-1 border-top border-secondary font-monospace fw-bold ${corTexto}" style="font-size: 0.70rem;">
+            ${a.impacto}
+          </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 /**
@@ -793,17 +821,20 @@ function renderizarGraficoEvolucaoSavings() {
     let volumeMes = 0;
     let gastoMes = 0;
     let somaAnpMes = 0;
+    let volumeComAnp = 0;
 
     regsMes.forEach(r => {
       const v = parseFloat(r.VOLUME_CICLO || 0);
       const p = parseFloat(r.VALOR_UNITARIO || 0);
-      const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : {};
-      const refAnp = anpUf[m] || anpUf['2026-10'] || 0;
+      const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : null;
+      // AUDITORIA ESTRITA: apenas o mês real do registro, sem fallbacks para meses aleatórios
+      const refAnp = (anpUf && anpUf[m]) ? anpUf[m] : 0;
 
       volumeMes += v;
       gastoMes += (p * v);
       if (refAnp > 0) {
         somaAnpMes += (refAnp * v);
+        volumeComAnp += v;
         if (p < refAnp) {
           savingMes += ((refAnp - p) * v);
         }
@@ -811,7 +842,7 @@ function renderizarGraficoEvolucaoSavings() {
     });
 
     const precoMedioFrota = volumeMes > 0 ? (gastoMes / volumeMes) : 0;
-    const anpMedioFrota = volumeMes > 0 ? (somaAnpMes / volumeMes) : 0;
+    const anpMedioFrota = volumeComAnp > 0 ? (somaAnpMes / volumeComAnp) : 0;
     const spreadMedio = (precoMedioFrota > 0 && anpMedioFrota > 0) ? (precoMedioFrota - anpMedioFrota) : 0;
 
     seriesHardSaving.push(Math.round(savingMes));
@@ -920,7 +951,8 @@ function renderizarGraficoEvolucaoSavings() {
 }
 
 /**
- * Motor de Cálculo Matemático e Agrupamento da Competência (Blindado Contra Anacronismos e Distorções)
+ * Motor de Cálculo Matemático e Agrupamento da Competência
+ * (Com conformidade temporal estrita, sem estimativas ocultas e sem fallbacks de datas descoladas)
  */
 function calcularMetricasFechamento(mesAlvo) {
   const regsMes = baseRegistrosMensais.filter(r => r.MES_ANO === mesAlvo);
@@ -937,8 +969,9 @@ function calcularMetricasFechamento(mesAlvo) {
     volumeTotalMes += v;
     valorTotalGastoMes += vt;
 
-    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : {};
-    const refAnp = anpUf[mesAlvo] || anpUf['2026-10'] || 0;
+    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : null;
+    // AUDITORIA ESTRITA: somente se existir o mês alvo exato
+    const refAnp = (anpUf && anpUf[mesAlvo]) ? anpUf[mesAlvo] : 0;
     if (refAnp > 0 && p > 0 && p < refAnp) {
       hardSavingTotalMes += ((refAnp - p) * v);
     }
@@ -947,17 +980,19 @@ function calcularMetricasFechamento(mesAlvo) {
   const custoMedioFrotaMes = volumeTotalMes > 0 ? (valorTotalGastoMes / volumeTotalMes) : 0;
 
   let somaAnpPonderada = 0;
+  let volumePonderadoAnp = 0;
   regsMes.forEach(r => {
     const v = parseFloat(r.VOLUME_CICLO || 0);
-    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : {};
-    const refAnp = anpUf[mesAlvo] || anpUf['2026-10'] || 0;
+    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : null;
+    const refAnp = (anpUf && anpUf[mesAlvo]) ? anpUf[mesAlvo] : 0;
     if (refAnp > 0) {
       somaAnpPonderada += (refAnp * v);
+      volumePonderadoAnp += v;
     }
   });
 
-  const anpMediaPonderadaMes = volumeTotalMes > 0 ? (somaAnpPonderada / volumeTotalMes) : 0;
-  const spreadMedioMes = custoMedioFrotaMes - anpMediaPonderadaMes;
+  const anpMediaPonderadaMes = volumePonderadoAnp > 0 ? (somaAnpPonderada / volumePonderadoAnp) : 0;
+  const spreadMedioMes = anpMediaPonderadaMes > 0 ? (custoMedioFrotaMes - anpMediaPonderadaMes) : 0;
   const operacaoVerde = spreadMedioMes <= 0;
 
   let costAvoidanceMes = 0;
@@ -1002,10 +1037,10 @@ function calcularMetricasFechamento(mesAlvo) {
     const precoAcordado = trat.preco_acordado || 0;
     const precoProposto = trat.preco_proposto || 0;
 
-    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPosto]) ? anpRevenda[ufPosto] : {};
-    const refAnp = anpUf[mesAlvo] || anpUf['2026-10'] || 0;
+    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPosto]) ? anpRevenda[ufPosto] : null;
+    const refAnp = (anpUf && anpUf[mesAlvo]) ? anpUf[mesAlvo] : 0;
 
-    // TRAVA TEMPORAL ESTRITA: O acordo precisa existir e estar vigente no mês
+    // TRAVA TEMPORAL: O acordo precisa existir e estar vigente no mês
     const acordoJaVigia = mesVigencia && (mesAlvo >= mesVigencia);
 
     if (volPostoMes > 0 && precoAcordado > 0 && acordoJaVigia) {
@@ -1074,27 +1109,16 @@ function calcularMetricasFechamento(mesAlvo) {
       });
     }
 
-    // MANOBRA DE ROTA (Vigente na competência com apuração real de litragem e preço de fuga)
+    // MANOBRA DE ROTA (Vigente na competência com sincronismo temporal exato entre Origem e Destino)
     if (trat.status === 'POSTO_BLOQUEADO' && trat.posto_destino && acordoJaVigia) {
       const ufDestino = trat.posto_destino_uf || ufPosto;
-      const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufDestino)];
-      const acordosDestinoVigentes = (tratDestino?.historico || []).filter(h =>
-        h.status === 'ACORDO_FECHADO' && h.preco > 0 && h.vigencia && h.vigencia.substring(0, 7) <= mesAlvo
-      ).sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
-      
-      const acordoDestinoVigente = acordosDestinoVigentes[0] || (
-        !tratDestino?.historico?.length && tratDestino?.status === 'ACORDO_FECHADO' && tratDestino.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesAlvo
-          ? { preco: tratDestino.preco_acordado, vigencia: tratDestino.vigencia }
-          : null
-      );
-      const precoDestino = parseFloat(acordoDestinoVigente?.preco || 0);
+      const mesTransicao = mesVigencia || mesAlvo;
 
-      // Histórico completo do posto origem até o mês alvo
+      // 1. Registros e Litragens históricas da Origem
       const historicoOrigem = baseRegistrosMensais.filter(r =>
-        r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO <= mesAlvo
+        r.POSTO === nomePosto && r.UF_POSTO === ufPosto
       );
 
-      // Volume mensal por competência
       const volPorMesOrigem = {};
       historicoOrigem.forEach(r => {
         const m = r.MES_ANO;
@@ -1103,9 +1127,9 @@ function calcularMetricasFechamento(mesAlvo) {
         }
       });
 
-      // Se o bloqueio ocorreu dentro do mês alvo ou anterior, buscar meses cheios ativos antes do bloqueio
+      // Volume de referência: Média dos meses cheios anteriores à manobra
       const mesesAnterioresAoBloqueio = Object.keys(volPorMesOrigem)
-        .filter(m => m < mesVigencia && volPorMesOrigem[m] > 0)
+        .filter(m => m < mesTransicao && volPorMesOrigem[m] > 0)
         .sort()
         .reverse();
 
@@ -1120,35 +1144,80 @@ function calcularMetricasFechamento(mesAlvo) {
           ? `Mês anterior (${mesesAmostra[0].split('-').reverse().join('/')})` 
           : `Média de ${mesesAmostra.length} meses cheios anteriores`;
       } else {
-        // Fallback caso seja posto novo sem histórico prévio ao mês do bloqueio
         const mesesComVolume = Object.keys(volPorMesOrigem).filter(m => volPorMesOrigem[m] > 0).sort();
         const ultMes = mesesComVolume[mesesComVolume.length - 1] || '';
         volumeReferencia = ultMes ? volPorMesOrigem[ultMes] : 0;
         rotuloPeriodoVolume = ultMes ? `Litragem em ${ultMes.split('-').reverse().join('/')}` : 'Volume residual';
       }
 
-      // Preço de origem: busca o último preço pago na bomba no momento da saída (ou preço balcão pretendido)
-      let ultCicloOrigem = null;
-      historicoOrigem.forEach(r => {
-        const p = parseFloat(r.VALOR_UNITARIO || 0);
-        if (p > 0 && (!ultCicloOrigem || (r.DATA_FIM_CICLO || '') > (ultCicloOrigem.DATA_FIM_CICLO || ''))) {
-          ultCicloOrigem = r;
-        }
+      // 2. Preço Real Pago na Origem no Mês da Transição
+      const regsOrigemMesTransicao = historicoOrigem.filter(r => r.MES_ANO === mesTransicao);
+      let vOrigemMes = 0;
+      let vtOrigemMes = 0;
+      regsOrigemMesTransicao.forEach(r => {
+        const v = parseFloat(r.VOLUME_CICLO || 0);
+        vOrigemMes += v;
+        vtOrigemMes += parseFloat(r.VALOR_TOTAL_CICLO || (v * parseFloat(r.VALOR_UNITARIO || 0)));
       });
 
-      const ultimoPagoOrigem = ultCicloOrigem ? parseFloat(ultCicloOrigem.VALOR_UNITARIO || 0) : 0;
-      
-      // O preço evitado é a proposta de reajuste pretendida pelo posto; caso não haja, é o último valor pago na bomba
-      const precoOrigem = trat.preco_proposto > ultimoPagoOrigem 
-        ? trat.preco_proposto 
-        : (ultimoPagoOrigem > 0 ? ultimoPagoOrigem : (trat.preco_acordado || 0));
+      let precoOrigem = vOrigemMes > 0 ? (vtOrigemMes / vOrigemMes) : 0;
 
-      const diffUnitario = precoOrigem > 0 && precoDestino > 0
-        ? precoOrigem - precoDestino
-        : null;
+      // Fallback para último preço na bomba se não houve faturamento no mês do corte
+      if (precoOrigem === 0) {
+        let ultCicloOrigem = null;
+        historicoOrigem.filter(r => r.MES_ANO <= mesTransicao).forEach(r => {
+          const p = parseFloat(r.VALOR_UNITARIO || 0);
+          if (p > 0 && (!ultCicloOrigem || (r.DATA_FIM_CICLO || '') > (ultCicloOrigem.DATA_FIM_CICLO || ''))) {
+            ultCicloOrigem = r;
+          }
+        });
+        precoOrigem = ultCicloOrigem ? parseFloat(ultCicloOrigem.VALOR_UNITARIO || 0) : (trat.preco_acordado || 0);
+      }
 
-      const savingProjetado = diffUnitario !== null ? diffUnitario * volumeReferencia : 0;
+      // 3. Preço Real Pago no Destino NO MESMO MÊS DA TRANSIÇÃO
+      const historicoDestino = baseRegistrosMensais.filter(r =>
+        r.POSTO === trat.posto_destino && r.UF_POSTO === ufDestino
+      );
+
+      const regsDestinoMesTransicao = historicoDestino.filter(r => r.MES_ANO === mesTransicao);
+      let vDestinoMes = 0;
+      let vtDestinoMes = 0;
+      regsDestinoMesTransicao.forEach(r => {
+        const v = parseFloat(r.VOLUME_CICLO || 0);
+        vDestinoMes += v;
+        vtDestinoMes += parseFloat(r.VALOR_TOTAL_CICLO || (v * parseFloat(r.VALOR_UNITARIO || 0)));
+      });
+
+      let precoDestino = vDestinoMes > 0 ? (vtDestinoMes / vDestinoMes) : 0;
+
+      // Se não houve faturamento do destino no mês da transição, busca acordo cadastrado na época
+      if (precoDestino === 0) {
+        const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufDestino)];
+        const acordosDestinoNaEpoca = (tratDestino?.historico || []).filter(h =>
+          h.status === 'ACORDO_FECHADO' && h.preco > 0 && h.vigencia && h.vigencia.substring(0, 7) <= mesTransicao
+        ).sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
+
+        if (acordosDestinoNaEpoca.length > 0) {
+          precoDestino = acordosDestinoNaEpoca[0].preco;
+        } else if (tratDestino?.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesTransicao) {
+          precoDestino = tratDestino.preco_acordado;
+        } else {
+          const regsDestinoMesAlvo = historicoDestino.filter(r => r.MES_ANO === mesAlvo);
+          let vDestAlvo = 0, vtDestAlvo = 0;
+          regsDestinoMesAlvo.forEach(r => {
+            const v = parseFloat(r.VOLUME_CICLO || 0);
+            vDestAlvo += v;
+            vtDestAlvo += parseFloat(r.VALOR_TOTAL_CICLO || (v * parseFloat(r.VALOR_UNITARIO || 0)));
+          });
+          precoDestino = vDestAlvo > 0 ? (vtDestAlvo / vDestAlvo) : 0;
+        }
+      }
+
+      // 4. Cálculo do Saving Líquido
+      const diffUnitario = (precoOrigem > 0 && precoDestino > 0) ? (precoOrigem - precoDestino) : null;
+      const savingProjetado = diffUnitario !== null ? (diffUnitario * volumeReferencia) : 0;
       const volumeFmt = Math.round(volumeReferencia).toLocaleString('pt-BR');
+      const mesTransFmt = mesTransicao.split('-').reverse().join('/');
 
       let descricaoManobra;
       let impactoManobra;
@@ -1158,12 +1227,9 @@ function calcularMetricasFechamento(mesAlvo) {
         impactoManobra = 'Saving não calculado: volume real indisponível';
       } else if (diffUnitario === null) {
         descricaoManobra = `Volume base de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}), suspenso em <strong>${nomePosto} (${ufPosto})</strong> e destinado para <strong>${trat.posto_destino}</strong>.`;
-        impactoManobra = 'Saving não calculado: preço de fuga da origem ou preço acordado no destino indisponível';
+        impactoManobra = 'Saving não calculado: preço real da época indisponível';
       } else {
-        const vigenciaDestinoFmt = acordoDestinoVigente.vigencia.split('-').reverse().join('/');
-        const tipoPrecoOrigemDesc = trat.preco_proposto > ultimoPagoOrigem ? 'preço pretendido evitado' : 'último preço na bomba';
-
-        descricaoManobra = `Volume de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}) realocado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${trat.posto_destino} (${ufDestino})</strong>; ${tipoPrecoOrigemDesc} R$ ${precoOrigem.toFixed(3)}/L vs. preço negociado no destino R$ ${precoDestino.toFixed(3)}/L desde ${vigenciaDestinoFmt}.`;
+        descricaoManobra = `Volume de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}) realocado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${trat.posto_destino} (${ufDestino})</strong>; preço real na transição (${mesTransFmt}) R$ ${precoOrigem.toFixed(3)}/L vs. R$ ${precoDestino.toFixed(3)}/L no destino.`;
         
         const tipoImpacto = savingProjetado >= 0 ? 'Economia Mensal Projetada' : 'Acréscimo Mensal Projetado';
         impactoManobra = `${savingProjetado >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingProjetado)).toLocaleString('pt-BR')} de ${tipoImpacto}`;
@@ -1203,7 +1269,7 @@ function calcularMetricasFechamento(mesAlvo) {
     volInternoMes += vG;
     gastoInternoMes += vtG;
 
-    // Confronto com ANP Distribuição da UF
+    // Confronto com ANP Distribuição da UF estrita ao mês alvo
     const mapaDist = (typeof anpDistribuicao !== 'undefined') ? anpDistribuicao : {};
     const refDist = (mapaDist[ufG] && mapaDist[ufG][mesAlvo]) ? mapaDist[ufG][mesAlvo] : 0;
     const varDistPerc = (custoGaragem > 0 && refDist > 0) ? (((custoGaragem - refDist) / refDist) * 100) : 0;
@@ -1216,7 +1282,18 @@ function calcularMetricasFechamento(mesAlvo) {
       vRua += vol;
       vtRua += parseFloat(r.VALOR_TOTAL_CICLO || (vol * parseFloat(r.VALOR_UNITARIO || 0)));
     });
-    const precoRuaUf = vRua > 0 ? (vtRua / vRua) : (refDist * 1.12);
+
+    let precoRuaUf = 0;
+    let estimadoRua = false;
+
+    if (vRua > 0) {
+      precoRuaUf = vtRua / vRua;
+    } else if (refDist > 0) {
+      // SINALIZAÇÃO EXPLÍCITA: sem compra na rua na UF, adota estimativa técnica com flag de alerta
+      precoRuaUf = refDist * 1.12;
+      estimadoRua = true;
+    }
+
     const spreadRua = (precoRuaUf > 0 && custoGaragem > 0) ? (precoRuaUf - custoGaragem) : 0;
     const ganhoTotalGaragem = spreadRua * vG;
     savingGaragemMes += ganhoTotalGaragem;
@@ -1228,6 +1305,7 @@ function calcularMetricasFechamento(mesAlvo) {
       refDist,
       varDistPerc,
       precoRuaUf,
+      estimadoRua,
       spreadRua,
       volume: vG,
       ganhoTotal: ganhoTotalGaragem
@@ -1242,8 +1320,8 @@ function calcularMetricasFechamento(mesAlvo) {
   baseRegistrosMensais.forEach(r => {
     const p = parseFloat(r.VALOR_UNITARIO || 0);
     const v = parseFloat(r.VOLUME_CICLO || 0);
-    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : {};
-    const refAnp = anpUf[r.MES_ANO] || anpUf['2026-10'] || 0;
+    const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : null;
+    const refAnp = (anpUf && anpUf[r.MES_ANO]) ? anpUf[r.MES_ANO] : 0;
     if (refAnp > 0 && p > 0 && p < refAnp) {
       savingAcumuladoYtd += ((refAnp - p) * v);
     }
