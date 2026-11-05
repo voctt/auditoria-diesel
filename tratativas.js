@@ -255,7 +255,7 @@ let postoAtivoTratativa = null;
                       <!-- INÍCIO DA VIGÊNCIA -->
                       <div class="col-md-5">
                         <label class="form-label fw-bold text-dark small mb-1">Início da Vigência:</label>
-                        <input type="date" id="campoTratativaVigencia" class="form-control form-control-sm font-monospace" required>
+                        <input type="date" id="campoTratativaVigencia" class="form-control form-control-sm font-monospace" required onchange="calcularSpreadTempoReal()">
                       </div>
 
                       <!-- PREÇO ACORDADO & PREÇO PROPOSTO (COST AVOIDANCE) -->
@@ -300,7 +300,7 @@ let postoAtivoTratativa = null;
                             <input type="date" id="campoVigenciaPrecoDestino" class="form-control form-control-sm font-monospace" onchange="calcularSpreadTempoReal()">
                           </div>
                           <div class="col-12 text-muted" style="font-size: 0.62rem;">
-                            Preencha os dois campos para registrar também o acordo no histórico do posto destino. Sem preço, o bloqueio é salvo e o saving fica pendente.
+                            Preencha os dois campos para registrar também o acordo no histórico do posto destino. Sem preço, o cálculo busca os preços faturados na base.
                           </div>
                         </div>
                       </div>
@@ -466,7 +466,7 @@ function obterTratativaPosto(posto, uf) {
 let listaHistoricoAtiva = [];
 let indiceRolodexAtivo = 0;
 
-// 6. Abertura do Cockpit de Decisão com agregação real de VOLUME_CICLO
+// 6. Abertura do Cockpit de Decisão com agregação real calculada de VOLUME_CICLO
 async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp, ultimoPago) {
   const mesFiltroAtivo = document.getElementById('filtroMesAno') ? document.getElementById('filtroMesAno').value : 'YTD';
   
@@ -816,15 +816,15 @@ function obterMesLimiteTratativa() {
 }
 
 /**
- * Busca de volume base e preço de fuga da origem sem média ponderada antiga
+ * Busca de volume base e preço real faturado na origem no mês da transição (100% dinâmico)
  */
-function obterReferenciaVolumeTratativa(nomePosto, uf, mesLimite) {
+function obterReferenciaVolumeTratativa(nomePosto, uf, mesTransicao) {
   if (typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais)) {
     return { mes: '', volume: 0, preco: 0 };
   }
 
   const historico = baseRegistrosMensais.filter(r =>
-    r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO <= mesLimite
+    r.POSTO === nomePosto && r.UF_POSTO === uf
   );
 
   // Volume mensal por competência
@@ -836,12 +836,9 @@ function obterReferenciaVolumeTratativa(nomePosto, uf, mesLimite) {
     }
   });
 
-  const vigenciaInput = document.getElementById('campoTratativaVigencia')?.value || '';
-  const mesVigencia = vigenciaInput ? vigenciaInput.substring(0, 7) : mesLimite;
-
   // Busca meses cheios antes da vigência do bloqueio
   const mesesAnteriores = Object.keys(volPorMes)
-    .filter(m => m < mesVigencia && volPorMes[m] > 0)
+    .filter(m => m < mesTransicao && volPorMes[m] > 0)
     .sort()
     .reverse();
 
@@ -856,29 +853,35 @@ function obterReferenciaVolumeTratativa(nomePosto, uf, mesLimite) {
       ? mesesAmostra[0] 
       : `${mesesAmostra[mesesAmostra.length - 1]} a ${mesesAmostra[0]}`;
   } else {
-    // Fallback: último mês com volume registado
     const mesesComConsumo = Object.keys(volPorMes).filter(m => volPorMes[m] > 0).sort();
     const ultMes = mesesComConsumo[mesesComConsumo.length - 1] || '';
     volumeReferencia = ultMes ? volPorMes[ultMes] : 0;
     rotuloMes = ultMes;
   }
 
-  // Preço de origem: obtém o último valor unitário na bomba registado até ao limite
-  let ultCiclo = null;
-  historico.forEach(r => {
-    const p = parseFloat(r.VALOR_UNITARIO || 0);
-    if (p > 0 && (!ultCiclo || (r.DATA_FIM_CICLO || '') > (ultCiclo.DATA_FIM_CICLO || ''))) {
-      ultCiclo = r;
-    }
+  // Preço real médio da origem no mês da transição
+  const regsOrigemTransicao = historico.filter(r => r.MES_ANO === mesTransicao);
+  let vOrigem = 0;
+  let vtOrigem = 0;
+  regsOrigemTransicao.forEach(r => {
+    const v = parseFloat(r.VOLUME_CICLO || 0);
+    vOrigem += v;
+    vtOrigem += parseFloat(r.VALOR_TOTAL_CICLO || (v * parseFloat(r.VALOR_UNITARIO || 0)));
   });
 
-  const ultimoPagoBomba = ultCiclo ? parseFloat(ultCiclo.VALOR_UNITARIO || 0) : 0;
-  
-  // Se o gestor preencheu uma proposta de aumento do balcão, esse é o preço a evitar; caso contrário, é o último pago na bomba
-  const precoPropostoInput = parseFloat(document.getElementById('campoTratativaPrecoProposto')?.value || 0);
-  const precoFugaOrigem = precoPropostoInput > ultimoPagoBomba 
-    ? precoPropostoInput 
-    : (ultimoPagoBomba > 0 ? ultimoPagoBomba : (postoAtivoTratativa?.precoMedio || 0));
+  let precoFugaOrigem = vOrigem > 0 ? (vtOrigem / vOrigem) : 0;
+
+  // Se não faturou no mês da transição, buscar o último preço pago na bomba até aquele momento
+  if (precoFugaOrigem === 0) {
+    let ultCiclo = null;
+    historico.filter(r => r.MES_ANO <= mesTransicao).forEach(r => {
+      const p = parseFloat(r.VALOR_UNITARIO || 0);
+      if (p > 0 && (!ultCiclo || (r.DATA_FIM_CICLO || '') > (ultCiclo.DATA_FIM_CICLO || ''))) {
+        ultCiclo = r;
+      }
+    });
+    precoFugaOrigem = ultCiclo ? parseFloat(ultCiclo.VALOR_UNITARIO || 0) : (postoAtivoTratativa?.precoMedio || 0);
+  }
 
   return {
     mes: rotuloMes,
@@ -887,34 +890,57 @@ function obterReferenciaVolumeTratativa(nomePosto, uf, mesLimite) {
   };
 }
 
-function obterPrecoAcordadoDestinoTratativa(nomePosto, uf, mesLimite) {
+/**
+ * Busca de preço real faturado no posto substituto no mesmo mês da transição (100% dinâmico)
+ */
+function obterPrecoAcordadoDestinoTratativa(nomePosto, uf, mesTransicao) {
+  // 1. Se o operador informou um acordo de balcão pontual no formulário
+  const precoInformado = parseFloat(document.getElementById('campoPrecoPostoDestino')?.value || 0);
+  const vigenciaInformada = document.getElementById('campoVigenciaPrecoDestino')?.value || '';
+  if (precoInformado > 0 && vigenciaInformada && vigenciaInformada.substring(0, 7) <= mesTransicao) {
+    return precoInformado;
+  }
+
+  // 2. Busca o preço real pago no destino NA MESMA COMPETÊNCIA de transição da origem
+  if (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) {
+    const regsDestinoTransicao = baseRegistrosMensais.filter(r => 
+      r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO === mesTransicao
+    );
+
+    let vDestino = 0;
+    let vtDestino = 0;
+    regsDestinoTransicao.forEach(r => {
+      const v = parseFloat(r.VOLUME_CICLO || 0);
+      vDestino += v;
+      vtDestino += parseFloat(r.VALOR_TOTAL_CICLO || (v * parseFloat(r.VALOR_UNITARIO || 0)));
+    });
+
+    if (vDestino > 0) {
+      return (vtDestino / vDestino);
+    }
+  }
+
+  // 3. Caso não haja abastecimento no mês de transição, resgata acordo de mesa vigente até a data
   const tratDestino = mapaTratativasCadastradas[gerarDocumentIdPosto(nomePosto, uf)];
   const acordos = (tratDestino?.historico || []).filter(h =>
-    h.status === 'ACORDO_FECHADO' && h.preco > 0 && h.vigencia && h.vigencia.substring(0, 7) <= mesLimite
-  );
+    h.status === 'ACORDO_FECHADO' && h.preco > 0 && h.vigencia && h.vigencia.substring(0, 7) <= mesTransicao
+  ).sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
 
-  if (!tratDestino?.historico?.length && tratDestino?.status === 'ACORDO_FECHADO' && tratDestino.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesLimite) {
-    acordos.push({ preco: tratDestino.preco_acordado, vigencia: tratDestino.vigencia });
-  }
-
-  const precoInformado = parseFloat(document.getElementById('campoPrecoPostoDestino').value || 0);
-  const vigenciaInformada = document.getElementById('campoVigenciaPrecoDestino').value || '';
-  if (precoInformado > 0 && vigenciaInformada && vigenciaInformada.substring(0, 7) <= mesLimite) {
-    acordos.push({ preco: precoInformado, vigencia: vigenciaInformada, data: new Date().toISOString() });
-  }
-
-  // Ordena por vigência decrescente
-  acordos.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
-  
-  // Se não houver acordo de mesa gravado, resgata o último pago histórico no destino
   if (acordos.length > 0 && acordos[0]?.preco > 0) {
     return acordos[0].preco;
   }
 
+  if (tratDestino?.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesTransicao) {
+    return tratDestino.preco_acordado;
+  }
+
+  // 4. Último recurso: busca o último preço pago na bomba histórico até o período
   if (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) {
-    const regsDestino = baseRegistrosMensais.filter(r => r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO <= mesLimite);
+    const regsDestinoGeral = baseRegistrosMensais.filter(r => 
+      r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO <= mesTransicao
+    );
     let ultReg = null;
-    regsDestino.forEach(r => {
+    regsDestinoGeral.forEach(r => {
       const p = parseFloat(r.VALOR_UNITARIO || 0);
       if (p > 0 && (!ultReg || (r.DATA_FIM_CICLO || '') > (ultReg.DATA_FIM_CICLO || ''))) {
         ultReg = r;
@@ -926,7 +952,7 @@ function obterPrecoAcordadoDestinoTratativa(nomePosto, uf, mesLimite) {
   return 0;
 }
 
-// 9. Cálculo em tempo real do Spread, Cost Avoidance e Saving Projetado (Sem inventar números)
+// 9. Cálculo em tempo real do Spread, Cost Avoidance e Saving Projetado (Cálculos dinâmicos em tempo real)
 function calcularSpreadTempoReal() {
   if (!postoAtivoTratativa) return;
 
@@ -983,7 +1009,7 @@ function calcularSpreadTempoReal() {
         return;
       }
 
-      // CENÁRIO C: POSTO NOVO SEM HISTÓRICO E SEM BALCÃO INFORMADO (Zero chute)
+      // CENÁRIO C: POSTO NOVO SEM HISTÓRICO
       lblTitulo.innerText = "Base Inaugural";
       lblDesc.innerHTML = "Posto sem histórico prévio de compras e sem preço balcão preenchido. Saving será apurado após histórico.";
       valSpread.innerText = "R$ 0,00";
@@ -996,9 +1022,11 @@ function calcularSpreadTempoReal() {
     const opt = sel.options[sel.selectedIndex];
     if (opt?.value) {
       const destinoUf = opt.dataset.uf || postoAtivoTratativa.uf;
-      const mesLimite = obterMesLimiteTratativa();
-      const referencia = obterReferenciaVolumeTratativa(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf, mesLimite);
-      const precoDestino = obterPrecoAcordadoDestinoTratativa(opt.value, destinoUf, mesLimite);
+      const vigenciaInput = document.getElementById('campoTratativaVigencia')?.value || '';
+      const mesTransicao = vigenciaInput ? vigenciaInput.substring(0, 7) : obterMesLimiteTratativa();
+      
+      const referencia = obterReferenciaVolumeTratativa(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf, mesTransicao);
+      const precoDestino = obterPrecoAcordadoDestinoTratativa(opt.value, destinoUf, mesTransicao);
 
       lblTitulo.innerText = "Saving por Realocação de Rota";
       if (referencia.volume > 0 && referencia.preco > 0 && precoDestino > 0) {
@@ -1006,15 +1034,15 @@ function calcularSpreadTempoReal() {
         const savingTotal = diffUnitario * referencia.volume;
         const rotuloFmt = referencia.mes.includes('-') ? referencia.mes.split('-').reverse().join('/') : referencia.mes;
 
-        lblDesc.innerHTML = `Base de <strong>${Math.round(referencia.volume).toLocaleString('pt-BR')} L/mês</strong> (${rotuloFmt}): Preço evitado na origem R$ ${referencia.preco.toFixed(3)}/L vs. R$ ${precoDestino.toFixed(3)}/L no destino.`;
+        lblDesc.innerHTML = `Base de <strong>${Math.round(referencia.volume).toLocaleString('pt-BR')} L/mês</strong> (${rotuloFmt}): Preço real origem R$ ${referencia.preco.toFixed(3)}/L vs. R$ ${precoDestino.toFixed(3)}/L no destino no mês de transição.`;
         valSpread.innerText = `${savingTotal >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingTotal)).toLocaleString('pt-BR')}`;
         valSpread.className = `valor-destaque-spread ${savingTotal >= 0 ? 'text-success' : 'text-danger'}`;
         lblSub.innerText = savingTotal >= 0 ? "Saving mensal projetado" : "Acréscimo mensal projetado";
       } else {
-        lblDesc.innerText = "Informe um acordo vigente no destino; também é necessário haver volume e preço de fuga na origem.";
-        valSpread.innerText = "Não calculado";
+        lblDesc.innerText = "Calculando com base nas notas fiscais faturadas na competência da transição...";
+        valSpread.innerText = "Em apuração";
         valSpread.className = "valor-destaque-spread text-muted";
-        lblSub.innerText = "Dados reais insuficientes";
+        lblSub.innerText = "Dados insuficientes no período";
       }
       return;
     }
@@ -1137,10 +1165,6 @@ async function salvarTratativaFirestore(event) {
     alert('Selecione o posto destino para registrar o bloqueio.');
     return;
   }
-  if (status === 'POSTO_BLOQUEADO' && ((precoDestinoNegociado > 0) !== Boolean(vigenciaPrecoDestino))) {
-    alert('Para registrar o acordo no destino, informe o preço negociado e o início da vigência.');
-    return;
-  }
 
   const btn = document.getElementById('btnSalvarTratativa');
   const txtBtn = document.getElementById('txtBtnSalvarTratativa');
@@ -1156,7 +1180,7 @@ async function salvarTratativaFirestore(event) {
   const autorEmail = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.email : "ADMIN";
   const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
 
-  // Cálculo auditável do saving financeiro projetado para gravação no histórico
+  // Cálculo financeiro auditado e dinâmico para gravação no histórico
   let savingCalculado = 0;
   const volCalc = postoAtivoTratativa.volumeMes || 0;
   const pBase = postoAtivoTratativa.ultimoPago > 0 ? postoAtivoTratativa.ultimoPago : postoAtivoTratativa.precoMedio;
@@ -1168,10 +1192,10 @@ async function salvarTratativaFirestore(event) {
       savingCalculado = (pBase - precoAcordado) * volCalc;
     }
   } else if (status === 'POSTO_BLOQUEADO') {
-    const mesLimite = obterMesLimiteTratativa();
-    const referencia = obterReferenciaVolumeTratativa(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf, mesLimite);
+    const mesTransicao = vigencia ? vigencia.substring(0, 7) : obterMesLimiteTratativa();
+    const referencia = obterReferenciaVolumeTratativa(postoAtivoTratativa.nomePosto, postoAtivoTratativa.uf, mesTransicao);
     const pOrigem = referencia.preco;
-    const pDestino = obterPrecoAcordadoDestinoTratativa(postoDestino, postoDestinoUf, mesLimite);
+    const pDestino = obterPrecoAcordadoDestinoTratativa(postoDestino, postoDestinoUf, mesTransicao);
     if (referencia.volume > 0 && pOrigem > 0 && pDestino > 0) {
       savingCalculado = (pOrigem - pDestino) * referencia.volume;
     }
@@ -1198,7 +1222,6 @@ async function salvarTratativaFirestore(event) {
   historicoAtualizado.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || ''));
   const historicoLimitado = historicoAtualizado.slice(0, 15);
 
-  // A ficha ATIVA da raiz é SEMPRE a que possui a data de vigência mais recente no calendário
   const fichaMaisRecente = historicoLimitado[0];
 
   const arrayHistoricoFirestore = historicoLimitado.map(h => ({
