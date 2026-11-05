@@ -815,32 +815,75 @@ function obterMesLimiteTratativa() {
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/**
+ * Busca de volume base e preço de fuga da origem sem média ponderada antiga
+ */
 function obterReferenciaVolumeTratativa(nomePosto, uf, mesLimite) {
-  const registros = baseRegistrosMensais.filter(r =>
-    r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO <= mesLimite && parseFloat(r.VOLUME_CICLO || 0) > 0
-  );
-  const meses = [...new Set(registros.map(r => r.MES_ANO))].sort();
-  const mes = meses[meses.length - 1] || '';
-  const registrosMes = registros.filter(r => r.MES_ANO === mes);
-  let volume = 0;
-  let valor = 0;
-  let precoCompleto = registrosMes.length > 0;
+  if (typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais)) {
+    return { mes: '', volume: 0, preco: 0 };
+  }
 
-  registrosMes.forEach(r => {
-    const litros = parseFloat(r.VOLUME_CICLO || 0);
-    const preco = parseFloat(r.VALOR_UNITARIO || 0);
-    volume += litros;
-    if (preco > 0) {
-      valor += litros * preco;
-    } else {
-      precoCompleto = false;
+  const historico = baseRegistrosMensais.filter(r =>
+    r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO <= mesLimite
+  );
+
+  // Volume mensal por competência
+  const volPorMes = {};
+  historico.forEach(r => {
+    const m = r.MES_ANO;
+    if (m) {
+      volPorMes[m] = (volPorMes[m] || 0) + parseFloat(r.VOLUME_CICLO || 0);
     }
   });
 
+  const vigenciaInput = document.getElementById('campoTratativaVigencia')?.value || '';
+  const mesVigencia = vigenciaInput ? vigenciaInput.substring(0, 7) : mesLimite;
+
+  // Busca meses cheios antes da vigência do bloqueio
+  const mesesAnteriores = Object.keys(volPorMes)
+    .filter(m => m < mesVigencia && volPorMes[m] > 0)
+    .sort()
+    .reverse();
+
+  let volumeReferencia = 0;
+  let rotuloMes = '';
+
+  if (mesesAnteriores.length > 0) {
+    const mesesAmostra = mesesAnteriores.slice(0, 3);
+    const somaVol = mesesAmostra.reduce((acc, m) => acc + volPorMes[m], 0);
+    volumeReferencia = somaVol / mesesAmostra.length;
+    rotuloMes = mesesAmostra.length === 1 
+      ? mesesAmostra[0] 
+      : `${mesesAmostra[mesesAmostra.length - 1]} a ${mesesAmostra[0]}`;
+  } else {
+    // Fallback: último mês com volume registado
+    const mesesComConsumo = Object.keys(volPorMes).filter(m => volPorMes[m] > 0).sort();
+    const ultMes = mesesComConsumo[mesesComConsumo.length - 1] || '';
+    volumeReferencia = ultMes ? volPorMes[ultMes] : 0;
+    rotuloMes = ultMes;
+  }
+
+  // Preço de origem: obtém o último valor unitário na bomba registado até ao limite
+  let ultCiclo = null;
+  historico.forEach(r => {
+    const p = parseFloat(r.VALOR_UNITARIO || 0);
+    if (p > 0 && (!ultCiclo || (r.DATA_FIM_CICLO || '') > (ultCiclo.DATA_FIM_CICLO || ''))) {
+      ultCiclo = r;
+    }
+  });
+
+  const ultimoPagoBomba = ultCiclo ? parseFloat(ultCiclo.VALOR_UNITARIO || 0) : 0;
+  
+  // Se o gestor preencheu uma proposta de aumento do balcão, esse é o preço a evitar; caso contrário, é o último pago na bomba
+  const precoPropostoInput = parseFloat(document.getElementById('campoTratativaPrecoProposto')?.value || 0);
+  const precoFugaOrigem = precoPropostoInput > ultimoPagoBomba 
+    ? precoPropostoInput 
+    : (ultimoPagoBomba > 0 ? ultimoPagoBomba : (postoAtivoTratativa?.precoMedio || 0));
+
   return {
-    mes,
-    volume,
-    preco: volume > 0 && precoCompleto ? valor / volume : 0
+    mes: rotuloMes,
+    volume: volumeReferencia,
+    preco: precoFugaOrigem
   };
 }
 
@@ -860,8 +903,27 @@ function obterPrecoAcordadoDestinoTratativa(nomePosto, uf, mesLimite) {
     acordos.push({ preco: precoInformado, vigencia: vigenciaInformada, data: new Date().toISOString() });
   }
 
+  // Ordena por vigência decrescente
   acordos.sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
-  return acordos[0]?.preco || 0;
+  
+  // Se não houver acordo de mesa gravado, resgata o último pago histórico no destino
+  if (acordos.length > 0 && acordos[0]?.preco > 0) {
+    return acordos[0].preco;
+  }
+
+  if (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) {
+    const regsDestino = baseRegistrosMensais.filter(r => r.POSTO === nomePosto && r.UF_POSTO === uf && r.MES_ANO <= mesLimite);
+    let ultReg = null;
+    regsDestino.forEach(r => {
+      const p = parseFloat(r.VALOR_UNITARIO || 0);
+      if (p > 0 && (!ultReg || (r.DATA_FIM_CICLO || '') > (ultReg.DATA_FIM_CICLO || ''))) {
+        ultReg = r;
+      }
+    });
+    if (ultReg) return parseFloat(ultReg.VALOR_UNITARIO || 0);
+  }
+
+  return 0;
 }
 
 // 9. Cálculo em tempo real do Spread, Cost Avoidance e Saving Projetado (Sem inventar números)
@@ -940,14 +1002,16 @@ function calcularSpreadTempoReal() {
 
       lblTitulo.innerText = "Saving por Realocação de Rota";
       if (referencia.volume > 0 && referencia.preco > 0 && precoDestino > 0) {
-        const savingTotal = (referencia.preco - precoDestino) * referencia.volume;
-        const mesFmt = referencia.mes.split('-').reverse().join('/');
-        lblDesc.innerHTML = `${Math.round(referencia.volume).toLocaleString('pt-BR')} L de ${mesFmt}: R$ ${referencia.preco.toFixed(3)}/L na origem e R$ ${precoDestino.toFixed(3)}/L no destino.`;
+        const diffUnitario = referencia.preco - precoDestino;
+        const savingTotal = diffUnitario * referencia.volume;
+        const rotuloFmt = referencia.mes.includes('-') ? referencia.mes.split('-').reverse().join('/') : referencia.mes;
+
+        lblDesc.innerHTML = `Base de <strong>${Math.round(referencia.volume).toLocaleString('pt-BR')} L/mês</strong> (${rotuloFmt}): Preço evitado na origem R$ ${referencia.preco.toFixed(3)}/L vs. R$ ${precoDestino.toFixed(3)}/L no destino.`;
         valSpread.innerText = `${savingTotal >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingTotal)).toLocaleString('pt-BR')}`;
         valSpread.className = `valor-destaque-spread ${savingTotal >= 0 ? 'text-success' : 'text-danger'}`;
         lblSub.innerText = savingTotal >= 0 ? "Saving mensal projetado" : "Acréscimo mensal projetado";
       } else {
-        lblDesc.innerText = "Informe um acordo vigente no destino; também é necessário haver volume e preço reais na origem.";
+        lblDesc.innerText = "Informe um acordo vigente no destino; também é necessário haver volume e preço de fuga na origem.";
         valSpread.innerText = "Não calculado";
         valSpread.className = "valor-destaque-spread text-muted";
         lblSub.innerText = "Dados reais insuficientes";
@@ -1068,6 +1132,7 @@ async function salvarTratativaFirestore(event) {
   const postoDestinoUf = optDestino?.dataset.uf || postoAtivoTratativa.uf;
   const precoDestinoNegociado = parseFloat(document.getElementById('campoPrecoPostoDestino').value) || 0;
   const vigenciaPrecoDestino = document.getElementById('campoVigenciaPrecoDestino').value || '';
+
   if (status === 'POSTO_BLOQUEADO' && !postoDestino) {
     alert('Selecione o posto destino para registrar o bloqueio.');
     return;
@@ -1179,6 +1244,7 @@ async function salvarTratativaFirestore(event) {
   let fichaMaisRecenteDestino = null;
   let acordoDestinoGravado = false;
   let decisaoOrigemGravada = false;
+
   if (status === 'POSTO_BLOQUEADO' && precoDestinoNegociado > 0 && vigenciaPrecoDestino) {
     const docIdDestino = gerarDocumentIdPosto(postoDestino, postoDestinoUf);
     const tratDestino = mapaTratativasCadastradas[docIdDestino] || {};
