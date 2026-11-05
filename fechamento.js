@@ -6,7 +6,7 @@
 
 const FIRESTORE_BASE_DOSSIE = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/fechamentos_dossie";
 
-let mesFechamentoAtivo = "2026-10";
+let mesFechamentoAtivo = null;
 let cacheDossieMes = {};
 let graficoEvolucaoInstancia = null;
 
@@ -216,7 +216,9 @@ async function renderizarAbaFechamentoExecutivo() {
   }
 
   const mesesDisponiveis = [...new Set(baseRegistrosMensais.map(r => r.MES_ANO).filter(Boolean))].sort().reverse();
-  if (mesesDisponiveis.length > 0 && !mesesDisponiveis.includes(mesFechamentoAtivo)) {
+  
+  // Resolução dinâmica: seleciona o mês mais recente da base caso não haja seleção ou o mês ativo não exista
+  if (mesesDisponiveis.length > 0 && (!mesFechamentoAtivo || !mesesDisponiveis.includes(mesFechamentoAtivo))) {
     mesFechamentoAtivo = mesesDisponiveis[0];
   }
 
@@ -827,7 +829,6 @@ function renderizarGraficoEvolucaoSavings() {
       const v = parseFloat(r.VOLUME_CICLO || 0);
       const p = parseFloat(r.VALOR_UNITARIO || 0);
       const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : null;
-      // AUDITORIA ESTRITA: apenas o mês real do registro, sem fallbacks para meses aleatórios
       const refAnp = (anpUf && anpUf[m]) ? anpUf[m] : 0;
 
       volumeMes += v;
@@ -952,7 +953,6 @@ function renderizarGraficoEvolucaoSavings() {
 
 /**
  * Motor de Cálculo Matemático e Agrupamento da Competência
- * (Com conformidade temporal estrita, sem estimativas ocultas e sem fallbacks de datas descoladas)
  */
 function calcularMetricasFechamento(mesAlvo) {
   const regsMes = baseRegistrosMensais.filter(r => r.MES_ANO === mesAlvo);
@@ -970,7 +970,6 @@ function calcularMetricasFechamento(mesAlvo) {
     valorTotalGastoMes += vt;
 
     const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[r.UF_POSTO]) ? anpRevenda[r.UF_POSTO] : null;
-    // AUDITORIA ESTRITA: somente se existir o mês alvo exato
     const refAnp = (anpUf && anpUf[mesAlvo]) ? anpUf[mesAlvo] : 0;
     if (refAnp > 0 && p > 0 && p < refAnp) {
       hardSavingTotalMes += ((refAnp - p) * v);
@@ -1040,7 +1039,6 @@ function calcularMetricasFechamento(mesAlvo) {
     const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPosto]) ? anpRevenda[ufPosto] : null;
     const refAnp = (anpUf && anpUf[mesAlvo]) ? anpUf[mesAlvo] : 0;
 
-    // TRAVA TEMPORAL: O acordo precisa existir e estar vigente no mês
     const acordoJaVigia = mesVigencia && (mesAlvo >= mesVigencia);
 
     if (volPostoMes > 0 && precoAcordado > 0 && acordoJaVigia) {
@@ -1066,7 +1064,6 @@ function calcularMetricasFechamento(mesAlvo) {
         }
       }
 
-      // IDENTIFICAÇÃO DE FUROS: Somente se o posto cobrar acima do combinado no período pós-vigência
       const gapAcordo = (ultimoPrecoBomba - precoAcordado);
       if (gapAcordo > 0.005) {
         postosComFuro.push({
@@ -1114,7 +1111,6 @@ function calcularMetricasFechamento(mesAlvo) {
       const ufDestino = trat.posto_destino_uf || ufPosto;
       const mesTransicao = mesVigencia || mesAlvo;
 
-      // 1. Registros e Litragens históricas da Origem
       const historicoOrigem = baseRegistrosMensais.filter(r =>
         r.POSTO === nomePosto && r.UF_POSTO === ufPosto
       );
@@ -1127,7 +1123,6 @@ function calcularMetricasFechamento(mesAlvo) {
         }
       });
 
-      // Volume de referência: Média dos meses cheios anteriores à manobra
       const mesesAnterioresAoBloqueio = Object.keys(volPorMesOrigem)
         .filter(m => m < mesTransicao && volPorMesOrigem[m] > 0)
         .sort()
@@ -1150,7 +1145,6 @@ function calcularMetricasFechamento(mesAlvo) {
         rotuloPeriodoVolume = ultMes ? `Litragem em ${ultMes.split('-').reverse().join('/')}` : 'Volume residual';
       }
 
-      // 2. Preço Real Pago na Origem no Mês da Transição
       const regsOrigemMesTransicao = historicoOrigem.filter(r => r.MES_ANO === mesTransicao);
       let vOrigemMes = 0;
       let vtOrigemMes = 0;
@@ -1162,7 +1156,6 @@ function calcularMetricasFechamento(mesAlvo) {
 
       let precoOrigem = vOrigemMes > 0 ? (vtOrigemMes / vOrigemMes) : 0;
 
-      // Fallback para último preço na bomba se não houve faturamento no mês do corte
       if (precoOrigem === 0) {
         let ultCicloOrigem = null;
         historicoOrigem.filter(r => r.MES_ANO <= mesTransicao).forEach(r => {
@@ -1174,7 +1167,6 @@ function calcularMetricasFechamento(mesAlvo) {
         precoOrigem = ultCicloOrigem ? parseFloat(ultCicloOrigem.VALOR_UNITARIO || 0) : (trat.preco_acordado || 0);
       }
 
-      // 3. Preço Real Pago no Destino NO MESMO MÊS DA TRANSIÇÃO
       const historicoDestino = baseRegistrosMensais.filter(r =>
         r.POSTO === trat.posto_destino && r.UF_POSTO === ufDestino
       );
@@ -1190,7 +1182,6 @@ function calcularMetricasFechamento(mesAlvo) {
 
       let precoDestino = vDestinoMes > 0 ? (vtDestinoMes / vDestinoMes) : 0;
 
-      // Se não houve faturamento do destino no mês da transição, busca acordo cadastrado na época
       if (precoDestino === 0) {
         const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufDestino)];
         const acordosDestinoNaEpoca = (tratDestino?.historico || []).filter(h =>
@@ -1213,7 +1204,6 @@ function calcularMetricasFechamento(mesAlvo) {
         }
       }
 
-      // 4. Cálculo do Saving Líquido
       const diffUnitario = (precoOrigem > 0 && precoDestino > 0) ? (precoOrigem - precoDestino) : null;
       const savingProjetado = diffUnitario !== null ? (diffUnitario * volumeReferencia) : 0;
       const volumeFmt = Math.round(volumeReferencia).toLocaleString('pt-BR');
