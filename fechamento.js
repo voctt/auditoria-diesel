@@ -763,7 +763,7 @@ function renderizarCardsVitrineTatica(acoes) {
           <strong class="text-white small d-block mb-1">${a.titulo}</strong>
           <div class="text-white-50" style="font-size: 0.72rem; line-height: 1.35;">${a.descricao}</div>
         </div>
-        <div class="mt-2 pt-1 border-top border-secondary font-monospace fw-bold text-success" style="font-size: 0.70rem;">
+        <div class="mt-2 pt-1 border-top border-secondary font-monospace fw-bold ${a.impacto.includes('-') ? 'text-danger' : 'text-success'}" style="font-size: 0.70rem;">
           ${a.impacto}
         </div>
       </div>
@@ -920,7 +920,7 @@ function renderizarGraficoEvolucaoSavings() {
 }
 
 /**
- * Motor de Cálculo Matemático e Agrupamento da Competência (Blindado Contra Anacronismos)
+ * Motor de Cálculo Matemático e Agrupamento da Competência (Blindado Contra Anacronismos e Distorções)
  */
 function calcularMetricasFechamento(mesAlvo) {
   const regsMes = baseRegistrosMensais.filter(r => r.MES_ANO === mesAlvo);
@@ -1074,13 +1074,14 @@ function calcularMetricasFechamento(mesAlvo) {
       });
     }
 
-    // MANOBRA DE ROTA (Vigente na competência com números reais)
+    // MANOBRA DE ROTA (Vigente na competência com apuração real de litragem e preço de fuga)
     if (trat.status === 'POSTO_BLOQUEADO' && trat.posto_destino && acordoJaVigia) {
       const ufDestino = trat.posto_destino_uf || ufPosto;
       const tratDestino = mapaTrat[gerarDocumentIdPosto(trat.posto_destino, ufDestino)];
       const acordosDestinoVigentes = (tratDestino?.historico || []).filter(h =>
         h.status === 'ACORDO_FECHADO' && h.preco > 0 && h.vigencia && h.vigencia.substring(0, 7) <= mesAlvo
       ).sort((a, b) => (b.vigencia || '').localeCompare(a.vigencia || '') || (b.data || '').localeCompare(a.data || ''));
+      
       const acordoDestinoVigente = acordosDestinoVigentes[0] || (
         !tratDestino?.historico?.length && tratDestino?.status === 'ACORDO_FECHADO' && tratDestino.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesAlvo
           ? { preco: tratDestino.preco_acordado, vigencia: tratDestino.vigencia }
@@ -1088,53 +1089,82 @@ function calcularMetricasFechamento(mesAlvo) {
       );
       const precoDestino = parseFloat(acordoDestinoVigente?.preco || 0);
 
+      // Histórico completo do posto origem até o mês alvo
       const historicoOrigem = baseRegistrosMensais.filter(r =>
         r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO <= mesAlvo
       );
-      const mesesComVolume = [...new Set(historicoOrigem
-        .filter(r => parseFloat(r.VOLUME_CICLO || 0) > 0)
-        .map(r => r.MES_ANO)
-      )].sort();
-      const mesVolumeReferencia = mesesComVolume[mesesComVolume.length - 1] || '';
-      const registrosVolumeReferencia = historicoOrigem.filter(r => r.MES_ANO === mesVolumeReferencia);
-      let volumeReferencia = 0;
-      let valorOrigemReferencia = 0;
-      let precoOrigemCompleto = registrosVolumeReferencia.length > 0;
 
-      registrosVolumeReferencia.forEach(r => {
-        const volume = parseFloat(r.VOLUME_CICLO || 0);
-        const preco = parseFloat(r.VALOR_UNITARIO || 0);
-        if (volume > 0) {
-          volumeReferencia += volume;
-          if (preco > 0) {
-            valorOrigemReferencia += volume * preco;
-          } else {
-            precoOrigemCompleto = false;
-          }
+      // Volume mensal por competência
+      const volPorMesOrigem = {};
+      historicoOrigem.forEach(r => {
+        const m = r.MES_ANO;
+        if (m) {
+          volPorMesOrigem[m] = (volPorMesOrigem[m] || 0) + parseFloat(r.VOLUME_CICLO || 0);
         }
       });
 
-      const precoOrigem = volumeReferencia > 0 && precoOrigemCompleto
-        ? valorOrigemReferencia / volumeReferencia
-        : 0;
+      // Se o bloqueio ocorreu dentro do mês alvo ou anterior, buscar meses cheios ativos antes do bloqueio
+      const mesesAnterioresAoBloqueio = Object.keys(volPorMesOrigem)
+        .filter(m => m < mesVigencia && volPorMesOrigem[m] > 0)
+        .sort()
+        .reverse();
+
+      let volumeReferencia = 0;
+      let rotuloPeriodoVolume = "";
+
+      if (mesesAnterioresAoBloqueio.length > 0) {
+        const mesesAmostra = mesesAnterioresAoBloqueio.slice(0, 3);
+        const somaVolumeAmostra = mesesAmostra.reduce((acc, m) => acc + volPorMesOrigem[m], 0);
+        volumeReferencia = somaVolumeAmostra / mesesAmostra.length;
+        rotuloPeriodoVolume = mesesAmostra.length === 1 
+          ? `Mês anterior (${mesesAmostra[0].split('-').reverse().join('/')})` 
+          : `Média de ${mesesAmostra.length} meses cheios anteriores`;
+      } else {
+        // Fallback caso seja posto novo sem histórico prévio ao mês do bloqueio
+        const mesesComVolume = Object.keys(volPorMesOrigem).filter(m => volPorMesOrigem[m] > 0).sort();
+        const ultMes = mesesComVolume[mesesComVolume.length - 1] || '';
+        volumeReferencia = ultMes ? volPorMesOrigem[ultMes] : 0;
+        rotuloPeriodoVolume = ultMes ? `Litragem em ${ultMes.split('-').reverse().join('/')}` : 'Volume residual';
+      }
+
+      // Preço de origem: busca o último preço pago na bomba no momento da saída (ou preço balcão pretendido)
+      let ultCicloOrigem = null;
+      historicoOrigem.forEach(r => {
+        const p = parseFloat(r.VALOR_UNITARIO || 0);
+        if (p > 0 && (!ultCicloOrigem || (r.DATA_FIM_CICLO || '') > (ultCicloOrigem.DATA_FIM_CICLO || ''))) {
+          ultCicloOrigem = r;
+        }
+      });
+
+      const ultimoPagoOrigem = ultCicloOrigem ? parseFloat(ultCicloOrigem.VALOR_UNITARIO || 0) : 0;
+      
+      // O preço evitado é a proposta de reajuste pretendida pelo posto; caso não haja, é o último valor pago na bomba
+      const precoOrigem = trat.preco_proposto > ultimoPagoOrigem 
+        ? trat.preco_proposto 
+        : (ultimoPagoOrigem > 0 ? ultimoPagoOrigem : (trat.preco_acordado || 0));
+
       const diffUnitario = precoOrigem > 0 && precoDestino > 0
         ? precoOrigem - precoDestino
         : null;
+
       const savingProjetado = diffUnitario !== null ? diffUnitario * volumeReferencia : 0;
-      const mesVolumeFmt = mesVolumeReferencia ? mesVolumeReferencia.split('-').reverse().join('/') : '';
       const volumeFmt = Math.round(volumeReferencia).toLocaleString('pt-BR');
 
       let descricaoManobra;
       let impactoManobra;
+
       if (volumeReferencia <= 0) {
-        descricaoManobra = `Sem volume histórico registrado para <strong>${nomePosto} (${ufPosto})</strong> até ${mesAlvo}.`;
+        descricaoManobra = `Sem volume histórico representativo para <strong>${nomePosto} (${ufPosto})</strong> até ${mesAlvo}.`;
         impactoManobra = 'Saving não calculado: volume real indisponível';
       } else if (diffUnitario === null) {
-        descricaoManobra = `Último volume real: <strong>${volumeFmt} L</strong> em ${mesVolumeFmt}, suspenso em <strong>${nomePosto} (${ufPosto})</strong> e destinado para <strong>${trat.posto_destino}</strong>.`;
-        impactoManobra = 'Saving não calculado: preço real da origem ou preço negociado vigente do destino indisponível';
+        descricaoManobra = `Volume base de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}), suspenso em <strong>${nomePosto} (${ufPosto})</strong> e destinado para <strong>${trat.posto_destino}</strong>.`;
+        impactoManobra = 'Saving não calculado: preço de fuga da origem ou preço acordado no destino indisponível';
       } else {
         const vigenciaDestinoFmt = acordoDestinoVigente.vigencia.split('-').reverse().join('/');
-        descricaoManobra = `Volume real de <strong>${volumeFmt} L</strong> (${mesVolumeFmt}) projetado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${trat.posto_destino} (${ufDestino})</strong>; preço médio pago na origem R$ ${precoOrigem.toFixed(3)}/L e preço negociado vigente no destino R$ ${precoDestino.toFixed(3)}/L desde ${vigenciaDestinoFmt}.`;
+        const tipoPrecoOrigemDesc = trat.preco_proposto > ultimoPagoOrigem ? 'preço pretendido evitado' : 'último preço na bomba';
+
+        descricaoManobra = `Volume de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}) realocado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${trat.posto_destino} (${ufDestino})</strong>; ${tipoPrecoOrigemDesc} R$ ${precoOrigem.toFixed(3)}/L vs. preço negociado no destino R$ ${precoDestino.toFixed(3)}/L desde ${vigenciaDestinoFmt}.`;
+        
         const tipoImpacto = savingProjetado >= 0 ? 'Economia Mensal Projetada' : 'Acréscimo Mensal Projetado';
         impactoManobra = `${savingProjetado >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingProjetado)).toLocaleString('pt-BR')} de ${tipoImpacto}`;
       }
