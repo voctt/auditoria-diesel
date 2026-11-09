@@ -1095,7 +1095,7 @@ function renderizarResumoAnualPosto(postos) {
   const limiteMes = agora.getMonth() + 1;
   const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const meses = nomesMeses.slice(0, limiteMes);
-  const dadosMes = meses.map(() => ({ litros: 0, valor: 0 }));
+  const dadosMes = meses.map(() => ({ litros: 0, valor: 0, somaPrecos: 0, qtdPrecos: 0 }));
 
   const registrosAno = baseRegistrosMensais.filter(registro => {
     const mes = String(registro.MES_ANO || registro.DATA_FIM_CICLO || '').slice(0, 7);
@@ -1116,20 +1116,29 @@ function renderizarResumoAnualPosto(postos) {
     const precoUnitario = parseFloat(registro.VALOR_UNITARIO || 0) || 0;
     dadosMes[indiceMes].litros += litros;
     dadosMes[indiceMes].valor += valorInformado > 0 ? valorInformado : litros * precoUnitario;
+    const precoCiclo = precoUnitario || (litros > 0 && valorInformado > 0 ? valorInformado / litros : 0);
+    if (precoCiclo > 0) {
+      dadosMes[indiceMes].somaPrecos += precoCiclo;
+      dadosMes[indiceMes].qtdPrecos += 1;
+    }
   });
 
   const totalLitros = dadosMes.reduce((total, mes) => total + mes.litros, 0);
   const totalValor = dadosMes.reduce((total, mes) => total + mes.valor, 0);
-  const precoMedio = totalLitros > 0 ? totalValor / totalLitros : 0;
   const formatarReais = (valor, casas = 2) => Number(valor || 0).toLocaleString('pt-BR', {
     minimumFractionDigits: casas,
     maximumFractionDigits: casas
   });
+  const formatarCompacto = valor => {
+    const absoluto = Math.abs(valor);
+    if (absoluto >= 1000000) return `${(valor / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
+    if (absoluto >= 1000) return `${(valor / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`;
+    return Math.round(valor).toLocaleString('pt-BR');
+  };
 
   document.getElementById('resumoPostoAnualNome').textContent = posto.NOME_EXIBICAO || posto.POSTO;
   document.getElementById('resumoPostoAnualAno').textContent = `Ano vigente: ${ano}`;
   document.getElementById('resumoPostoAnualLitros').textContent = `${Math.round(totalLitros).toLocaleString('pt-BR')} L`;
-  document.getElementById('resumoPostoAnualPreco').textContent = `R$ ${formatarReais(precoMedio, 3)}`;
   document.getElementById('resumoPostoAnualTotal').textContent = `R$ ${formatarReais(totalValor)}`;
 
   const tratativaPosto = typeof obterTratativaPosto === 'function'
@@ -1138,11 +1147,26 @@ function renderizarResumoAnualPosto(postos) {
   const historicoTratativas = Array.isArray(tratativaPosto?.historico) && tratativaPosto.historico.length
     ? tratativaPosto.historico
     : (tratativaPosto ? [tratativaPosto] : []);
+  const obterDataRegistro = tratativa => {
+    const valorData = String(tratativa.data || '');
+    if (/^\d{4}-\d{2}-\d{2}T/.test(valorData)) {
+      const dataLocal = new Date(valorData);
+      if (Number.isFinite(dataLocal.getTime())) {
+        const anoLocal = dataLocal.getFullYear();
+        const mesLocal = String(dataLocal.getMonth() + 1).padStart(2, '0');
+        const diaLocal = String(dataLocal.getDate()).padStart(2, '0');
+        return `${anoLocal}-${mesLocal}-${diaLocal}`;
+      }
+    }
+    const dataRegistro = valorData.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(dataRegistro)
+      ? dataRegistro
+      : String(tratativa.vigencia || '').slice(0, 10);
+  };
   const tratativasAno = historicoTratativas.filter(tratativa => {
-    const vigencia = String(tratativa.vigencia || '').slice(0, 10);
-    const mes = vigencia.slice(0, 7);
-    const numeroMes = parseInt(vigencia.slice(5, 7), 10);
-    return vigencia.startsWith(`${ano}-`) && numeroMes > 0 && numeroMes <= limiteMes && meses[ numeroMes - 1 ] && mes;
+    const dataRegistro = obterDataRegistro(tratativa);
+    const numeroMes = parseInt(dataRegistro.slice(5, 7), 10);
+    return dataRegistro.startsWith(`${ano}-`) && numeroMes > 0 && numeroMes <= limiteMes && meses[numeroMes - 1];
   });
 
   const escaparHtml = valor => {
@@ -1152,15 +1176,22 @@ function renderizarResumoAnualPosto(postos) {
   };
   const tratativasPorMes = new Map();
   tratativasAno.forEach(tratativa => {
-    const mesIndice = parseInt(String(tratativa.vigencia).slice(5, 7), 10) - 1;
+    const mesIndice = parseInt(obterDataRegistro(tratativa).slice(5, 7), 10) - 1;
     if (!tratativasPorMes.has(mesIndice)) tratativasPorMes.set(mesIndice, []);
     tratativasPorMes.get(mesIndice).push(tratativa);
   });
   const pontosTratativas = [...tratativasPorMes.entries()].map(([mesIndice, tratativas]) => {
     const tratativa = tratativas[0];
     const precoRegistrado = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
-    const precoMes = dadosMes[mesIndice].litros > 0 ? dadosMes[mesIndice].valor / dadosMes[mesIndice].litros : 0;
+    const precoMes = dadosMes[mesIndice].qtdPrecos > 0 ? dadosMes[mesIndice].somaPrecos / dadosMes[mesIndice].qtdPrecos : 0;
     return { x: meses[mesIndice], y: precoRegistrado || precoMes, tratativas };
+  });
+  const tabelaAnp = posto.TIPO_OPERACAO === 'INTERNO' ? anpDistribuicao : anpRevenda;
+  const anpUf = tabelaAnp?.[posto.UF_POSTO] || {};
+  const dadosAnpMes = meses.map((_, indice) => {
+    const mesChave = `${ano}-${String(indice + 1).padStart(2, '0')}`;
+    const precoAnp = parseFloat(anpUf[mesChave] || 0);
+    return precoAnp > 0 ? precoAnp : null;
   });
 
   if (resumoPostoAnualChartInstance) {
@@ -1170,7 +1201,7 @@ function renderizarResumoAnualPosto(postos) {
 
   secao.style.display = 'block';
   containerGrafico.innerHTML = '';
-  if (totalLitros <= 0 && tratativasAno.length === 0) {
+  if (totalLitros <= 0 && totalValor <= 0 && tratativasAno.length === 0) {
     containerGrafico.innerHTML = '<div class="text-center text-muted small py-5">Sem registros do posto no ano vigente.</div>';
     return;
   }
@@ -1178,7 +1209,9 @@ function renderizarResumoAnualPosto(postos) {
   const opcoes = {
     series: [
       { name: 'Volume (L)', type: 'column', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? Math.round(mes.litros) : null })) },
-      { name: 'Preço médio', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? mes.valor / mes.litros : null })) },
+      { name: 'Total abastecido (R$)', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.valor > 0 ? mes.valor : null })) },
+      { name: 'Custo médio (R$/L)', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.qtdPrecos > 0 ? mes.somaPrecos / mes.qtdPrecos : null })) },
+      { name: 'Média ANP (R$/L)', type: 'line', data: dadosAnpMes.map((valor, indice) => ({ x: meses[indice], y: valor })) },
       { name: 'Tratativas', type: 'scatter', data: pontosTratativas }
     ],
     chart: {
@@ -1189,17 +1222,30 @@ function renderizarResumoAnualPosto(postos) {
       fontFamily: 'inherit',
       parentHeightOffset: 0
     },
-    colors: ['#94a3b8', '#15803d', '#eab308'],
+    colors: ['#94a3b8', '#ea580c', '#15803d', '#475569', '#eab308'],
     plotOptions: { bar: { columnWidth: '42%', borderRadius: 3 } },
-    stroke: { curve: 'smooth', width: [0, 3, 0] },
-    markers: { size: [0, 4, 8], strokeColors: ['#94a3b8', '#15803d', '#ffffff'], strokeWidth: 2, hover: { sizeOffset: 3 } },
+    stroke: { curve: 'smooth', width: [0, 3, 3, 2, 0], dashArray: [0, 0, 0, 5, 0] },
+    markers: { size: [0, 4, 4, 3, 8], strokeColors: ['#94a3b8', '#ea580c', '#15803d', '#475569', '#ffffff'], strokeWidth: 2, hover: { sizeOffset: 3 } },
     dataLabels: {
       enabled: true,
-      enabledOnSeries: [2],
-      formatter: () => '!',
-      offsetY: -10,
-      style: { fontSize: '12px', fontWeight: 800, colors: ['#92400e'] },
-      background: { enabled: true, foreColor: '#92400e', borderRadius: 10, padding: 3, borderWidth: 1, borderColor: '#eab308', opacity: 1 }
+      enabledOnSeries: [0, 1, 2, 4],
+      formatter: (valor, opcoes) => {
+        if (opcoes.seriesIndex === 4) return '!';
+        if (valor === null || valor === undefined || !Number.isFinite(Number(valor))) return '';
+        const larguraGrafico = Number(opcoes.w.globals.gridWidth || 0);
+        if (opcoes.seriesIndex === 0) {
+          const litros = larguraGrafico >= 1000 ? Math.round(valor).toLocaleString('pt-BR') : formatarCompacto(valor);
+          return `${litros} L`;
+        }
+        if (opcoes.seriesIndex === 1) {
+          const gasto = larguraGrafico >= 1000 ? formatarReais(valor, 0) : formatarCompacto(valor);
+          return `R$ ${gasto}`;
+        }
+        return `R$ ${formatarReais(valor, 3)}`;
+      },
+      offsetY: -8,
+      style: { fontSize: '10px', fontWeight: 700, colors: ['#334155', '#c2410c', '#15803d', '#475569', '#92400e'] },
+      background: { enabled: true, foreColor: '#ffffff', borderRadius: 2, padding: 2, borderWidth: 0, opacity: 0.82 }
     },
     xaxis: {
       type: 'category',
@@ -1210,9 +1256,9 @@ function renderizarResumoAnualPosto(postos) {
     },
     yaxis: [
       {
-        seriesName: ['Preço médio', 'Tratativas'],
+        seriesName: ['Custo médio (R$/L)', 'Média ANP (R$/L)', 'Tratativas'],
         min: 0,
-        title: { text: 'Preço médio (R$/L)' },
+        title: { text: 'Custo médio (R$/L)' },
         labels: { formatter: valor => `R$ ${formatarReais(valor, 2)}` }
       },
       {
@@ -1221,9 +1267,17 @@ function renderizarResumoAnualPosto(postos) {
         min: 0,
         title: { text: 'Volume (L)' },
         labels: { formatter: valor => Math.round(valor).toLocaleString('pt-BR') }
+      },
+      {
+        seriesName: 'Total abastecido (R$)',
+        opposite: true,
+        offsetX: 50,
+        min: 0,
+        title: { text: 'Total (R$)' },
+        labels: { formatter: valor => `R$ ${formatarCompacto(valor)}` }
       }
     ],
-    grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 8, right: 8 } },
+    grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 8, right: 64, top: 16 } },
     legend: { position: 'top', horizontalAlign: 'right', markers: { radius: 8 } },
     tooltip: {
       shared: false,
@@ -1234,12 +1288,13 @@ function renderizarResumoAnualPosto(postos) {
         const mes = escaparHtml(ponto.x || meses[dataPointIndex] || '');
         if (serie.name === 'Tratativas') {
           const detalhes = (ponto.tratativas || []).map((tratativa, indiceTratativa) => {
+            const dataRegistro = obterDataRegistro(tratativa).split('-').reverse().join('/') || 'Sem data';
             const vigencia = String(tratativa.vigencia || '').slice(0, 10).split('-').reverse().join('/') || 'Sem data';
             const status = escaparHtml(String(tratativa.status || 'Sem status').replace(/_/g, ' '));
             const preco = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
             const notas = tratativa.notas ? `<div class="mt-1">${escaparHtml(tratativa.notas).replace(/\n/g, '<br>')}</div>` : '';
             const separador = indiceTratativa > 0 ? 'mt-2 pt-2 border-top' : '';
-            return `<div class="${separador}"><div>Vigência: ${escaparHtml(vigencia)}</div><div>Status: ${status}</div>${preco > 0 ? `<div>Preço: R$ ${formatarReais(preco, 3)}</div>` : ''}${notas}</div>`;
+            return `<div class="${separador}"><div>Registrada em: ${escaparHtml(dataRegistro)}</div><div>Vigência: ${escaparHtml(vigencia)}</div><div>Status: ${status}</div>${preco > 0 ? `<div>Preço: R$ ${formatarReais(preco, 3)}</div>` : ''}${notas}</div>`;
           }).join('');
           return `<div class="p-2 small"><strong>Tratativas • ${mes}</strong>${detalhes}</div>`;
         }
@@ -1247,7 +1302,9 @@ function renderizarResumoAnualPosto(postos) {
         const valor = typeof ponto === 'number' ? ponto : Number(ponto.y || 0);
         const valorFormatado = serie.name === 'Volume (L)'
           ? `${Math.round(valor).toLocaleString('pt-BR')} L`
-          : `R$ ${formatarReais(valor, 3)}/L`;
+          : serie.name === 'Total abastecido (R$)'
+            ? `R$ ${formatarReais(valor, 2)}`
+            : `R$ ${formatarReais(valor, 3)}/L`;
         return `<div class="p-2 small"><strong>${mes}</strong><div>${escaparHtml(serie.name)}: ${valorFormatado}</div></div>`;
       }
     },
