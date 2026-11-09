@@ -321,7 +321,15 @@
             <div class="font-monospace fw-bold" id="resumoPostoAnualTotal">--</div>
           </div>
         </div>
-        <div id="graficoResumoPostoAnual" role="img" aria-label="Gráfico anual de litros, valores totais, custo médio e tratativas do posto"></div>
+        <div class="d-flex flex-nowrap justify-content-between align-items-center gap-3 py-2 mb-1 border-bottom small" id="legendaResumoPostoAnual" aria-label="Legenda dos gráficos anuais" style="overflow-x: auto; white-space: nowrap;">
+          <span class="d-inline-flex align-items-center gap-2 flex-shrink-0"><span style="display: block; flex: 0 0 18px; height: 8px; background: #94a3b8; border-radius: 2px;"></span>Litros</span>
+          <span class="d-inline-flex align-items-center gap-2 flex-shrink-0"><span style="display: block; flex: 0 0 18px; border-top: 3px solid #ea580c;"></span>Total abastecido</span>
+          <span class="d-inline-flex align-items-center gap-2 flex-shrink-0"><span style="display: block; flex: 0 0 18px; border-top: 3px solid #15803d;"></span>Custo médio do posto</span>
+          <span class="d-inline-flex align-items-center gap-2 flex-shrink-0"><span style="display: block; flex: 0 0 18px; border-top: 2px dashed #475569;"></span>Média ANP da UF</span>
+          <span class="d-inline-flex align-items-center gap-2 flex-shrink-0"><span class="d-inline-flex align-items-center justify-content-center rounded-circle text-dark fw-bold" style="flex: 0 0 16px; height: 16px; background: #facc15; font-size: 0.65rem;">!</span>Tratativa</span>
+        </div>
+        <div id="graficoResumoCustos" role="img" aria-label="Gráfico mensal do custo médio do posto e da ANP"></div>
+        <div id="graficoResumoVolumes" role="img" aria-label="Gráfico mensal de litros abastecidos e valor total"></div>
       </div>
     </div>
 

@@ -1069,19 +1069,24 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
   });
 }
 
-let resumoPostoAnualChartInstance = null;
+let resumoPostoAnualChartInstances = [];
 
 function renderizarResumoAnualPosto(postos) {
   const secao = document.getElementById('resumoPostoAnual');
-  const containerGrafico = document.getElementById('graficoResumoPostoAnual');
-  if (!secao || !containerGrafico) return;
+  const containerCustos = document.getElementById('graficoResumoCustos');
+  const containerVolumes = document.getElementById('graficoResumoVolumes');
+  if (!secao || !containerCustos || !containerVolumes) return;
+
+  const destruirGraficos = () => {
+    resumoPostoAnualChartInstances.forEach(grafico => {
+      try { grafico.destroy(); } catch (e) {}
+    });
+    resumoPostoAnualChartInstances = [];
+  };
 
   const ocultarResumo = () => {
     secao.style.display = 'none';
-    if (resumoPostoAnualChartInstance) {
-      try { resumoPostoAnualChartInstance.destroy(); } catch (e) {}
-      resumoPostoAnualChartInstance = null;
-    }
+    destruirGraficos();
   };
 
   if (!postoFiltrado || !postos.length || typeof ApexCharts === 'undefined') {
@@ -1194,58 +1199,122 @@ function renderizarResumoAnualPosto(postos) {
     return precoAnp > 0 ? precoAnp : null;
   });
 
-  if (resumoPostoAnualChartInstance) {
-    try { resumoPostoAnualChartInstance.destroy(); } catch (e) {}
-    resumoPostoAnualChartInstance = null;
-  }
+  destruirGraficos();
 
   secao.style.display = 'block';
-  containerGrafico.innerHTML = '';
-  if (totalLitros <= 0 && totalValor <= 0 && tratativasAno.length === 0) {
-    containerGrafico.innerHTML = '<div class="text-center text-muted small py-5">Sem registros do posto no ano vigente.</div>';
+  containerCustos.innerHTML = '';
+  containerVolumes.innerHTML = '';
+  const temDadosAnp = dadosAnpMes.some(valor => valor !== null);
+  if (totalLitros <= 0 && totalValor <= 0 && tratativasAno.length === 0 && !temDadosAnp) {
+    containerCustos.innerHTML = '<div class="text-center text-muted small py-4">Sem registros do posto no ano vigente.</div>';
     return;
   }
 
-  const opcoes = {
+  const tooltipCusto = ({ seriesIndex, dataPointIndex, w }) => {
+    const serie = w.config.series[seriesIndex];
+    const ponto = serie.data[dataPointIndex] || {};
+    const mes = escaparHtml(ponto.x || meses[dataPointIndex] || '');
+    if (serie.name === 'Tratativas') {
+      const detalhes = (ponto.tratativas || []).map((tratativa, indiceTratativa) => {
+        const dataRegistro = obterDataRegistro(tratativa).split('-').reverse().join('/') || 'Sem data';
+        const vigencia = String(tratativa.vigencia || '').slice(0, 10).split('-').reverse().join('/') || 'Sem data';
+        const status = escaparHtml(String(tratativa.status || 'Sem status').replace(/_/g, ' '));
+        const preco = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
+        const notas = tratativa.notas ? `<div class="mt-1">${escaparHtml(tratativa.notas).replace(/\n/g, '<br>')}</div>` : '';
+        const separador = indiceTratativa > 0 ? 'mt-2 pt-2 border-top' : '';
+        return `<div class="${separador}"><div>Registrada em: ${escaparHtml(dataRegistro)}</div><div>Vigência: ${escaparHtml(vigencia)}</div><div>Status: ${status}</div>${preco > 0 ? `<div>Preço: R$ ${formatarReais(preco, 3)}</div>` : ''}${notas}</div>`;
+      }).join('');
+      return `<div class="p-2 small"><strong>Tratativas • ${mes}</strong>${detalhes}</div>`;
+    }
+
+    const valor = Number(ponto.y || 0);
+    return `<div class="p-2 small"><strong>${mes}</strong><div>${escaparHtml(serie.name)}: R$ ${formatarReais(valor, 3)}/L</div></div>`;
+  };
+  const tooltipVolume = ({ seriesIndex, dataPointIndex, w }) => {
+    const serie = w.config.series[seriesIndex];
+    const ponto = serie.data[dataPointIndex] || {};
+    const mes = escaparHtml(ponto.x || meses[dataPointIndex] || '');
+    const valor = Number(ponto.y || 0);
+    const valorFormatado = serie.name === 'Litros'
+      ? `${Math.round(valor).toLocaleString('pt-BR')} L`
+      : `R$ ${formatarReais(valor, 2)}`;
+    return `<div class="p-2 small"><strong>${mes}</strong><div>${escaparHtml(serie.name)}: ${valorFormatado}</div></div>`;
+  };
+
+  const opcoesCustos = {
     series: [
-      { name: 'Volume (L)', type: 'column', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? Math.round(mes.litros) : null })) },
-      { name: 'Total abastecido (R$)', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.valor > 0 ? mes.valor : null })) },
-      { name: 'Custo médio (R$/L)', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.qtdPrecos > 0 ? mes.somaPrecos / mes.qtdPrecos : null })) },
+      { name: 'Custo médio do posto', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.qtdPrecos > 0 ? mes.somaPrecos / mes.qtdPrecos : null })) },
       { name: 'Média ANP (R$/L)', type: 'line', data: dadosAnpMes.map((valor, indice) => ({ x: meses[indice], y: valor })) },
       { name: 'Tratativas', type: 'scatter', data: pontosTratativas }
     ],
     chart: {
       type: 'line',
-      height: 310,
+      height: 190,
       toolbar: { show: false },
       animations: { enabled: false },
       fontFamily: 'inherit',
       parentHeightOffset: 0
     },
-    colors: ['#94a3b8', '#ea580c', '#15803d', '#475569', '#eab308'],
-    plotOptions: { bar: { columnWidth: '42%', borderRadius: 3 } },
-    stroke: { curve: 'smooth', width: [0, 3, 3, 2, 0], dashArray: [0, 0, 0, 5, 0] },
-    markers: { size: [0, 4, 4, 3, 8], strokeColors: ['#94a3b8', '#ea580c', '#15803d', '#475569', '#ffffff'], strokeWidth: 2, hover: { sizeOffset: 3 } },
+    colors: ['#15803d', '#475569', '#eab308'],
+    stroke: { curve: 'smooth', width: [3, 2, 0], dashArray: [0, 5, 0] },
+    markers: { size: [3, 3, 8], strokeColors: ['#15803d', '#475569', '#ffffff'], strokeWidth: 2, hover: { sizeOffset: 3 } },
     dataLabels: {
       enabled: true,
-      enabledOnSeries: [0, 1, 2, 4],
+      enabledOnSeries: [0, 2],
       formatter: (valor, opcoes) => {
-        if (opcoes.seriesIndex === 4) return '!';
-        if (valor === null || valor === undefined || !Number.isFinite(Number(valor))) return '';
+        if (opcoes.seriesIndex === 2) return '!';
+        return valor === null || valor === undefined ? '' : `R$ ${formatarReais(valor, 3)}`;
+      },
+      offsetY: -7,
+      style: { fontSize: '10px', fontWeight: 600, colors: ['#166534', '#475569', '#92400e'] },
+      background: { enabled: true, foreColor: '#ffffff', borderRadius: 3, padding: 3, borderWidth: 0, opacity: 0.46 }
+    },
+    xaxis: {
+      type: 'category',
+      categories: meses,
+      labels: { show: false },
+      axisBorder: { show: false },
+      axisTicks: { show: false }
+    },
+    yaxis: { labels: { show: false }, title: { text: undefined } },
+    grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 12, right: 12, top: 16, bottom: 0 } },
+    legend: { show: false },
+    tooltip: { shared: false, intersect: true, custom: tooltipCusto },
+    noData: { text: 'Sem dados de custo para o ano vigente' }
+  };
+
+  const opcoesVolumes = {
+    series: [
+      { name: 'Litros', type: 'column', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? Math.round(mes.litros) : null })) },
+      { name: 'Total abastecido', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.valor > 0 ? mes.valor : null })) }
+    ],
+    chart: {
+      type: 'line',
+      height: 230,
+      toolbar: { show: false },
+      animations: { enabled: false },
+      fontFamily: 'inherit',
+      parentHeightOffset: 0
+    },
+    colors: ['#94a3b8', '#ea580c'],
+    plotOptions: { bar: { columnWidth: '34%', borderRadius: 3 } },
+    stroke: { curve: 'smooth', width: [0, 3] },
+    markers: { size: [0, 3], strokeColors: ['#94a3b8', '#ea580c'], strokeWidth: 2, hover: { sizeOffset: 3 } },
+    dataLabels: {
+      enabled: true,
+      formatter: (valor, opcoes) => {
+        if (valor === null || valor === undefined) return '';
         const larguraGrafico = Number(opcoes.w.globals.gridWidth || 0);
         if (opcoes.seriesIndex === 0) {
           const litros = larguraGrafico >= 1000 ? Math.round(valor).toLocaleString('pt-BR') : formatarCompacto(valor);
           return `${litros} L`;
         }
-        if (opcoes.seriesIndex === 1) {
-          const gasto = larguraGrafico >= 1000 ? formatarReais(valor, 0) : formatarCompacto(valor);
-          return `R$ ${gasto}`;
-        }
-        return `R$ ${formatarReais(valor, 3)}`;
+        const total = larguraGrafico >= 1000 ? formatarReais(valor, 0) : formatarCompacto(valor);
+        return `R$ ${total}`;
       },
-      offsetY: -8,
-      style: { fontSize: '10px', fontWeight: 700, colors: ['#334155', '#c2410c', '#15803d', '#475569', '#92400e'] },
-      background: { enabled: true, foreColor: '#ffffff', borderRadius: 2, padding: 2, borderWidth: 0, opacity: 0.82 }
+      offsetY: -7,
+      style: { fontSize: '10px', fontWeight: 600, colors: ['#475569', '#c2410c'] },
+      background: { enabled: true, foreColor: '#ffffff', borderRadius: 3, padding: 3, borderWidth: 0, opacity: 0.46 }
     },
     xaxis: {
       type: 'category',
@@ -1256,63 +1325,28 @@ function renderizarResumoAnualPosto(postos) {
     },
     yaxis: [
       {
-        seriesName: ['Custo médio (R$/L)', 'Média ANP (R$/L)', 'Tratativas'],
-        min: 0,
-        title: { text: 'Custo médio (R$/L)' },
-        labels: { formatter: valor => `R$ ${formatarReais(valor, 2)}` }
+        seriesName: 'Litros',
+        labels: { show: false },
+        title: { text: undefined }
       },
       {
-        seriesName: 'Volume (L)',
+        seriesName: 'Total abastecido',
         opposite: true,
-        min: 0,
-        title: { text: 'Volume (L)' },
-        labels: { formatter: valor => Math.round(valor).toLocaleString('pt-BR') }
-      },
-      {
-        seriesName: 'Total abastecido (R$)',
-        opposite: true,
-        offsetX: 50,
-        min: 0,
-        title: { text: 'Total (R$)' },
-        labels: { formatter: valor => `R$ ${formatarCompacto(valor)}` }
+        labels: { show: false },
+        title: { text: undefined }
       }
     ],
-    grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 8, right: 64, top: 16 } },
-    legend: { position: 'top', horizontalAlign: 'right', markers: { radius: 8 } },
-    tooltip: {
-      shared: false,
-      intersect: true,
-      custom: ({ seriesIndex, dataPointIndex, w }) => {
-        const serie = w.config.series[seriesIndex];
-        const ponto = serie.data[dataPointIndex] || {};
-        const mes = escaparHtml(ponto.x || meses[dataPointIndex] || '');
-        if (serie.name === 'Tratativas') {
-          const detalhes = (ponto.tratativas || []).map((tratativa, indiceTratativa) => {
-            const dataRegistro = obterDataRegistro(tratativa).split('-').reverse().join('/') || 'Sem data';
-            const vigencia = String(tratativa.vigencia || '').slice(0, 10).split('-').reverse().join('/') || 'Sem data';
-            const status = escaparHtml(String(tratativa.status || 'Sem status').replace(/_/g, ' '));
-            const preco = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
-            const notas = tratativa.notas ? `<div class="mt-1">${escaparHtml(tratativa.notas).replace(/\n/g, '<br>')}</div>` : '';
-            const separador = indiceTratativa > 0 ? 'mt-2 pt-2 border-top' : '';
-            return `<div class="${separador}"><div>Registrada em: ${escaparHtml(dataRegistro)}</div><div>Vigência: ${escaparHtml(vigencia)}</div><div>Status: ${status}</div>${preco > 0 ? `<div>Preço: R$ ${formatarReais(preco, 3)}</div>` : ''}${notas}</div>`;
-          }).join('');
-          return `<div class="p-2 small"><strong>Tratativas • ${mes}</strong>${detalhes}</div>`;
-        }
-
-        const valor = typeof ponto === 'number' ? ponto : Number(ponto.y || 0);
-        const valorFormatado = serie.name === 'Volume (L)'
-          ? `${Math.round(valor).toLocaleString('pt-BR')} L`
-          : serie.name === 'Total abastecido (R$)'
-            ? `R$ ${formatarReais(valor, 2)}`
-            : `R$ ${formatarReais(valor, 3)}/L`;
-        return `<div class="p-2 small"><strong>${mes}</strong><div>${escaparHtml(serie.name)}: ${valorFormatado}</div></div>`;
-      }
-    },
+    grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 12, right: 12, top: 14, bottom: 0 } },
+    legend: { show: false },
+    tooltip: { shared: false, intersect: true, custom: tooltipVolume },
     noData: { text: 'Sem dados para o ano vigente' }
   };
 
-  resumoPostoAnualChartInstance = new ApexCharts(containerGrafico, opcoes);
-  resumoPostoAnualChartInstance.render();
+  resumoPostoAnualChartInstances = [
+    new ApexCharts(containerCustos, opcoesCustos),
+    new ApexCharts(containerVolumes, opcoesVolumes)
+  ];
+  resumoPostoAnualChartInstances.forEach(grafico => grafico.render());
 }
 
 function filtrarTabelaTexto() {
