@@ -1260,7 +1260,7 @@ function renderizarResumoAnualPosto(postos) {
     markers: { size: [3, 3, 8], strokeColors: ['#15803d', '#475569', '#ffffff'], strokeWidth: 2, hover: { sizeOffset: 3 } },
     dataLabels: {
       enabled: true,
-      enabledOnSeries: [0, 2],
+      enabledOnSeries: [0, 1, 2],
       formatter: (valor, opcoes) => {
         if (opcoes.seriesIndex === 2) return '!';
         return valor === null || valor === undefined ? '' : `R$ ${formatarReais(valor, 3)}`;
