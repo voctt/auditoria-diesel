@@ -1240,9 +1240,25 @@ function renderizarResumoAnualPosto(postos) {
     return `<div class="p-2 small"><strong>${mes}</strong><div>${escaparHtml(serie.name)}: ${valorFormatado}</div></div>`;
   };
 
+  const custosMediosPosto = dadosMes.map(mes => mes.litros > 0 ? mes.valorCiclo / mes.litros : null);
+  const valoresEscalaPreco = [
+    ...custosMediosPosto,
+    ...dadosAnpMes,
+    ...pontosTratativas.map(ponto => ponto.y)
+  ].filter(valor => Number.isFinite(valor) && valor > 0);
+  const precoEscalaMin = valoresEscalaPreco.length > 0
+    ? Math.max(0, Math.floor(Math.min(...valoresEscalaPreco) * 2) / 2)
+    : 0;
+  const precoEscalaMaxCalculado = valoresEscalaPreco.length > 0
+    ? Math.ceil(Math.max(...valoresEscalaPreco) * 2) / 2
+    : 1;
+  const precoEscalaMax = precoEscalaMaxCalculado > precoEscalaMin
+    ? precoEscalaMaxCalculado
+    : precoEscalaMin + 0.5;
+
   const opcoesCustos = {
     series: [
-      { name: 'Custo médio do posto', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? mes.valorCiclo / mes.litros : null })) },
+      { name: 'Custo médio do posto', type: 'line', data: custosMediosPosto.map((valor, indice) => ({ x: meses[indice], y: valor })) },
       { name: 'Média ANP (R$/L)', type: 'line', data: dadosAnpMes.map((valor, indice) => ({ x: meses[indice], y: valor })) },
       { name: 'Tratativas', type: 'line', data: pontosTratativas }
     ],
@@ -1279,15 +1295,19 @@ function renderizarResumoAnualPosto(postos) {
     yaxis: [
       {
         seriesName: 'Custo médio do posto',
+        min: precoEscalaMin,
+        max: precoEscalaMax,
         tickAmount: 4,
-        labels: { show: true, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
+        labels: { show: true, minWidth: 64, maxWidth: 64, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
         title: { text: 'Custo médio (R$/L)' }
       },
       {
         seriesName: 'Média ANP (R$/L)',
         opposite: true,
+        min: precoEscalaMin,
+        max: precoEscalaMax,
         tickAmount: 4,
-        labels: { show: true, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
+        labels: { show: true, minWidth: 80, maxWidth: 80, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
         title: { text: 'Média ANP (R$/L)' }
       }
     ],
@@ -1341,14 +1361,14 @@ function renderizarResumoAnualPosto(postos) {
       {
         seriesName: 'Litros',
         tickAmount: 4,
-        labels: { show: true, formatter: valor => `${formatarCompacto(valor)} L` },
+        labels: { show: true, minWidth: 64, maxWidth: 64, formatter: valor => `${formatarCompacto(valor)} L` },
         title: { text: 'Volume (L)' }
       },
       {
         seriesName: 'Total abastecido',
         opposite: true,
         tickAmount: 4,
-        labels: { show: true, formatter: valor => `R$ ${formatarCompacto(valor)}` },
+        labels: { show: true, minWidth: 80, maxWidth: 80, formatter: valor => `R$ ${formatarCompacto(valor)}` },
         title: { text: 'Total (R$)' }
       }
     ],
