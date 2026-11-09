@@ -1100,7 +1100,7 @@ function renderizarResumoAnualPosto(postos) {
   const limiteMes = agora.getMonth() + 1;
   const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const meses = nomesMeses.slice(0, limiteMes);
-  const dadosMes = meses.map(() => ({ litros: 0, valor: 0, somaPrecos: 0, qtdPrecos: 0 }));
+  const dadosMes = meses.map(() => ({ litros: 0, valor: 0, valorCiclo: 0 }));
 
   const registrosAno = baseRegistrosMensais.filter(registro => {
     const mes = String(registro.MES_ANO || registro.DATA_FIM_CICLO || '').slice(0, 7);
@@ -1121,11 +1121,7 @@ function renderizarResumoAnualPosto(postos) {
     const precoUnitario = parseFloat(registro.VALOR_UNITARIO || 0) || 0;
     dadosMes[indiceMes].litros += litros;
     dadosMes[indiceMes].valor += valorInformado > 0 ? valorInformado : litros * precoUnitario;
-    const precoCiclo = precoUnitario || (litros > 0 && valorInformado > 0 ? valorInformado / litros : 0);
-    if (precoCiclo > 0) {
-      dadosMes[indiceMes].somaPrecos += precoCiclo;
-      dadosMes[indiceMes].qtdPrecos += 1;
-    }
+    dadosMes[indiceMes].valorCiclo += valorInformado;
   });
 
   const totalLitros = dadosMes.reduce((total, mes) => total + mes.litros, 0);
@@ -1191,7 +1187,7 @@ function renderizarResumoAnualPosto(postos) {
     if (tratativas.length === 0) return { x: mes, y: null, tratativas: [] };
     const tratativa = tratativas[0];
     const precoRegistrado = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
-    const precoMes = dadosMes[mesIndice].qtdPrecos > 0 ? dadosMes[mesIndice].somaPrecos / dadosMes[mesIndice].qtdPrecos : 0;
+    const precoMes = dadosMes[mesIndice].litros > 0 ? dadosMes[mesIndice].valorCiclo / dadosMes[mesIndice].litros : 0;
     return { x: mes, y: precoRegistrado || precoMes, tratativas };
   });
   const tabelaAnp = posto.TIPO_OPERACAO === 'INTERNO' ? anpDistribuicao : anpRevenda;
@@ -1246,7 +1242,7 @@ function renderizarResumoAnualPosto(postos) {
 
   const opcoesCustos = {
     series: [
-      { name: 'Custo médio do posto', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.qtdPrecos > 0 ? mes.somaPrecos / mes.qtdPrecos : null })) },
+      { name: 'Custo médio do posto', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? mes.valorCiclo / mes.litros : null })) },
       { name: 'Média ANP (R$/L)', type: 'line', data: dadosAnpMes.map((valor, indice) => ({ x: meses[indice], y: valor })) },
       { name: 'Tratativas', type: 'line', data: pontosTratativas }
     ],
