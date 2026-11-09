@@ -302,6 +302,31 @@
           Buscando histórico consolidado KMM e referências ANP...
         </div>
       </div>
+
+      <div id="resumoPostoAnual" class="mt-2 px-3 pt-3 border-top" style="display: none;">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+          <div>
+            <h6 class="fw-bold mb-1"><i class="bi bi-graph-up me-1 text-success"></i>Resumo anual do posto</h6>
+            <div class="small text-muted" id="resumoPostoAnualNome"></div>
+          </div>
+          <span class="badge bg-light text-secondary border" id="resumoPostoAnualAno"></span>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-4">
+            <div class="small text-muted text-uppercase" style="font-size: 0.62rem;">Litros no ano</div>
+            <div class="font-monospace fw-bold" id="resumoPostoAnualLitros">--</div>
+          </div>
+          <div class="col-4">
+            <div class="small text-muted text-uppercase" style="font-size: 0.62rem;">Preço médio ponderado</div>
+            <div class="font-monospace fw-bold text-success" id="resumoPostoAnualPreco">--</div>
+          </div>
+          <div class="col-4">
+            <div class="small text-muted text-uppercase" style="font-size: 0.62rem;">Total abastecido</div>
+            <div class="font-monospace fw-bold" id="resumoPostoAnualTotal">--</div>
+          </div>
+        </div>
+        <div id="graficoResumoPostoAnual" role="img" aria-label="Gráfico anual de volume, preço médio e tratativas do posto"></div>
+      </div>
     </div>
 
     <!-- SEÇÃO 2: ROTEIRIZADOR DE POSTOS LEAFLET -->

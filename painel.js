@@ -662,6 +662,7 @@ function processarPainel() {
   renderizarSparklineVolumeCard(mesesDisponiveis, registrosModo);
   atualizarCardsExtremosSemPonderada(registros, mesSel);
   renderizarTermometroPostos(listaPostos, mesesDisponiveis);
+  renderizarResumoAnualPosto(listaPostos);
 
   if (typeof atualizarCoresMiniMapa === 'function') atualizarCoresMiniMapa();
 }
@@ -1066,6 +1067,195 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     sparkChart.render();
     sparklineInstances[chartDomId] = sparkChart;
   });
+}
+
+let resumoPostoAnualChartInstance = null;
+
+function renderizarResumoAnualPosto(postos) {
+  const secao = document.getElementById('resumoPostoAnual');
+  const containerGrafico = document.getElementById('graficoResumoPostoAnual');
+  if (!secao || !containerGrafico) return;
+
+  const ocultarResumo = () => {
+    secao.style.display = 'none';
+    if (resumoPostoAnualChartInstance) {
+      try { resumoPostoAnualChartInstance.destroy(); } catch (e) {}
+      resumoPostoAnualChartInstance = null;
+    }
+  };
+
+  if (!postoFiltrado || !postos.length || typeof ApexCharts === 'undefined') {
+    ocultarResumo();
+    return;
+  }
+
+  const posto = postos.find(p => p.POSTO === postoFiltrado) || postos[0];
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const limiteMes = agora.getMonth() + 1;
+  const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const meses = nomesMeses.slice(0, limiteMes);
+  const dadosMes = meses.map(() => ({ litros: 0, valor: 0 }));
+
+  const registrosAno = baseRegistrosMensais.filter(registro => {
+    const mes = String(registro.MES_ANO || registro.DATA_FIM_CICLO || '').slice(0, 7);
+    return registro.POSTO === posto.POSTO &&
+      registro.UF_POSTO === posto.UF_POSTO &&
+      registro.TIPO_OPERACAO === posto.TIPO_OPERACAO &&
+      (posto.TIPO_OPERACAO !== 'INTERNO' || registro.MUNICIPIO_POSTO === posto.MUNICIPIO_POSTO) &&
+      mes.startsWith(`${ano}-`);
+  });
+
+  registrosAno.forEach(registro => {
+    const mes = String(registro.MES_ANO || registro.DATA_FIM_CICLO || '').slice(0, 7);
+    const indiceMes = parseInt(mes.slice(5, 7), 10) - 1;
+    if (indiceMes < 0 || indiceMes >= limiteMes) return;
+
+    const litros = parseFloat(registro.VOLUME_CICLO || 0) || 0;
+    const valorInformado = parseFloat(registro.VALOR_TOTAL_CICLO || 0) || 0;
+    const precoUnitario = parseFloat(registro.VALOR_UNITARIO || 0) || 0;
+    dadosMes[indiceMes].litros += litros;
+    dadosMes[indiceMes].valor += valorInformado > 0 ? valorInformado : litros * precoUnitario;
+  });
+
+  const totalLitros = dadosMes.reduce((total, mes) => total + mes.litros, 0);
+  const totalValor = dadosMes.reduce((total, mes) => total + mes.valor, 0);
+  const precoMedio = totalLitros > 0 ? totalValor / totalLitros : 0;
+  const formatarReais = (valor, casas = 2) => Number(valor || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas
+  });
+
+  document.getElementById('resumoPostoAnualNome').textContent = posto.NOME_EXIBICAO || posto.POSTO;
+  document.getElementById('resumoPostoAnualAno').textContent = `Ano vigente: ${ano}`;
+  document.getElementById('resumoPostoAnualLitros').textContent = `${Math.round(totalLitros).toLocaleString('pt-BR')} L`;
+  document.getElementById('resumoPostoAnualPreco').textContent = `R$ ${formatarReais(precoMedio, 3)}`;
+  document.getElementById('resumoPostoAnualTotal').textContent = `R$ ${formatarReais(totalValor)}`;
+
+  const tratativaPosto = typeof obterTratativaPosto === 'function'
+    ? obterTratativaPosto(posto.POSTO, posto.UF_POSTO)
+    : null;
+  const historicoTratativas = Array.isArray(tratativaPosto?.historico) && tratativaPosto.historico.length
+    ? tratativaPosto.historico
+    : (tratativaPosto ? [tratativaPosto] : []);
+  const tratativasAno = historicoTratativas.filter(tratativa => {
+    const vigencia = String(tratativa.vigencia || '').slice(0, 10);
+    const mes = vigencia.slice(0, 7);
+    const numeroMes = parseInt(vigencia.slice(5, 7), 10);
+    return vigencia.startsWith(`${ano}-`) && numeroMes > 0 && numeroMes <= limiteMes && meses[ numeroMes - 1 ] && mes;
+  });
+
+  const escaparHtml = valor => {
+    const elemento = document.createElement('span');
+    elemento.textContent = String(valor ?? '');
+    return elemento.innerHTML;
+  };
+  const tratativasPorMes = new Map();
+  tratativasAno.forEach(tratativa => {
+    const mesIndice = parseInt(String(tratativa.vigencia).slice(5, 7), 10) - 1;
+    if (!tratativasPorMes.has(mesIndice)) tratativasPorMes.set(mesIndice, []);
+    tratativasPorMes.get(mesIndice).push(tratativa);
+  });
+  const pontosTratativas = [...tratativasPorMes.entries()].map(([mesIndice, tratativas]) => {
+    const tratativa = tratativas[0];
+    const precoRegistrado = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
+    const precoMes = dadosMes[mesIndice].litros > 0 ? dadosMes[mesIndice].valor / dadosMes[mesIndice].litros : 0;
+    return { x: meses[mesIndice], y: precoRegistrado || precoMes, tratativas };
+  });
+
+  if (resumoPostoAnualChartInstance) {
+    try { resumoPostoAnualChartInstance.destroy(); } catch (e) {}
+    resumoPostoAnualChartInstance = null;
+  }
+
+  secao.style.display = 'block';
+  containerGrafico.innerHTML = '';
+  if (totalLitros <= 0 && tratativasAno.length === 0) {
+    containerGrafico.innerHTML = '<div class="text-center text-muted small py-5">Sem registros do posto no ano vigente.</div>';
+    return;
+  }
+
+  const opcoes = {
+    series: [
+      { name: 'Volume (L)', type: 'column', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? Math.round(mes.litros) : null })) },
+      { name: 'Preço médio', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.litros > 0 ? mes.valor / mes.litros : null })) },
+      { name: 'Tratativas', type: 'scatter', data: pontosTratativas }
+    ],
+    chart: {
+      type: 'line',
+      height: 310,
+      toolbar: { show: false },
+      animations: { enabled: false },
+      fontFamily: 'inherit',
+      parentHeightOffset: 0
+    },
+    colors: ['#94a3b8', '#15803d', '#eab308'],
+    plotOptions: { bar: { columnWidth: '42%', borderRadius: 3 } },
+    stroke: { curve: 'smooth', width: [0, 3, 0] },
+    markers: { size: [0, 4, 8], strokeColors: ['#94a3b8', '#15803d', '#ffffff'], strokeWidth: 2, hover: { sizeOffset: 3 } },
+    dataLabels: {
+      enabled: true,
+      enabledOnSeries: [2],
+      formatter: () => '!',
+      offsetY: -10,
+      style: { fontSize: '12px', fontWeight: 800, colors: ['#92400e'] },
+      background: { enabled: true, foreColor: '#92400e', borderRadius: 10, padding: 3, borderWidth: 1, borderColor: '#eab308', opacity: 1 }
+    },
+    xaxis: {
+      type: 'category',
+      categories: meses,
+      labels: { rotate: 0, trim: false },
+      axisBorder: { color: '#e2e8f0' },
+      axisTicks: { color: '#e2e8f0' }
+    },
+    yaxis: [
+      {
+        seriesName: ['Preço médio', 'Tratativas'],
+        min: 0,
+        title: { text: 'Preço médio (R$/L)' },
+        labels: { formatter: valor => `R$ ${formatarReais(valor, 2)}` }
+      },
+      {
+        seriesName: 'Volume (L)',
+        opposite: true,
+        min: 0,
+        title: { text: 'Volume (L)' },
+        labels: { formatter: valor => Math.round(valor).toLocaleString('pt-BR') }
+      }
+    ],
+    grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 8, right: 8 } },
+    legend: { position: 'top', horizontalAlign: 'right', markers: { radius: 8 } },
+    tooltip: {
+      shared: false,
+      intersect: true,
+      custom: ({ seriesIndex, dataPointIndex, w }) => {
+        const serie = w.config.series[seriesIndex];
+        const ponto = serie.data[dataPointIndex] || {};
+        const mes = escaparHtml(ponto.x || meses[dataPointIndex] || '');
+        if (serie.name === 'Tratativas') {
+          const detalhes = (ponto.tratativas || []).map((tratativa, indiceTratativa) => {
+            const vigencia = String(tratativa.vigencia || '').slice(0, 10).split('-').reverse().join('/') || 'Sem data';
+            const status = escaparHtml(String(tratativa.status || 'Sem status').replace(/_/g, ' '));
+            const preco = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
+            const notas = tratativa.notas ? `<div class="mt-1">${escaparHtml(tratativa.notas).replace(/\n/g, '<br>')}</div>` : '';
+            const separador = indiceTratativa > 0 ? 'mt-2 pt-2 border-top' : '';
+            return `<div class="${separador}"><div>Vigência: ${escaparHtml(vigencia)}</div><div>Status: ${status}</div>${preco > 0 ? `<div>Preço: R$ ${formatarReais(preco, 3)}</div>` : ''}${notas}</div>`;
+          }).join('');
+          return `<div class="p-2 small"><strong>Tratativas • ${mes}</strong>${detalhes}</div>`;
+        }
+
+        const valor = typeof ponto === 'number' ? ponto : Number(ponto.y || 0);
+        const valorFormatado = serie.name === 'Volume (L)'
+          ? `${Math.round(valor).toLocaleString('pt-BR')} L`
+          : `R$ ${formatarReais(valor, 3)}/L`;
+        return `<div class="p-2 small"><strong>${mes}</strong><div>${escaparHtml(serie.name)}: ${valorFormatado}</div></div>`;
+      }
+    },
+    noData: { text: 'Sem dados para o ano vigente' }
+  };
+
+  resumoPostoAnualChartInstance = new ApexCharts(containerGrafico, opcoes);
+  resumoPostoAnualChartInstance.render();
 }
 
 function filtrarTabelaTexto() {
