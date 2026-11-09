@@ -767,14 +767,14 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
             <span class="badge-tipo tipo-rota">ROTA</span>
             <span style="color: #334155; font-weight: 800;">${extRota.max ? extRota.max.uf : '--'}</span>
           </span>
-          <span>R$ ${extRota.max ? extRota.max.preco.toFixed(3) : '--'}</span>
+          <span>R$ ${extRota.max ? extRota.max.preco.toFixed(3).replace('.', ',') : '--'}</span>
         </div>
         <div class="kpi-val-split text-danger pt-1 mt-1" style="border-top: 1px dotted #fecaca;" title="Maior Garagem: ${extInterno.max ? extInterno.max.posto : 'ND'}">
           <span class="d-flex align-items-center gap-1">
             <span class="badge-tipo tipo-interno">GARAGEM</span>
             <span style="color: #334155; font-weight: 800;">${extInterno.max ? extInterno.max.uf : '--'}</span>
           </span>
-          <span>R$ ${extInterno.max ? extInterno.max.preco.toFixed(3) : '--'}</span>
+          <span>R$ ${extInterno.max ? extInterno.max.preco.toFixed(3).replace('.', ',') : '--'}</span>
         </div>
       `;
       if (lblMaiorSub) lblMaiorSub.innerText = mesSel === 'YTD' ? "Últimos 20 dias ativos" : "Extremos da competência";
@@ -790,14 +790,14 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
             <span class="badge-tipo tipo-rota">ROTA</span>
             <span style="color: #334155; font-weight: 800;">${extRota.min ? extRota.min.uf : '--'}</span>
           </span>
-          <span>R$ ${extRota.min ? extRota.min.preco.toFixed(3) : '--'}</span>
+          <span>R$ ${extRota.min ? extRota.min.preco.toFixed(3).replace('.', ',') : '--'}</span>
         </div>
         <div class="kpi-val-split text-success pt-1 mt-1" style="border-top: 1px dotted #bbf7d0;" title="Menor Garagem Ativa: ${extInterno.min ? extInterno.min.posto : 'ND'}">
           <span class="d-flex align-items-center gap-1">
             <span class="badge-tipo tipo-interno">GARAGEM</span>
             <span style="color: #334155; font-weight: 800;">${extInterno.min ? extInterno.min.uf : '--'}</span>
           </span>
-          <span>R$ ${extInterno.min ? extInterno.min.preco.toFixed(3) : '--'}</span>
+          <span>R$ ${extInterno.min ? extInterno.min.preco.toFixed(3).replace('.', ',') : '--'}</span>
         </div>
       `;
       if (lblMenorSub) lblMenorSub.innerText = mesSel === 'YTD' ? "Últimos 20 dias ativos" : "Extremos da competência";
@@ -814,7 +814,7 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
     if (ext.max) {
       containerMaior.innerHTML = `
         <div class="kpi-val text-danger" title="${ext.max.posto}">
-          <span style="color: #334155;">${ext.max.uf}</span> - R$ ${ext.max.preco.toFixed(3)}
+          <span style="color: #334155;">${ext.max.uf}</span> - R$ ${ext.max.preco.toFixed(3).replace('.', ',')}
         </div>
       `;
       if (lblMaiorSub) lblMaiorSub.innerText = `${rotuloTipo} • ${ext.max.posto}`;
@@ -826,7 +826,7 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
     if (ext.min) {
       containerMenor.innerHTML = `
         <div class="kpi-val text-success" title="${ext.min.posto}">
-          <span style="color: #334155;">${ext.min.uf}</span> - R$ ${ext.min.preco.toFixed(3)}
+          <span style="color: #334155;">${ext.min.uf}</span> - R$ ${ext.min.preco.toFixed(3).replace('.', ',')}
         </div>
       `;
       if (lblMenorSub) lblMenorSub.innerText = `${rotuloTipo} • ${ext.min.posto}`;
