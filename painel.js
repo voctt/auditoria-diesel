@@ -1168,10 +1168,11 @@ function renderizarResumoAnualPosto(postos) {
       ? dataRegistro
       : String(tratativa.vigencia || '').slice(0, 10);
   };
+  const obterDataVigencia = tratativa => String(tratativa.vigencia || obterDataRegistro(tratativa)).slice(0, 10);
   const tratativasAno = historicoTratativas.filter(tratativa => {
-    const dataRegistro = obterDataRegistro(tratativa);
-    const numeroMes = parseInt(dataRegistro.slice(5, 7), 10);
-    return dataRegistro.startsWith(`${ano}-`) && numeroMes > 0 && numeroMes <= limiteMes && meses[numeroMes - 1];
+    const dataVigencia = obterDataVigencia(tratativa);
+    const numeroMes = parseInt(dataVigencia.slice(5, 7), 10);
+    return dataVigencia.startsWith(`${ano}-`) && numeroMes > 0 && numeroMes <= limiteMes && meses[numeroMes - 1];
   });
 
   const escaparHtml = valor => {
@@ -1181,15 +1182,17 @@ function renderizarResumoAnualPosto(postos) {
   };
   const tratativasPorMes = new Map();
   tratativasAno.forEach(tratativa => {
-    const mesIndice = parseInt(obterDataRegistro(tratativa).slice(5, 7), 10) - 1;
+    const mesIndice = parseInt(obterDataVigencia(tratativa).slice(5, 7), 10) - 1;
     if (!tratativasPorMes.has(mesIndice)) tratativasPorMes.set(mesIndice, []);
     tratativasPorMes.get(mesIndice).push(tratativa);
   });
-  const pontosTratativas = [...tratativasPorMes.entries()].map(([mesIndice, tratativas]) => {
+  const pontosTratativas = meses.map((mes, mesIndice) => {
+    const tratativas = tratativasPorMes.get(mesIndice) || [];
+    if (tratativas.length === 0) return { x: mes, y: null, tratativas: [] };
     const tratativa = tratativas[0];
     const precoRegistrado = parseFloat(tratativa.preco || 0) || parseFloat(tratativa.preco_proposto || 0);
     const precoMes = dadosMes[mesIndice].qtdPrecos > 0 ? dadosMes[mesIndice].somaPrecos / dadosMes[mesIndice].qtdPrecos : 0;
-    return { x: meses[mesIndice], y: precoRegistrado || precoMes, tratativas };
+    return { x: mes, y: precoRegistrado || precoMes, tratativas };
   });
   const tabelaAnp = posto.TIPO_OPERACAO === 'INTERNO' ? anpDistribuicao : anpRevenda;
   const anpUf = tabelaAnp?.[posto.UF_POSTO] || {};
@@ -1245,7 +1248,7 @@ function renderizarResumoAnualPosto(postos) {
     series: [
       { name: 'Custo médio do posto', type: 'line', data: dadosMes.map((mes, indice) => ({ x: meses[indice], y: mes.qtdPrecos > 0 ? mes.somaPrecos / mes.qtdPrecos : null })) },
       { name: 'Média ANP (R$/L)', type: 'line', data: dadosAnpMes.map((valor, indice) => ({ x: meses[indice], y: valor })) },
-      { name: 'Tratativas', type: 'scatter', data: pontosTratativas }
+      { name: 'Tratativas', type: 'line', data: pontosTratativas }
     ],
     chart: {
       type: 'line',
@@ -1262,8 +1265,9 @@ function renderizarResumoAnualPosto(postos) {
       enabled: true,
       enabledOnSeries: [0, 1, 2],
       formatter: (valor, opcoes) => {
+        if (valor === null || valor === undefined) return '';
         if (opcoes.seriesIndex === 2) return '!';
-        return valor === null || valor === undefined ? '' : `R$ ${formatarReais(valor, 3)}`;
+        return `R$ ${formatarReais(valor, 3)}`;
       },
       offsetY: -7,
       style: { fontSize: '10px', fontWeight: 600, colors: ['#166534', '#475569', '#92400e'] },
@@ -1276,7 +1280,21 @@ function renderizarResumoAnualPosto(postos) {
       axisBorder: { show: false },
       axisTicks: { show: false }
     },
-    yaxis: { labels: { show: false }, title: { text: undefined } },
+    yaxis: [
+      {
+        seriesName: 'Custo médio do posto',
+        tickAmount: 4,
+        labels: { show: true, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
+        title: { text: undefined }
+      },
+      {
+        seriesName: 'Média ANP (R$/L)',
+        opposite: true,
+        tickAmount: 4,
+        labels: { show: true, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
+        title: { text: undefined }
+      }
+    ],
     grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 12, right: 12, top: 16, bottom: 0 } },
     legend: { show: false },
     tooltip: { shared: false, intersect: true, custom: tooltipCusto },
@@ -1326,13 +1344,15 @@ function renderizarResumoAnualPosto(postos) {
     yaxis: [
       {
         seriesName: 'Litros',
-        labels: { show: false },
+        tickAmount: 4,
+        labels: { show: true, formatter: valor => `${formatarCompacto(valor)} L` },
         title: { text: undefined }
       },
       {
         seriesName: 'Total abastecido',
         opposite: true,
-        labels: { show: false },
+        tickAmount: 4,
+        labels: { show: true, formatter: valor => `R$ ${formatarCompacto(valor)}` },
         title: { text: undefined }
       }
     ],
