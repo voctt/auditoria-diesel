@@ -1285,14 +1285,14 @@ function renderizarResumoAnualPosto(postos) {
         seriesName: 'Custo médio do posto',
         tickAmount: 4,
         labels: { show: true, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
-        title: { text: undefined }
+        title: { text: 'Custo médio (R$/L)' }
       },
       {
         seriesName: 'Média ANP (R$/L)',
         opposite: true,
         tickAmount: 4,
         labels: { show: true, formatter: valor => `R$ ${formatarReais(valor, 2)}` },
-        title: { text: undefined }
+        title: { text: 'Média ANP (R$/L)' }
       }
     ],
     grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 12, right: 12, top: 16, bottom: 0 } },
@@ -1346,14 +1346,14 @@ function renderizarResumoAnualPosto(postos) {
         seriesName: 'Litros',
         tickAmount: 4,
         labels: { show: true, formatter: valor => `${formatarCompacto(valor)} L` },
-        title: { text: undefined }
+        title: { text: 'Volume (L)' }
       },
       {
         seriesName: 'Total abastecido',
         opposite: true,
         tickAmount: 4,
         labels: { show: true, formatter: valor => `R$ ${formatarCompacto(valor)}` },
-        title: { text: undefined }
+        title: { text: 'Total (R$)' }
       }
     ],
     grid: { borderColor: '#e2e8f0', strokeDashArray: 3, padding: { left: 12, right: 12, top: 14, bottom: 0 } },
