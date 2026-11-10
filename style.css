@@ -111,6 +111,77 @@ body {
 .card-kpi:hover {
   transform: translateY(-2px);
 }
+#gridKpisPrincipais .card-kpi {
+  border-left: 1px solid var(--border-color) !important;
+  border-top: 3px solid var(--kpi-accent, #cbd5e1);
+  padding-top: 7px;
+}
+#gridKpisPrincipais .card-kpi-volume {
+  --kpi-accent: #1c483a;
+  background: linear-gradient(135deg, #f1f8f4 0%, #ffffff 78%);
+}
+#gridKpisPrincipais .card-kpi-media {
+  --kpi-accent: #059669;
+  background: linear-gradient(145deg, #f1faf5 0%, #ffffff 100%);
+}
+#gridKpisPrincipais .card-kpi-prioridade {
+  --kpi-accent: #ea580c;
+  background: linear-gradient(145deg, #fff7ed 0%, #ffffff 82%);
+}
+#gridKpisPrincipais .card-kpi-extremo.card-kpi-alerta {
+  --kpi-accent: #dc2626;
+  background: linear-gradient(145deg, #fff7f7 0%, #ffffff 82%);
+}
+#gridKpisPrincipais .card-kpi-extremo.card-kpi-destaque {
+  --kpi-accent: #059669;
+  background: linear-gradient(145deg, #f1faf5 0%, #ffffff 82%);
+}
+#gridKpisPrincipais .card-kpi-oficial {
+  --kpi-accent: #0284c7;
+  background: linear-gradient(145deg, #f0f9ff 0%, #ffffff 100%);
+}
+.kpi-card-icon {
+  position: relative;
+  z-index: 2;
+  color: var(--kpi-accent, #64748b);
+  font-size: 0.9rem;
+}
+.kpi-volume-pair {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.kpi-volume-item {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.kpi-metric-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.kpi-volume-item .kpi-val {
+  overflow: hidden;
+  font-size: 0.92rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kpi-volume-divider {
+  flex: 0 0 1px;
+  height: 34px;
+  background: rgba(28, 72, 58, 0.16);
+}
+#gridKpisPrincipais .card-kpi-volume .sparkline-kpi-bg {
+  opacity: 0.10;
+}
+#gridKpisPrincipais .card-kpi-media .kpi-val-grande {
+  font-size: 1.55rem;
+}
 .card-animacao-entrada {
   animation: entrada-kpi 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: var(--atraso-entrada-kpi, 0ms);
