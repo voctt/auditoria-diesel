@@ -161,7 +161,7 @@ let postoAtivoTratativa = null;
                 <h6 class="modal-title fw-bold mb-0 text-white" id="modalTratativaPostoNome">Nome do Posto</h6>
               </div>
               <div class="small text-white-50 mt-1" style="font-size: 0.70rem;" id="modalTratativaSub">
-                Município: -- | Operação: ROTA
+                Município: -- | Operação: --
               </div>
             </div>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
@@ -467,7 +467,7 @@ let listaHistoricoAtiva = [];
 let indiceRolodexAtivo = 0;
 
 // 6. Abertura do Cockpit de Decisão com agregação real calculada de VOLUME_CICLO
-async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp, ultimoPago) {
+async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp, ultimoPago, tipoOperacao = 'EXTERNO') {
   const mesFiltroAtivo = document.getElementById('filtroMesAno') ? document.getElementById('filtroMesAno').value : 'YTD';
   
   let volumeMesCalculo = 0;
@@ -476,7 +476,13 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
   let dataUltimoNaBomba = "--/--";
 
   if (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) {
-    const registrosDoPosto = baseRegistrosMensais.filter(d => d.POSTO === nomePosto && d.UF_POSTO === uf);
+    // O volume usa os ciclos do posto e operação ativos no mesmo recorte de competência do painel.
+    let registrosDoPosto = baseRegistrosMensais.filter(d =>
+      d.POSTO === nomePosto && d.UF_POSTO === uf && d.TIPO_OPERACAO === tipoOperacao
+    );
+    if (mesFiltroAtivo === 'YTD' && typeof filtrarRegistrosYtd === 'function') {
+      registrosDoPosto = filtrarRegistrosYtd(registrosDoPosto);
+    }
 
     if (mesFiltroAtivo !== 'YTD') {
       const ciclosDoMes = registrosDoPosto.filter(d => d.MES_ANO === mesFiltroAtivo);
@@ -537,6 +543,7 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
     nomePosto, 
     uf, 
     municipio, 
+    tipoOperacao,
     precoMedio: precoMedio || 0, 
     refAnp: refAnp || 0, 
     ultimoPago: ultimoPrecoNaBomba,
@@ -546,7 +553,8 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
   // Preenchimento dos dados visuais no cabeçalho
   document.getElementById('modalTratativaPostoNome').innerText = nomePosto;
   document.getElementById('modalTratativaUf').innerText = uf || '--';
-  document.getElementById('modalTratativaSub').innerText = `Município: ${municipio || 'Não Identificado'} | Operação: ROTA`;
+  const rotuloOperacao = tipoOperacao === 'INTERNO' ? 'Tanques Próprios' : 'Rota Rodoviária';
+  document.getElementById('modalTratativaSub').innerText = `Município: ${municipio || 'Não Identificado'} | Operação: ${rotuloOperacao}`;
 
   document.getElementById('modalCtxPrecoMedio').innerText = ultimoPrecoNaBomba > 0 ? `R$ ${ultimoPrecoNaBomba.toFixed(3)}` : '--';
   document.getElementById('modalCtxDataUltimo').innerText = `em ${dataUltimoNaBomba}`;

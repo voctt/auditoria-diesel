@@ -35,7 +35,7 @@ let utilizadorAutenticado = null;
 
         <div class="login-rodape-privacidade">
           <i class="bi bi-lock-fill me-1"></i> Plataforma Exclusiva &bull; Ambiente Seguro Auditado<br>
-          VOCTT Inteligência & Consultoria de Frotas &copy; 2026
+          VOCTT Inteligência & Consultoria de Frotas &copy; ${new Date().getFullYear()}
         </div>
       </div>
     </div>

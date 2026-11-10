@@ -137,7 +137,10 @@ function gerarConteudoTooltipUf(uf) {
   let regs = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
   regs = regs.filter(d => d.UF_POSTO === uf);
 
-  if (mesSel !== 'YTD') {
+  // Aplica o mesmo recorte temporal do painel para que o tooltip descreva o mapa filtrado.
+  if (mesSel === 'YTD' && typeof filtrarRegistrosYtd === 'function') {
+    regs = filtrarRegistrosYtd(regs);
+  } else if (mesSel !== 'YTD') {
     regs = regs.filter(d => d.MES_ANO === mesSel);
   }
 
@@ -146,8 +149,9 @@ function gerarConteudoTooltipUf(uf) {
   const medExterno = litExterno > 0 ? (valExterno / litExterno) : 0;
 
   if (uf === 'SP') {
-    const regsBarueri = regs.filter(d => {
-      if (d.TIPO_OPERACAO !== 'INTERNO') return false;
+    // O total inclui todos os registros internos de SP; o grupo residual evita omitir garagens.
+    const regsInternosSp = regs.filter(d => d.TIPO_OPERACAO === 'INTERNO');
+    const regsBarueri = regsInternosSp.filter(d => {
       const m = normalizarTextoComparacao(d.MUNICIPIO_POSTO);
       const p = normalizarTextoComparacao(d.POSTO);
       return m.includes('BARUERI') || p.includes('BARUERI');
@@ -156,8 +160,7 @@ function gerarConteudoTooltipUf(uf) {
     const valBarueri = regsBarueri.reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_CICLO || c.VALOR_TOTAL_MES || 0), 0);
     const medBarueri = litBarueri > 0 ? (valBarueri / litBarueri) : 0;
 
-    const regsRibeirao = regs.filter(d => {
-      if (d.TIPO_OPERACAO !== 'INTERNO') return false;
+    const regsRibeirao = regsInternosSp.filter(d => {
       const m = normalizarTextoComparacao(d.MUNICIPIO_POSTO);
       const p = normalizarTextoComparacao(d.POSTO);
       return m.includes('RIBEIRAO') || p.includes('RIBEIRAO') || p.includes('RP');
@@ -166,7 +169,17 @@ function gerarConteudoTooltipUf(uf) {
     const valRibeirao = regsRibeirao.reduce((a, c) => a + parseFloat(c.VALOR_TOTAL_CICLO || c.VALOR_TOTAL_MES || 0), 0);
     const medRibeirao = litRibeirao > 0 ? (valRibeirao / litRibeirao) : 0;
 
-    const totalSp = litBarueri + litRibeirao + litExterno;
+    const regsOutrasGaragensSp = regsInternosSp.filter(d => {
+      const municipio = normalizarTextoComparacao(d.MUNICIPIO_POSTO);
+      const posto = normalizarTextoComparacao(d.POSTO);
+      return !municipio.includes('BARUERI') && !posto.includes('BARUERI') &&
+        !municipio.includes('RIBEIRAO') && !posto.includes('RIBEIRAO') && !posto.includes('RP');
+    });
+    const litrosOutrasGaragensSp = regsOutrasGaragensSp.reduce((total, d) => total + parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0), 0);
+    const valoresOutrasGaragensSp = regsOutrasGaragensSp.reduce((total, d) => total + parseFloat(d.VALOR_TOTAL_CICLO || d.VALOR_TOTAL_MES || 0), 0);
+    const medioOutrasGaragensSp = litrosOutrasGaragensSp > 0 ? valoresOutrasGaragensSp / litrosOutrasGaragensSp : 0;
+    const litrosInternosSp = regsInternosSp.reduce((total, d) => total + parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0), 0);
+    const totalSp = litrosInternosSp + litExterno;
 
     if (totalSp === 0) {
       return `<div style="font-size:0.75rem; padding: 2px;"><strong>SP &bull; São Paulo</strong><br><span style="color:#94a3b8;">Sem movimento no período</span></div>`;
@@ -178,6 +191,7 @@ function gerarConteudoTooltipUf(uf) {
         Total: <b>${Math.round(totalSp).toLocaleString('pt-BR')} L</b><br>
         <span style="color:#86efac;">Barueri (Garagem):</span> ${Math.round(litBarueri).toLocaleString('pt-BR')} L ${medBarueri > 0 ? '(R$ ' + medBarueri.toFixed(3) + ')' : ''}<br>
         <span style="color:#86efac;">Ribeirão (Garagem):</span> ${Math.round(litRibeirao).toLocaleString('pt-BR')} L ${medRibeirao > 0 ? '(R$ ' + medRibeirao.toFixed(3) + ')' : ''}<br>
+        <span style="color:#86efac;">Outras garagens:</span> ${Math.round(litrosOutrasGaragensSp).toLocaleString('pt-BR')} L ${medioOutrasGaragensSp > 0 ? '(R$ ' + medioOutrasGaragensSp.toFixed(3) + ')' : ''}<br>
         <span style="color:#fdba74;">Rota Rodoviária:</span> ${Math.round(litExterno).toLocaleString('pt-BR')} L ${medExterno > 0 ? '(R$ ' + medExterno.toFixed(3) + ')' : ''}
       </div>
     `;
@@ -213,7 +227,10 @@ function atualizarCoresMiniMapa() {
   const mesSel = document.getElementById('filtroMesAno') ? document.getElementById('filtroMesAno').value : 'YTD';
   let regs = (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) ? baseRegistrosMensais : [];
 
-  if (mesSel !== 'YTD') {
+  // A cor e a legenda usam exclusivamente as competências do filtro ativo.
+  if (mesSel === 'YTD' && typeof filtrarRegistrosYtd === 'function') {
+    regs = filtrarRegistrosYtd(regs);
+  } else if (mesSel !== 'YTD') {
     regs = regs.filter(d => d.MES_ANO === mesSel);
   }
 
@@ -224,6 +241,7 @@ function atualizarCoresMiniMapa() {
     if (!Number.isFinite(volume)) return;
     volPorUf[d.UF_POSTO] = (volPorUf[d.UF_POSTO] || 0) + volume;
   });
+  // Normaliza apenas UFs com movimento; estados sem volume permanecem sem base.
   const volumesAtivos = Object.values(volPorUf).filter(volume => volume > 0);
   const minVolume = volumesAtivos.length ? Math.min(...volumesAtivos) : NaN;
   const maxVolume = volumesAtivos.length ? Math.max(...volumesAtivos) : NaN;

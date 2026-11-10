@@ -61,7 +61,11 @@ function atualizarCardsAuditoriaKPIs(aderenciaPerc, savingTotal, desviosQtd, mar
   const elMargem = document.getElementById('kpiAuditoriaMargemPreservada');
   const subPerda = document.getElementById('kpiAuditoriaPerdaSub');
 
-  if (elAderencia) elAderencia.innerText = `${aderenciaPerc.toFixed(1).replace('.', ',')}%`;
+  if (elAderencia) {
+    elAderencia.innerText = Number.isFinite(aderenciaPerc)
+      ? `${aderenciaPerc.toFixed(1).replace('.', ',')}%`
+      : '--%';
+  }
   if (elSaving) elSaving.innerText = `R$ ${Math.round(savingTotal).toLocaleString('pt-BR')}`;
   if (elDesvios) elDesvios.innerText = desviosQtd;
   if (elMargem) elMargem.innerText = margemPreservadaQtd;
@@ -110,8 +114,8 @@ function gerarParecerExecutivoPosto(p) {
   }
 
   if (p.tipoConformidade === 'QUEBRA') {
-    const perdaEstimada = Math.round(p.gapAcordo * p.volumeAuditado).toLocaleString('pt-BR');
-    return `Furo Comercial Imediato: O posto cobrou <strong>R$ ${precoFmt}/L</strong> (<strong>+R$ ${p.gapAcordo.toFixed(3)}/L acima do combinado</strong>) logo após o fechamento da tabela. Desvio faturado de <strong>R$ ${perdaEstimada}</strong> ${periodoTexto} passível de contestação e desconto na fatura quinzenal.`;
+    const perdaApurada = Math.round(p.perdaItem).toLocaleString('pt-BR');
+    return `Furo Comercial Imediato: O posto cobrou <strong>R$ ${precoFmt}/L</strong> (<strong>+R$ ${p.gapAcordo.toFixed(3)}/L acima do combinado</strong>) logo após o fechamento da tabela. Desvio apurado ciclo a ciclo de <strong>R$ ${perdaApurada}</strong> ${periodoTexto} passível de contestação e desconto na fatura quinzenal.`;
   }
 
   if (p.tipoConformidade === 'REAJUSTE') {
@@ -152,17 +156,11 @@ function renderizarAbaAuditoriaComercial() {
     `;
     const lblContador = document.getElementById('lblAuditoriaContador');
     if (lblContador) lblContador.innerText = "0 postos com tratativa";
-    atualizarCardsAuditoriaKPIs(0, 0, 0, 0, []);
+    atualizarCardsAuditoriaKPIs(null, 0, 0, 0, []);
     return;
   }
 
   let listaAuditoria = [];
-  let somaSavingRealizadoTotal = 0;
-  let totalAbastecimentosAuditados = 0;
-  let totalAbastecimentosConformes = 0;
-  let qtdDesviosPosVigencia = 0;
-  let qtdMargemPreservada = 0;
-  let listaPostosInfratores = [];
 
   chavesTratativas.forEach(docId => {
     const trat = mapaTrat[docId];
@@ -183,11 +181,13 @@ function renderizarAbaAuditoriaComercial() {
     // Montagem da régua multiciclos a partir do histórico do Rolodex
     let ciclosHistorico = [];
     if (Array.isArray(trat.historico) && trat.historico.length > 0) {
-      ciclosHistorico = [...trat.historico].filter(h => h.vigencia && h.preco > 0);
-      ciclosHistorico.sort((a, b) => (a.vigencia || '').localeCompare(b.vigencia || ''));
+      ciclosHistorico = [...trat.historico].filter(h => h.vigencia);
+      ciclosHistorico.sort((a, b) =>
+        (a.vigencia || '').localeCompare(b.vigencia || '') || (a.data || '').localeCompare(b.data || '')
+      );
     }
 
-    if (ciclosHistorico.length === 0 && trat.vigencia && trat.preco_acordado > 0) {
+    if (ciclosHistorico.length === 0 && trat.vigencia) {
       ciclosHistorico.push({
         vigencia: trat.vigencia,
         preco: trat.preco_acordado,
@@ -196,7 +196,9 @@ function renderizarAbaAuditoriaComercial() {
       });
     }
 
-    const dataPrimeiraVigencia = ciclosHistorico.length > 0 ? ciclosHistorico[0].vigencia : (trat.vigencia || "");
+    // A régua começa no primeiro acordo fechado; cotações e bloqueios permanecem como eventos de corte.
+    const ciclosContrato = ciclosHistorico.filter(h => h.status === 'ACORDO_FECHADO' && h.preco > 0);
+    const dataPrimeiraVigencia = ciclosContrato.length > 0 ? ciclosContrato[0].vigencia : '';
     const ultimaFichaAtiva = ciclosHistorico.length > 0 ? ciclosHistorico[ciclosHistorico.length - 1] : {
       vigencia: trat.vigencia || "",
       preco: trat.preco_acordado || 0,
@@ -211,9 +213,12 @@ function renderizarAbaAuditoriaComercial() {
     let precoBaseHistorico = 0;
     let dataPrecoBaseHistorico = "";
     let savingAcumuladoPosto = 0;
+    let perdaAcumuladaPosto = 0;
+    let abastecimentosAuditadosPosto = 0;
+    let abastecimentosConformesPosto = 0;
     let houveConsumoAuditado = false;
 
-    // Ordenação cronológica crescente para cálculo por ciclo
+    // Ordena as compras para aplicar a ficha vigente e apurar conformidade/perda por transação.
     const transacoesCrescentes = [...regsPosto].sort((a, b) => (a.DATA_FIM_CICLO || '').localeCompare(b.DATA_FIM_CICLO || ''));
 
     transacoesCrescentes.forEach(r => {
@@ -227,14 +232,8 @@ function renderizarAbaAuditoriaComercial() {
       }
 
       if (dataPrimeiraVigencia && dataCiclo >= dataPrimeiraVigencia) {
-        houveConsumoAuditado = true;
-        volumeAuditadoTotal += v;
-        if (!dataPrimeiroBombaAuditado || r.DATA_FIM_CICLO < dataPrimeiroBombaAuditado) {
-          dataPrimeiroBombaAuditado = r.DATA_FIM_CICLO;
-        }
-
-        // Localiza a tratativa válida na data exata da transação
-        let cicloVigente = ciclosHistorico[0];
+        // A ficha mais recente na data pode ser cotação/bloqueio; só acordo fechado cobre a compra.
+        let cicloVigente = null;
         for (let i = 0; i < ciclosHistorico.length; i++) {
           if (dataCiclo >= ciclosHistorico[i].vigencia) {
             cicloVigente = ciclosHistorico[i];
@@ -242,11 +241,25 @@ function renderizarAbaAuditoriaComercial() {
             break;
           }
         }
+        if (!cicloVigente || cicloVigente.status !== 'ACORDO_FECHADO' || cicloVigente.preco <= 0) return;
+
+        houveConsumoAuditado = true;
+        volumeAuditadoTotal += v;
+        if (!dataPrimeiroBombaAuditado || r.DATA_FIM_CICLO < dataPrimeiroBombaAuditado) {
+          dataPrimeiroBombaAuditado = r.DATA_FIM_CICLO;
+        }
 
         const anpUfObj = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPostoAlvo]) ? anpRevenda[ufPostoAlvo] : {};
-        const anpTransacao = anpUfObj[r.MES_ANO] || anpUfObj['2026-10'] || 0;
+        const anpTransacao = anpUfObj[r.MES_ANO] || 0;
         const precoNegociadoCiclo = cicloVigente ? cicloVigente.preco : trat.preco_acordado;
         const precoPropostoCiclo = cicloVigente ? cicloVigente.preco_proposto : (trat.preco_proposto || 0);
+
+        // Aderência conta compras; perda soma apenas o excesso efetivamente pago em cada ciclo.
+        if (precoNegociadoCiclo > 0 && p > 0 && v > 0) {
+          abastecimentosAuditadosPosto++;
+          if (p <= precoNegociadoCiclo + 0.005) abastecimentosConformesPosto++;
+          if (p > precoNegociadoCiclo) perdaAcumuladaPosto += (p - precoNegociadoCiclo) * v;
+        }
 
         // Cálculo do saving da transação
         let savingLinha = 0;
@@ -270,8 +283,8 @@ function renderizarAbaAuditoriaComercial() {
     });
 
     const anpUf = (typeof anpRevenda !== 'undefined' && anpRevenda[ufPostoAlvo]) ? anpRevenda[ufPostoAlvo] : {};
-    const mesChave = dataUltimoBomba ? dataUltimoBomba.substring(0, 7) : '2026-10';
-    const refAnpValor = anpUf[mesChave] || anpUf['2026-10'] || 0;
+    const mesChave = dataUltimoBomba ? dataUltimoBomba.substring(0, 7) : '';
+    const refAnpValor = mesChave ? (anpUf[mesChave] || 0) : 0;
 
     const precoAcordadoAtivo = ultimaFichaAtiva.preco || trat.preco_acordado || 0;
     const vigenciaAtivaStr = ultimaFichaAtiva.vigencia || trat.vigencia || "";
@@ -309,38 +322,24 @@ function renderizarAbaAuditoriaComercial() {
           statusClass = "conf-quebra";
           statusTexto = `🔴 Furo Imediato (${diasDecorridos}d)`;
           tipoConformidade = "QUEBRA";
-          qtdDesviosPosVigencia++;
-          listaPostosInfratores.push({ posto: nomePostoAlvo, gap: gapAcordo });
         } else if (diasDecorridos > 30) {
           statusClass = "conf-alerta";
           statusTexto = `🟠 Acordo Vencido (+${diasDecorridos}d) • Renovar Negociação`;
           tipoConformidade = "EXPIRADO";
-          qtdDesviosPosVigencia++;
-          listaPostosInfratores.push({ posto: nomePostoAlvo, gap: gapAcordo });
         } else if (gapAnp < -0.05) {
           statusClass = "conf-blindado";
           statusTexto = `🔵 Margem Preservada (+${diasDecorridos}d)`;
           tipoConformidade = "BLINDADO";
-          qtdMargemPreservada++;
-          totalAbastecimentosConformes++;
         } else {
           statusClass = "conf-alerta";
           statusTexto = `🟠 Reajuste em Avaliação (+${diasDecorridos}d)`;
           tipoConformidade = "REAJUSTE";
-          qtdDesviosPosVigencia++;
-          listaPostosInfratores.push({ posto: nomePostoAlvo, gap: gapAcordo });
         }
       } else {
         statusClass = "conf-ok";
         statusTexto = "🟢 Em Conformidade";
         tipoConformidade = "CONFORME";
-        totalAbastecimentosConformes++;
       }
-      totalAbastecimentosAuditados++;
-    }
-
-    if (savingAcumuladoPosto > 0) {
-      somaSavingRealizadoTotal += savingAcumuladoPosto;
     }
 
     // Formatação da régua de datas
@@ -373,6 +372,9 @@ function renderizarAbaAuditoriaComercial() {
       subLegendaPeriodo,
       volumeAuditado: (compraEhAnteriorVigencia ? 0 : volumeAuditadoTotal),
       savingItem: (compraEhAnteriorVigencia ? 0 : savingAcumuladoPosto),
+      perdaItem: (compraEhAnteriorVigencia ? 0 : perdaAcumuladaPosto),
+      abastecimentosAuditados: compraEhAnteriorVigencia ? 0 : abastecimentosAuditadosPosto,
+      abastecimentosConformes: compraEhAnteriorVigencia ? 0 : abastecimentosConformesPosto,
       notas: trat.notas || "",
       historicoTransacoes: historicoOrdenado
     });
@@ -383,14 +385,7 @@ function renderizarAbaAuditoriaComercial() {
 
   if (ufSel) listaFiltrada = listaFiltrada.filter(item => item.uf === ufSel);
   if (redeSel) {
-    if (redeSel === 'OUTROS') {
-      listaFiltrada = listaFiltrada.filter(item => {
-        const p = normalizarTexto(item.posto);
-        return !p.includes('MARAJO') && !p.startsWith('HG ') && !p.includes('SIM ') && !p.includes('GRAAL');
-      });
-    } else {
-      listaFiltrada = listaFiltrada.filter(item => normalizarTexto(item.posto).includes(redeSel));
-    }
+    listaFiltrada = listaFiltrada.filter(item => classificarRedePosto(item.posto) === redeSel);
   }
   if (statusSel) listaFiltrada = listaFiltrada.filter(item => item.tipoConformidade === statusSel);
   if (buscaTxt) {
@@ -420,8 +415,16 @@ function renderizarAbaAuditoriaComercial() {
   const lblContador = document.getElementById('lblAuditoriaContador');
   if (lblContador) lblContador.innerText = `${listaFiltrada.length} postos auditados`;
 
-  const aderenciaPerc = totalAbastecimentosAuditados > 0 ? ((totalAbastecimentosConformes / totalAbastecimentosAuditados) * 100) : 100;
-  atualizarCardsAuditoriaKPIs(aderenciaPerc, somaSavingRealizadoTotal, qtdDesviosPosVigencia, qtdMargemPreservada, listaPostosInfratores);
+  // Aderência é o percentual de transações conformes dentro dos filtros ativos.
+  // Os cards acompanham a mesma seleção aplicada à tabela, não o universo sem filtros.
+  const totalAuditadosFiltrados = listaFiltrada.reduce((total, item) => total + item.abastecimentosAuditados, 0);
+  const totalConformesFiltrados = listaFiltrada.reduce((total, item) => total + item.abastecimentosConformes, 0);
+  const savingFiltrado = listaFiltrada.reduce((total, item) => total + item.savingItem, 0);
+  const desviosFiltrados = listaFiltrada.filter(item => ['QUEBRA', 'EXPIRADO', 'REAJUSTE'].includes(item.tipoConformidade));
+  const margemFiltrada = listaFiltrada.filter(item => item.tipoConformidade === 'BLINDADO');
+  const aderenciaPerc = totalAuditadosFiltrados > 0 ? ((totalConformesFiltrados / totalAuditadosFiltrados) * 100) : null;
+  const infratoresFiltrados = desviosFiltrados.map(item => ({ posto: item.posto, gap: item.gapAcordo }));
+  atualizarCardsAuditoriaKPIs(aderenciaPerc, savingFiltrado, desviosFiltrados.length, margemFiltrada.length, infratoresFiltrados);
 
   // Atualização dos indicadores visuais (setinhas) nos cabeçalhos
   atualizarIconesOrdenacaoCabecalho();
@@ -473,9 +476,8 @@ function renderizarAbaAuditoriaComercial() {
     if (p.ehPosVigencia) {
       if (p.savingItem > 0) {
         savingHtml = `<span class="text-success fw-bold font-monospace" style="font-size:0.78rem;">+R$ ${Math.round(p.savingItem).toLocaleString('pt-BR')}</span>`;
-      } else if (p.tipoConformidade === 'QUEBRA' && p.volumeAuditado > 0) {
-        const perda = p.gapAcordo * p.volumeAuditado;
-        savingHtml = `<span class="text-danger fw-bold font-monospace" style="font-size:0.78rem;">-R$ ${Math.round(perda).toLocaleString('pt-BR')}</span>`;
+      } else if (p.perdaItem > 0) {
+        savingHtml = `<span class="text-danger fw-bold font-monospace" style="font-size:0.78rem;">-R$ ${Math.round(p.perdaItem).toLocaleString('pt-BR')}</span>`;
       }
     }
 
@@ -489,9 +491,9 @@ function renderizarAbaAuditoriaComercial() {
         const dataCicloStr = (t.DATA_FIM_CICLO || '').substring(0, 10);
         const ehPos = (p.vigencia && dataCicloStr >= p.vigencia);
         
-        const anpMes = (typeof anpRevenda !== 'undefined' && anpRevenda[p.uf] && anpRevenda[p.uf][t.MES_ANO]) 
-          ? anpRevenda[p.uf][t.MES_ANO] 
-          : p.refAnpValor;
+        const anpMes = (typeof anpRevenda !== 'undefined' && anpRevenda[p.uf] && anpRevenda[p.uf][t.MES_ANO])
+          ? anpRevenda[p.uf][t.MES_ANO]
+          : 0;
         const diffAnp = (valorUnitario > 0 && anpMes > 0) ? (valorUnitario - anpMes) : 0;
         const savingMicro = diffAnp < 0 ? Math.abs(diffAnp * lts) : 0;
 
@@ -501,7 +503,6 @@ function renderizarAbaAuditoriaComercial() {
             <td class="font-monospace text-muted">${dtFmt}</td>
             <td class="text-end font-monospace">${Math.round(lts).toLocaleString('pt-BR')} L</td>
             <td class="text-end font-monospace fw-bold text-dark">R$ ${valorUnitario.toFixed(3)}</td>
-            <td class="text-end font-monospace text-secondary">R$ ${valorUnitario.toFixed(3)}</td>
             <td class="text-end font-monospace text-primary">${anpMes > 0 ? `R$ ${anpMes.toFixed(3)}` : '--'}</td>
             <td class="text-center">${ehPos ? '<span class="badge bg-success" style="font-size:0.55rem;">PÓS-ACORDO</span>' : '<span class="badge bg-secondary" style="font-size:0.55rem;">PRÉ-ACORDO</span>'}</td>
             <td class="text-end font-monospace ${diffAnp < 0 ? 'text-success fw-bold' : 'text-danger'}">
@@ -511,7 +512,7 @@ function renderizarAbaAuditoriaComercial() {
         `;
       }).join('');
     } else {
-      linhasMicroHtml = `<tr><td colspan="8" class="text-center text-muted">Sem detalhamento transacional registrado no KMM.</td></tr>`;
+      linhasMicroHtml = `<tr><td colspan="7" class="text-center text-muted">Sem detalhamento transacional registrado no KMM.</td></tr>`;
     }
 
     const parecerTexto = gerarParecerExecutivoPosto(p);
@@ -585,8 +586,7 @@ function renderizarAbaAuditoriaComercial() {
                 <th>Competência</th>
                 <th>Última Data</th>
                 <th class="text-end">Volume Auditado</th>
-                <th class="text-end">Preço Médio</th>
-                <th class="text-end">Último Pago</th>
+                <th class="text-end">Preço Pago</th>
                 <th class="text-end">Ref. ANP Mês</th>
                 <th class="text-center">Enquadramento</th>
                 <th class="text-end">Saving Real (vs ANP)</th>

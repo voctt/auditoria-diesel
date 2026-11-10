@@ -1,6 +1,7 @@
 import io
 import os
 import json
+from datetime import datetime
 import requests
 import pandas as pd
 import firebase_admin
@@ -20,11 +21,13 @@ URL_DISTRIBUICAO_ESTADOS = (
     "pdc/semanal/combustiveis-liquidos-estados.xlsx"
 )
 
-URL_BRASIL_ANTT = (
+URL_ANP_BRASIL = (
     "https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/"
     "precos-revenda-e-de-distribuicao-combustiveis/shlp/semanal/"
     "semanal-brasil-desde-2013.xlsx"
 )
+# Limita a carga ao ano corrente; o mesmo valor identifica o documento consumido pelo painel.
+ANO_REFERENCIA = datetime.now().year
 
 MAPA_ESTADOS = {
     "ACRE": "AC", "ALAGOAS": "AL", "AMAPA": "AP", "AMAZONAS": "AM", "BAHIA": "BA",
@@ -72,7 +75,7 @@ def extrair_revenda_estados():
     df_diesel["DATA FINAL"] = pd.to_datetime(df_diesel[col_data_fim], errors="coerce")
     df_diesel = df_diesel.dropna(subset=["DATA FINAL"])
     df_diesel["MES_ANO"] = df_diesel["DATA FINAL"].dt.strftime("%Y-%m")
-    df_diesel = df_diesel[df_diesel["MES_ANO"].str.startswith("2026")].copy()
+    df_diesel = df_diesel[df_diesel["MES_ANO"].str.startswith(str(ANO_REFERENCIA))].copy()
 
     df_diesel["PRECO_NUM"] = pd.to_numeric(
         df_diesel[col_preco].astype(str).str.replace(",", "."),
@@ -114,7 +117,7 @@ def extrair_distribuicao_estados():
     df_diesel["DATA FINAL"] = pd.to_datetime(df_diesel[col_data_fim], errors="coerce")
     df_diesel = df_diesel.dropna(subset=["DATA FINAL"])
     df_diesel["MES_ANO"] = df_diesel["DATA FINAL"].dt.strftime("%Y-%m")
-    df_diesel = df_diesel[df_diesel["MES_ANO"].str.startswith("2026")].copy()
+    df_diesel = df_diesel[df_diesel["MES_ANO"].str.startswith(str(ANO_REFERENCIA))].copy()
 
     df_diesel["PRECO_NUM"] = pd.to_numeric(
         df_diesel[col_preco].astype(str).str.replace(",", "."),
@@ -138,9 +141,9 @@ def extrair_distribuicao_estados():
 
     return resultado
 
-def extrair_referencia_antt():
+def extrair_referencia_anp_brasil():
     print("Descarregando Media Brasil (ANTT)...")
-    resp = requests.get(URL_BRASIL_ANTT, headers=HEADERS, timeout=180)
+    resp = requests.get(URL_ANP_BRASIL, headers=HEADERS, timeout=180)
     resp.raise_for_status()
 
     # Cabecalho da serie Brasil esta na linha 18 (skiprows=17)
@@ -175,10 +178,10 @@ def extrair_referencia_antt():
 def executar_atualizacao():
     dados_revenda = extrair_revenda_estados()
     dados_distribuicao = extrair_distribuicao_estados()
-    dados_antt = extrair_referencia_antt()
+    dados_anp_brasil = extrair_referencia_anp_brasil()
 
     db = inicializar_firebase()
-    doc_ref = db.collection("anp_consolidada").document("mensal_2026")
+    doc_ref = db.collection("anp_consolidada").document(f"mensal_{ANO_REFERENCIA}")
 
     carga = {
         "revenda": dados_revenda,
@@ -186,8 +189,8 @@ def executar_atualizacao():
         "atualizado_em": firestore.SERVER_TIMESTAMP
     }
 
-    if dados_antt:
-        carga["referencia_antt"] = dados_antt
+    if dados_anp_brasil:
+        carga["referencia_anp_brasil"] = dados_anp_brasil
 
     print("Gravando documento consolidado no Firestore...")
     doc_ref.set(carga, merge=True)

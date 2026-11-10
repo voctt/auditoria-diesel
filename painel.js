@@ -4,7 +4,8 @@
    ========================================================================== */
 
 const WORKER_URL = "https://api-abastecimentos.klapowsko.workers.dev";
-const FIRESTORE_REST_URL = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/anp_consolidada/mensal_2026";
+// O documento ANP acompanha o ano corrente, igual ao ano processado pela rotina de atualização.
+const FIRESTORE_REST_URL = `https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/anp_consolidada/mensal_${new Date().getFullYear()}`;
 
 let baseRegistrosMensais = [];
 let dadosAnpBaseGlobal = null;
@@ -34,6 +35,28 @@ function normalizarTexto(txt) {
   return (txt || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
 }
 
+// Usa o ano da competência mais recente da base para definir o período YTD disponível.
+function obterAnoMaisRecenteBase(registros = baseRegistrosMensais) {
+  const meses = [...new Set(registros.map(d => d.MES_ANO).filter(Boolean))].sort();
+  return meses.length ? meses[meses.length - 1].slice(0, 4) : '';
+}
+
+// Retorna somente transações do ano-base; o resultado alimenta totais, gráficos e mapa.
+function filtrarRegistrosYtd(registros) {
+  const ano = obterAnoMaisRecenteBase();
+  return ano ? registros.filter(d => d.MES_ANO && d.MES_ANO.startsWith(`${ano}-`)) : [];
+}
+
+// Centraliza a classificação para que contagens e filtros produzam os mesmos grupos.
+function classificarRedePosto(nomePosto) {
+  const posto = normalizarTexto(nomePosto);
+  if (posto.includes('MARAJO')) return 'MARAJO';
+  if (posto.includes('GRAAL')) return 'GRAAL';
+  if (posto.includes('SIM ') || posto.includes('REDE SIM')) return 'SIM';
+  if (posto.startsWith('HG ') || posto.includes(' REDE HG')) return 'HG';
+  return 'OUTROS';
+}
+
 function decodificarCampoFirestore(valorBruto) {
   if (!valorBruto || typeof valorBruto !== 'object') return null;
   if ('stringValue' in valorBruto) return valorBruto.stringValue;
@@ -57,11 +80,11 @@ function identificarNomePonto(posto, municipio, uf, tipo) {
 
     if (mun.includes('BARUERI') || pos.includes('BARUERI')) return "Filial Barueri";
     if (mun.includes('RIBEIRAO') || pos.includes('RIBEIRAO') || pos.includes('RP')) return "Filial Ribeirão Preto";
-    if (mun.includes('COLOMBO') || uf === 'PR') return "Filial Colombo (Matriz)";
-    if (mun.includes('EUSEBIO') || mun.includes('FORTALEZA') || uf === 'CE') return "Filial Eusébio";
-    if (mun.includes('SIMOES') || mun.includes('SALVADOR') || uf === 'BA') return "Filial Simões Filho";
-    if (mun.includes('GOIANIA') || mun.includes('APARECIDA') || uf === 'GO') return "Filial Goiânia";
-    return `Garagem ${municipio || 'Interna'}`;
+    if (mun.includes('COLOMBO') || pos.includes('COLOMBO')) return "Filial Colombo (Matriz)";
+    if (mun.includes('EUSEBIO') || mun.includes('FORTALEZA') || pos.includes('EUSEBIO')) return "Filial Eusébio";
+    if (mun.includes('SIMOES') || mun.includes('SALVADOR') || pos.includes('SIMOES')) return "Filial Simões Filho";
+    if (mun.includes('GOIANIA') || mun.includes('APARECIDA') || pos.includes('GOIANIA')) return "Filial Goiânia";
+    return `Garagem ${municipio || posto || 'Interna'}`;
   }
   return posto || 'NÃO IDENTIFICADO';
 }
@@ -107,13 +130,13 @@ async function buscarDadosAnpFirestore() {
       if (dadosAnpBaseGlobal.revenda) anpRevenda = dadosAnpBaseGlobal.revenda;
       if (dadosAnpBaseGlobal.distribuicao) anpDistribuicao = dadosAnpBaseGlobal.distribuicao;
 
-      atualizarCardAnttOficial();
+      atualizarCardAnpBrasil();
       return;
     }
   } catch (err) {
     console.warn("Falha ao buscar via Firestore REST:", err);
   }
-  definirCardAnttIndisponivel();
+  definirCardAnpBrasilIndisponivel();
 }
 
 async function carregarDados() {
@@ -242,12 +265,13 @@ function animarContagemKpi(elemento, atraso, sequencia) {
   }, 100 + atraso);
 }
 
-function atualizarCardAnttOficial() {
-  const elCard = document.getElementById('cardAnpAntt');
-  const elSub = document.getElementById('cardAnpAnttSub');
+function atualizarCardAnpBrasil() {
+  const elCard = document.getElementById('cardAnpBrasil');
+  const elSub = document.getElementById('cardAnpBrasilSub');
 
-  if (dadosAnpBaseGlobal && dadosAnpBaseGlobal.referencia_antt) {
-    const ref = dadosAnpBaseGlobal.referencia_antt;
+  const referenciaBrasil = dadosAnpBaseGlobal?.referencia_anp_brasil || dadosAnpBaseGlobal?.referencia_antt;
+  if (referenciaBrasil) {
+    const ref = referenciaBrasil;
     const precoNum = parseFloat(ref.valor);
     if (!isNaN(precoNum) && precoNum > 0) {
       if (elCard) elCard.innerText = 'R$ ' + precoNum.toFixed(2).replace('.', ',');
@@ -256,12 +280,12 @@ function atualizarCardAnttOficial() {
       return;
     }
   }
-  definirCardAnttIndisponivel();
+  definirCardAnpBrasilIndisponivel();
 }
 
-function definirCardAnttIndisponivel() {
-  const elCard = document.getElementById('cardAnpAntt');
-  const elSub = document.getElementById('cardAnpAnttSub');
+function definirCardAnpBrasilIndisponivel() {
+  const elCard = document.getElementById('cardAnpBrasil');
+  const elSub = document.getElementById('cardAnpBrasilSub');
   if (elCard) elCard.innerText = "Indisponível";
   if (elSub) elSub.innerHTML = `<i class="bi bi-exclamation-circle me-1"></i>Sem publicação localizada`;
 }
@@ -270,7 +294,8 @@ function popularFiltrosDinamicos() {
   const meses = [...new Set(baseRegistrosMensais.map(d => d.MES_ANO).filter(Boolean))].sort().reverse();
   const selectMes = document.getElementById('filtroMesAno');
   if (selectMes) {
-    selectMes.innerHTML = '<option value="YTD">Ano Completo 2026 (Consolidado)</option>';
+    const anoYtd = obterAnoMaisRecenteBase();
+    selectMes.innerHTML = `<option value="YTD">Ano Completo${anoYtd ? ` ${anoYtd}` : ''} (Consolidado)</option>`;
     
     const nomesMes = {
       '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
@@ -319,12 +344,8 @@ function popularFiltrosDinamicos() {
   };
 
   baseRegistrosMensais.forEach(d => {
-    const p = normalizarTexto(d.POSTO);
-    if (p.includes('MARAJO')) contagemRedes['MARAJO'].add(d.POSTO);
-    else if (p.includes('GRAAL')) contagemRedes['GRAAL'].add(d.POSTO);
-    else if (p.includes('SIM ') || p.includes('REDE SIM')) contagemRedes['SIM'].add(d.POSTO);
-    else if (p.startsWith('HG ') || p.includes(' REDE HG')) contagemRedes['HG'].add(d.POSTO);
-    else contagemRedes['OUTROS'].add(d.POSTO);
+    if (!d.POSTO) return;
+    contagemRedes[classificarRedePosto(d.POSTO)].add(d.POSTO);
   });
 
   const htmlOpcoesRede = `
@@ -370,7 +391,8 @@ function alternarModoOperacao(modo) {
 
   const gridKpis = document.getElementById('gridKpisPrincipais');
   if (gridKpis) {
-    gridKpis.style.display = (modo === 'AUDITORIA' || modo === 'ROTEIRIZADOR' || modo === 'MATRIZES' || modo === 'FECHAMENTO') ? 'none' : 'flex';
+    const ocultarGrid = ['AUDITORIA', 'ROTEIRIZADOR', 'MATRIZES', 'FECHAMENTO'].includes(modo);
+    gridKpis.style.display = ocultarGrid ? 'none' : '';
   }
 
   const painelPrinc = document.getElementById('secaoPainelPrincipal');
@@ -499,7 +521,7 @@ function limparFiltroUf() {
 function processarPainel() {
   const mesSel = document.getElementById('filtroMesAno') ? document.getElementById('filtroMesAno').value : 'YTD';
 
-  let registros = baseRegistrosMensais;
+  let registros = mesSel === 'YTD' ? filtrarRegistrosYtd(baseRegistrosMensais) : baseRegistrosMensais;
 
   if (ufFiltrada) {
     registros = registros.filter(d => d.UF_POSTO === ufFiltrada);
@@ -508,14 +530,7 @@ function processarPainel() {
     registros = registros.filter(d => d.POSTO === postoFiltrado);
   }
   if (redeFiltrada) {
-    if (redeFiltrada === 'OUTROS') {
-      registros = registros.filter(d => {
-        const p = normalizarTexto(d.POSTO);
-        return !p.includes('MARAJO') && !p.startsWith('HG ') && !p.includes('SIM ') && !p.includes('GRAAL');
-      });
-    } else {
-      registros = registros.filter(d => normalizarTexto(d.POSTO).includes(redeFiltrada));
-    }
+    registros = registros.filter(d => classificarRedePosto(d.POSTO) === redeFiltrada);
   }
 
   let baseCalculoGeral = registros;
@@ -575,7 +590,6 @@ function processarPainel() {
   }
 
   const mesesDisponiveis = [...new Set(baseRegistrosMensais.map(d => d.MES_ANO).filter(Boolean))].sort();
-  const mesMaisRecenteGeral = mesesDisponiveis[mesesDisponiveis.length - 1] || '2026-10';
 
   const postosMap = {};
   let somaLitrosCards = 0;
@@ -617,7 +631,7 @@ function processarPainel() {
     }
   });
 
-  // Agregação dos ciclos por posto
+  // Agrega litros e gasto por posto; impacto/economia somam cada ciclo contra sua ANP mensal.
   baseCalculo.forEach(d => {
     const chave = d.TIPO_OPERACAO === 'INTERNO' 
       ? `${d.POSTO}_${d.UF_POSTO}_${d.MUNICIPIO_POSTO}` 
@@ -637,6 +651,8 @@ function processarPainel() {
         TIPO_OPERACAO: d.TIPO_OPERACAO,
         LITROS_TOTAL: 0,
         VALOR_TOTAL: 0,
+        IMPACTO_REAIS: 0,
+        ECONOMIA_ANP_REAIS: 0,
         ULTIMO_PRECO: parseFloat(d.VALOR_UNITARIO || 0),
         DATA_MAIS_RECENTE: d.DATA_FIM_CICLO || "",
         MES_MAIS_RECENTE: d.MES_ANO
@@ -645,6 +661,15 @@ function processarPainel() {
 
     postosMap[chave].LITROS_TOTAL += litros;
     postosMap[chave].VALOR_TOTAL += valor;
+
+    const tabelaAnpCiclo = d.TIPO_OPERACAO === 'INTERNO' ? anpDistribuicao : anpRevenda;
+    const referenciaAnpCiclo = tabelaAnpCiclo[d.UF_POSTO]?.[d.MES_ANO] || 0;
+    const precoPagoCiclo = parseFloat(d.VALOR_UNITARIO || 0);
+    if (referenciaAnpCiclo > 0 && precoPagoCiclo > 0 && litros > 0) {
+      const diferencaCiclo = (precoPagoCiclo - referenciaAnpCiclo) * litros;
+      if (diferencaCiclo > 0) postosMap[chave].IMPACTO_REAIS += diferencaCiclo;
+      else postosMap[chave].ECONOMIA_ANP_REAIS -= diferencaCiclo;
+    }
 
     if ((d.DATA_FIM_CICLO || "") > postosMap[chave].DATA_MAIS_RECENTE) {
       postosMap[chave].DATA_MAIS_RECENTE = d.DATA_FIM_CICLO;
@@ -675,8 +700,6 @@ function processarPainel() {
     const gapMercado = (precoMedioExibicao > 0 && refAnpValor > 0) ? (precoMedioExibicao - refAnpValor) : 0;
     const gapPerc = refAnpValor > 0 ? ((gapMercado / refAnpValor) * 100) : 0;
 
-    const impactoTotalReais = (gapMercado > 0 && p.LITROS_TOTAL > 0) ? (gapMercado * p.LITROS_TOTAL) : 0;
-
     const munNorm = normalizarTexto(p.MUNICIPIO_POSTO);
     const melhorLocal = melhorConcorrenteMunicipio[munNorm];
     let diffLocal = 0;
@@ -699,7 +722,8 @@ function processarPainel() {
       REF_ANP: refAnpValor,
       GAP_MERCADO: gapMercado,
       GAP_PERC: gapPerc,
-      IMPACTO_REAIS: impactoTotalReais,
+      IMPACTO_REAIS: p.IMPACTO_REAIS,
+      ECONOMIA_ANP_REAIS: p.ECONOMIA_ANP_REAIS,
       DIFF_LOCAL: diffLocal,
       NOME_MELHOR_LOCAL: nomeMelhorLocal,
       PRECO_MELHOR_LOCAL: precoMelhorLocal,
@@ -711,15 +735,8 @@ function processarPainel() {
 
   listaPostos.sort((a, b) => b.LITROS_TOTAL - a.LITROS_TOTAL);
 
-  let precoMedioCard = 0;
-  if (mesSel === 'YTD') {
-    const regsMesRecente = registrosModo.filter(d => d.MES_ANO === mesMaisRecenteGeral);
-    const litRec = regsMesRecente.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0);
-    const valRec = regsMesRecente.reduce((acc, c) => acc + parseFloat(c.VALOR_TOTAL_CICLO || 0), 0);
-    precoMedioCard = litRec > 0 ? (valRec / litRec) : 0;
-  } else {
-    precoMedioCard = somaLitrosCards > 0 ? (somaGastoCards / somaLitrosCards) : 0;
-  }
+  // Média ponderada da seleção atual: gasto total dividido pelos litros do mesmo período.
+  const precoMedioCard = somaLitrosCards > 0 ? (somaGastoCards / somaLitrosCards) : 0;
 
   const elCardVol = document.getElementById('cardVolume');
   const elCardGasto = document.getElementById('cardGasto');
@@ -759,9 +776,12 @@ function processarPainel() {
     }
   }
 
-  renderizarSparklineVolumeCard(mesesDisponiveis, registrosModo);
+  const mesesGrafico = mesSel === 'YTD'
+    ? mesesDisponiveis.filter(mes => mes.startsWith(`${obterAnoMaisRecenteBase()}-`))
+    : mesesDisponiveis;
+  renderizarSparklineVolumeCard(mesesGrafico, registrosModo);
   atualizarCardsExtremosSemPonderada(registros, mesSel);
-  renderizarTermometroPostos(listaPostos, mesesDisponiveis);
+  renderizarTermometroPostos(listaPostos, mesesGrafico);
   renderizarResumoAnualPosto(listaPostos);
 
   if (typeof atualizarCoresMiniMapa === 'function') atualizarCoresMiniMapa();
@@ -1081,6 +1101,18 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
   const postosInternos = ehConsolidado ? postos.filter(p => p.TIPO_OPERACAO === 'INTERNO') : [];
   const postosOrdenados = ehConsolidado ? [...postosExternos, ...postosInternos] : postos;
   const limitePostosExternos = 10;
+  // Indexa uma vez os ciclos por posto/mês para reaproveitá-los nas séries de todos os cards.
+  const ciclosPorPostoMes = new Map();
+  baseRegistrosMensais.forEach(registro => {
+    const chave = JSON.stringify([
+      registro.POSTO,
+      registro.UF_POSTO,
+      registro.MES_ANO,
+      registro.TIPO_OPERACAO === 'INTERNO' ? registro.MUNICIPIO_POSTO : ''
+    ]);
+    if (!ciclosPorPostoMes.has(chave)) ciclosPorPostoMes.set(chave, []);
+    ciclosPorPostoMes.get(chave).push(registro);
+  });
 
   const lblList = document.getElementById('lblListando');
   if (lblList) lblList.innerText = `A listar ${postosOrdenados.length} postos`;
@@ -1141,9 +1173,8 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     let impactoHtml = `<span class="text-muted small">R$ 0,00</span>`;
     if (p.IMPACTO_REAIS > 0) {
       impactoHtml = `<span class="text-danger fw-bold small">+R$ ${Math.round(p.IMPACTO_REAIS).toLocaleString('pt-BR')}</span>`;
-    } else if (p.REF_ANP > 0 && p.GAP_MERCADO < 0) {
-      const economia = Math.abs(p.GAP_MERCADO * p.LITROS_TOTAL);
-      impactoHtml = `<span class="text-success fw-bold small">-R$ ${Math.round(economia).toLocaleString('pt-BR')}</span>`;
+    } else if (p.ECONOMIA_ANP_REAIS > 0) {
+      impactoHtml = `<span class="text-success fw-bold small">-R$ ${Math.round(p.ECONOMIA_ANP_REAIS).toLocaleString('pt-BR')}</span>`;
     }
 
     let tagDispersao = "";
@@ -1190,10 +1221,13 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     const dadosAnpMes = [];
 
     mesesDisponiveis.forEach((m, mIdx) => {
-      const ciclosMes = baseRegistrosMensais.filter(r => 
-        r.POSTO === p.POSTO && r.UF_POSTO === p.UF_POSTO && r.MES_ANO === m &&
-        (p.TIPO_OPERACAO !== 'INTERNO' || r.MUNICIPIO_POSTO === p.MUNICIPIO_POSTO)
-      );
+      const chave = JSON.stringify([
+        p.POSTO,
+        p.UF_POSTO,
+        m,
+        p.TIPO_OPERACAO === 'INTERNO' ? p.MUNICIPIO_POSTO : ''
+      ]);
+      const ciclosMes = ciclosPorPostoMes.get(chave) || [];
       
       let precoKmmMes = null;
       if (ciclosMes.length > 0) {
@@ -1295,7 +1329,7 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
         </div>
 
         <div class="col-m-btn">
-          <button class="btn-tratativa ${classeBotaoTratativa}" title="${tituloBotaoTratativa}" onclick="abrirModalTratativa('${p.POSTO.replace(/'/g, "\\'")}', '${p.UF_POSTO}', '${(p.MUNICIPIO_POSTO || '').replace(/'/g, "\\'")}', ${p.PRECO_MEDIO_EXIBICAO}, ${p.REF_ANP}, ${p.ULTIMO_PRECO})">
+          <button class="btn-tratativa ${classeBotaoTratativa}" title="${tituloBotaoTratativa}" onclick="abrirModalTratativa('${p.POSTO.replace(/'/g, "\\'")}', '${p.UF_POSTO}', '${(p.MUNICIPIO_POSTO || '').replace(/'/g, "\\'")}', ${p.PRECO_MEDIO_EXIBICAO}, ${p.REF_ANP}, ${p.ULTIMO_PRECO}, '${p.TIPO_OPERACAO}')">
             <i class="bi bi-journal-check"></i> Tratativa
           </button>
         </div>

@@ -14,7 +14,7 @@ async function obterBaseAnpOficial() {
 
   // 2. Consulta direta via REST API do Firestore
   try {
-    const FIRESTORE_REST_URL = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/anp_consolidada/mensal_2026";
+    const FIRESTORE_REST_URL = `https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/anp_consolidada/mensal_${new Date().getFullYear()}`;
     const resp = await fetch(FIRESTORE_REST_URL);
     if (!resp.ok) throw new Error("Erro ao consultar Firestore REST");
     const json = await resp.json();
@@ -346,6 +346,32 @@ async function calcularMatrizesGerenciais(registros) {
     return qtdTotal;
   }
 
+  // Compara apenas meses com ANP disponível, ponderando pago e referência pelo mesmo volume real.
+  function getComparativoTotalAnp(chaveUnidade, ufReferencia, tipo, tabelaReferencia) {
+    let somaPago = 0;
+    let somaAnp = 0;
+    let volumePareado = 0;
+    let qtdPareada = 0;
+
+    mesesColunas.forEach(m => {
+      const dadosMes = dadosAgrupados[`${chaveUnidade}_${m.id}_${tipo}`];
+      const referencia = Number(tabelaReferencia[ufReferencia]?.[m.id] || 0);
+      if (!dadosMes || dadosMes.somaVolume <= 0 || referencia <= 0) return;
+      somaPago += dadosMes.somaValor;
+      somaAnp += referencia * dadosMes.somaVolume;
+      volumePareado += dadosMes.somaVolume;
+      qtdPareada += dadosMes.totalAbastecimentos;
+    });
+
+    if (volumePareado <= 0) return null;
+    const precoPago = somaPago / volumePareado;
+    const precoAnp = somaAnp / volumePareado;
+    return {
+      variacao: precoAnp > 0 ? ((precoPago - precoAnp) / precoAnp) * 100 : null,
+      qtd: qtdPareada
+    };
+  }
+
   // 1. MATRIZ EXECUTIVA EXTERNA (ROTA POR UF)
   let htmlExterna = `
     <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.72rem; white-space: nowrap;">
@@ -369,14 +395,12 @@ async function calcularMatrizesGerenciais(registros) {
 
   ufsExterno.forEach(uf => {
     let tds = `<td class="fw-bold bg-light">${uf}</td>`;
-    const precosAnpAno = [];
 
     mesesColunas.forEach(m => {
       const precoPago = getPrecoMedioSimples(uf, m.id, 'EXTERNO');
       const refAnp = (mapaRevenda[uf] && mapaRevenda[uf][m.id]) ? mapaRevenda[uf][m.id] : null;
 
       if (precoPago && refAnp) {
-        precosAnpAno.push(refAnp);
         const varPerc = ((precoPago - refAnp) / refAnp) * 100;
         
         const bgCor = varPerc <= 0 ? '#ecfdf5' : '#fef2f2';
@@ -403,12 +427,12 @@ async function calcularMatrizesGerenciais(registros) {
 
     const totalPago = getTotalUfSimples(uf, 'EXTERNO');
     const qtdTotal = getQtdTotalUf(uf, 'EXTERNO');
+    const comparativoTotal = getComparativoTotalAnp(uf, uf, 'EXTERNO', mapaRevenda);
 
-    if (totalPago && precosAnpAno.length > 0) {
-      const mediaAnpAno = precosAnpAno.reduce((a, b) => a + b, 0) / precosAnpAno.length;
-      const varTotal = ((totalPago - mediaAnpAno) / mediaAnpAno) * 100;
+    if (totalPago && comparativoTotal && comparativoTotal.variacao !== null) {
+      const varTotal = comparativoTotal.variacao;
 
-      if (qtdTotal >= 30) {
+      if (comparativoTotal.qtd >= 30) {
         if (varTotal < melhorVarExt) {
           melhorVarExt = varTotal;
           melhorUfExt = uf;
@@ -450,14 +474,12 @@ async function calcularMatrizesGerenciais(registros) {
     const rotulo = obterRotuloInterno(chave);
     const ufPai = obterUfPai(chave);
     let tds = `<td class="fw-bold bg-light text-start ps-2" style="white-space: nowrap;">${rotulo}</td>`;
-    const precosAnpAno = [];
 
     mesesColunas.forEach(m => {
       const precoPago = getPrecoMedioSimples(chave, m.id, 'INTERNO');
       const refAnp = (mapaDistribuicao[ufPai] && mapaDistribuicao[ufPai][m.id]) ? mapaDistribuicao[ufPai][m.id] : null;
 
       if (precoPago && refAnp) {
-        precosAnpAno.push(refAnp);
         const varPerc = ((precoPago - refAnp) / refAnp) * 100;
         const bgCor = varPerc <= 0 ? '#ecfdf5' : '#fef2f2';
         const txtCor = varPerc <= 0 ? '#047857' : '#b91c1c';
@@ -482,9 +504,9 @@ async function calcularMatrizesGerenciais(registros) {
     });
 
     const totalPago = getTotalUfSimples(chave, 'INTERNO');
-    if (totalPago && precosAnpAno.length > 0) {
-      const mediaAnpAno = precosAnpAno.reduce((a, b) => a + b, 0) / precosAnpAno.length;
-      const varTotal = ((totalPago - mediaAnpAno) / mediaAnpAno) * 100;
+    const comparativoTotal = getComparativoTotalAnp(chave, ufPai, 'INTERNO', mapaDistribuicao);
+    if (totalPago && comparativoTotal && comparativoTotal.variacao !== null) {
+      const varTotal = comparativoTotal.variacao;
       const bgTotal = varTotal <= 0 ? '#d1fae5' : '#fee2e2';
       const textCorTotal = varTotal <= 0 ? '#065f46' : '#991b1b';
       const textTotal = (varTotal > 0 ? '+' : '') + varTotal.toFixed(2).replace('.', ',') + '%';
