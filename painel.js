@@ -701,7 +701,10 @@ function processarPainel() {
       IMPACTO_REAIS: impactoTotalReais,
       DIFF_LOCAL: diffLocal,
       NOME_MELHOR_LOCAL: nomeMelhorLocal,
-      PRECO_MELHOR_LOCAL: precoMelhorLocal
+      PRECO_MELHOR_LOCAL: precoMelhorLocal,
+      OPORTUNIDADE_REPASSE_ANP: mesSel === 'YTD' && p.TIPO_OPERACAO === 'EXTERNO'
+        ? calcularOportunidadeRepasseAnp(p.POSTO, p.UF_POSTO)
+        : null
     };
   });
 
@@ -934,6 +937,99 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
   }
 }
 
+const QUEDA_MINIMA_ANP_REPASSE = 0.15;
+const REPASSE_PENDENTE_MINIMO = 0.10;
+const UM_DIA_MS = 24 * 60 * 60 * 1000;
+const MAX_DIAS_COMPRA_RECENTE = 45;
+
+function converterDataPrecoPosto(valor) {
+  if (!valor) return null;
+  const texto = String(valor).trim();
+  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+
+  const brasileira = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (brasileira) return new Date(Date.UTC(Number(brasileira[3]), Number(brasileira[2]) - 1, Number(brasileira[1])));
+  return null;
+}
+
+function calcularOportunidadeRepasseAnp(nomePosto, ufPosto) {
+  const comprasPosto = baseRegistrosMensais
+    .filter(registro => registro.TIPO_OPERACAO === 'EXTERNO' && registro.POSTO === nomePosto && registro.UF_POSTO === ufPosto)
+    .map(registro => ({
+      data: converterDataPrecoPosto(registro.DATA_FIM_CICLO),
+      preco: Number(registro.VALOR_UNITARIO || 0),
+      volume: Number(registro.VOLUME_CICLO || 0)
+    }))
+    .filter(compra => compra.data && Number.isFinite(compra.preco) && compra.preco > 0 && Number.isFinite(compra.volume) && compra.volume > 0)
+    .sort((a, b) => a.data - b.data);
+  const ultimaCompra = comprasPosto[comprasPosto.length - 1];
+  if (!ultimaCompra) return null;
+
+  const hoje = new Date();
+  const hojeUtc = Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const diasDesdeCompra = (hojeUtc - ultimaCompra.data.getTime()) / UM_DIA_MS;
+  if (diasDesdeCompra < 0 || diasDesdeCompra > MAX_DIAS_COMPRA_RECENTE) return null;
+
+  const mesUltimaCompra = `${ultimaCompra.data.getUTCFullYear()}-${String(ultimaCompra.data.getUTCMonth() + 1).padStart(2, '0')}`;
+  const referenciasAnp = Object.entries(anpRevenda[ufPosto] || {})
+    .map(([mes, preco]) => ({ mes, preco: Number(preco) }))
+    .filter(referencia => referencia.mes <= mesUltimaCompra && Number.isFinite(referencia.preco) && referencia.preco > 0)
+    .sort((a, b) => a.mes.localeCompare(b.mes));
+  if (referenciasAnp.length < 2) return null;
+
+  const referenciaAtual = referenciasAnp[referenciasAnp.length - 1];
+  const referenciaAnterior = referenciasAnp[referenciasAnp.length - 2];
+  const [anoAtual, mesAtual] = referenciaAtual.mes.split('-').map(Number);
+  const [anoAnterior, mesAnterior] = referenciaAnterior.mes.split('-').map(Number);
+  const distanciaMeses = (anoAtual - anoAnterior) * 12 + mesAtual - mesAnterior;
+  if (distanciaMeses !== 1) return null;
+
+  const fimMesAnterior = Date.UTC(anoAnterior, mesAnterior, 0);
+  const compraAnterior = [...comprasPosto].reverse().find(compra => compra.data.getTime() <= fimMesAnterior);
+  if (!compraAnterior || compraAnterior.data >= ultimaCompra.data) return null;
+  const intervaloEntreCompras = (ultimaCompra.data.getTime() - compraAnterior.data.getTime()) / UM_DIA_MS;
+  if (intervaloEntreCompras > 60) return null;
+
+  const quedaAnp = referenciaAnterior.preco - referenciaAtual.preco;
+  if (quedaAnp < QUEDA_MINIMA_ANP_REPASSE) return null;
+
+  const quedaPosto = compraAnterior.preco - ultimaCompra.preco;
+  const repassePendente = quedaAnp - quedaPosto;
+  if (repassePendente < REPASSE_PENDENTE_MINIMO) return null;
+
+  return {
+    quedaAnp,
+    quedaPosto,
+    repassePendente,
+    precoAnterior: compraAnterior.preco,
+    precoAtual: ultimaCompra.preco,
+    dataPrecoAnterior: compraAnterior.data,
+    dataUltimaCompra: ultimaCompra.data,
+    referenciaAnpAnterior: referenciaAnterior.preco,
+    referenciaAnpAtual: referenciaAtual.preco,
+    mesAnpAnterior: referenciaAnterior.mes,
+    mesAnpAtual: referenciaAtual.mes
+  };
+}
+
+function formatarValorRepasse(valor) {
+  return Number(valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatarMesReferenciaAnp(mesAno) {
+  const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const [ano, mes] = mesAno.split('-');
+  return `${nomesMeses[Number(mes) - 1] || mes}/${ano}`;
+}
+
+function alternarResumoRepasseAnp(idResumo, botao) {
+  const resumo = document.getElementById(idResumo);
+  if (!resumo) return;
+  resumo.hidden = !resumo.hidden;
+  botao.setAttribute('aria-expanded', String(!resumo.hidden));
+}
+
 function renderizarTermometroPostos(postos, mesesDisponiveis) {
   const container = document.getElementById('listaTermometroPostos');
   if (!container) return;
@@ -978,6 +1074,19 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     if (p.DIFF_LOCAL > 0) {
       const titleTexto = `Opção mais barata no mesmo período: ${p.NOME_MELHOR_LOCAL} a R$ ${p.PRECO_MELHOR_LOCAL.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
       tagDispersao = `<span class="badge-dispersao-local" title="${titleTexto}">Opção local -R$ ${p.DIFF_LOCAL.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>`;
+    }
+
+    let tagRepasseAnp = '';
+    if (p.OPORTUNIDADE_REPASSE_ANP) {
+      const oportunidade = p.OPORTUNIDADE_REPASSE_ANP;
+      const idResumo = `resumo-repasse-anp-${idx}`;
+      const resumo = `A referência mensal da ANP no ${p.UF_POSTO} caiu R$ ${formatarValorRepasse(oportunidade.quedaAnp)}/L de ${formatarMesReferenciaAnp(oportunidade.mesAnpAnterior)} para ${formatarMesReferenciaAnp(oportunidade.mesAnpAtual)}. O último preço pago foi R$ ${oportunidade.precoAtual.toFixed(3)} em ${formatarDataDiaMes(oportunidade.dataUltimaCompra.toISOString().slice(0, 10))}; antes, era R$ ${oportunidade.precoAnterior.toFixed(3)} em ${formatarDataDiaMes(oportunidade.dataPrecoAnterior.toISOString().slice(0, 10))}. Potencial de repasse não acompanhado: R$ ${formatarValorRepasse(oportunidade.repassePendente)}/L. Avalie revisar a negociação.`;
+      tagRepasseAnp = `
+        <button type="button" class="badge-oportunidade-anp" title="${resumo}" aria-expanded="false" aria-controls="${idResumo}" onclick="alternarResumoRepasseAnp('${idResumo}', this)">
+          <i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> Revisar repasse
+        </button>
+        <div id="${idResumo}" class="resumo-oportunidade-anp" hidden>${resumo}</div>
+      `;
     }
 
     const dataUltimoFormatada = formatarDataDiaMes(p.DATA_MAIS_RECENTE);
@@ -1059,6 +1168,7 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
           <div class="small text-muted" style="font-size: 0.66rem;">
             ${p.MUNICIPIO_POSTO || 'ND'} &bull; ${badgeTipo}
             ${tagDispersao}
+            ${tagRepasseAnp}
           </div>
         </div>
       </div>

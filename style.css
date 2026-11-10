@@ -432,6 +432,43 @@ body {
   font-weight: 600;
   cursor: help;
 }
+.badge-oportunidade-anp {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border: 1px solid #e8c66a;
+  border-radius: 3px;
+  background: #fff8df;
+  color: #79500a;
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.badge-oportunidade-anp:hover,
+.badge-oportunidade-anp:focus-visible {
+  background: #ffefb0;
+  border-color: #c89421;
+  outline: 2px solid rgba(200, 148, 33, 0.35);
+  outline-offset: 1px;
+}
+.resumo-oportunidade-anp {
+  max-width: 380px;
+  margin-top: 5px;
+  padding: 6px 8px;
+  border-left: 3px solid #c89421;
+  border-radius: 3px;
+  background: #fff8df;
+  color: #59400e;
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+.resumo-oportunidade-anp[hidden] {
+  display: none;
+}
 
 .btn-sync {
   background: var(--cargosoft-green);
