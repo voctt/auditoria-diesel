@@ -14,6 +14,7 @@ let modoAtual = "TODOS";
 let ufFiltrada = "";
 let postoFiltrado = "";
 let redeFiltrada = "";
+let animacaoInicialKpisExecutada = false;
 
 const listaCidades = (typeof baseCidadesBrasil !== 'undefined' && Array.isArray(baseCidadesBrasil)) ? baseCidadesBrasil : [];
 
@@ -136,6 +137,10 @@ async function carregarDados() {
       }
       popularFiltrosDinamicos();
       processarPainel();
+      if (!animacaoInicialKpisExecutada) {
+        animacaoInicialKpisExecutada = true;
+        animarEntradaKpis();
+      }
     } else {
       const container = document.getElementById('listaTermometroPostos');
       if (container) {
@@ -157,6 +162,60 @@ async function carregarDados() {
       btn.disabled = false;
     }
   }
+}
+
+function animarEntradaKpis() {
+  const grade = document.getElementById('gridKpisPrincipais');
+  if (!grade) return;
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const cards = Array.from(grade.querySelectorAll('.card-kpi, .card-tabela-resumo'));
+  if (cards.length === 0) return;
+
+  cards.forEach((card, indice) => {
+    const atraso = indice * 45;
+    card.style.setProperty('--atraso-entrada-kpi', `${atraso}ms`);
+    card.querySelectorAll('.kpi-val, .kpi-val-grande').forEach(elemento => {
+      animarContagemKpi(elemento, atraso);
+    });
+  });
+
+  setTimeout(() => grade.classList.add('kpis-entrando'), 100);
+  setTimeout(() => {
+    grade.classList.remove('kpis-entrando');
+    cards.forEach(card => card.style.removeProperty('--atraso-entrada-kpi'));
+  }, 100 + 360 + (cards.length - 1) * 45 + 50);
+}
+
+function animarContagemKpi(elemento, atraso) {
+  const textoFinal = elemento.innerText;
+  const correspondencia = textoFinal.match(/-?\d[\d.]*,\d+|-?\d[\d.]*/);
+  if (!correspondencia) return;
+
+  const textoNumero = correspondencia[0];
+  const valorFinal = parseFloat(textoNumero.replace(/\./g, '').replace(',', '.'));
+  if (!Number.isFinite(valorFinal)) return;
+
+  const casasDecimais = textoNumero.includes(',') ? textoNumero.split(',')[1].length : 0;
+  const formatar = valor => valor.toLocaleString('pt-BR', {
+    minimumFractionDigits: casasDecimais,
+    maximumFractionDigits: casasDecimais
+  });
+
+  setTimeout(() => {
+    const inicio = performance.now();
+    const atualizar = agora => {
+      const progresso = Math.min((agora - inicio) / 360, 1);
+      const suavizado = 1 - Math.pow(1 - progresso, 3);
+      elemento.innerText = textoFinal.replace(textoNumero, formatar(valorFinal * suavizado));
+
+      if (progresso < 1) requestAnimationFrame(atualizar);
+      else elemento.innerText = textoFinal;
+    };
+
+    requestAnimationFrame(atualizar);
+  }, 100 + atraso);
 }
 
 function atualizarCardAnttOficial() {
@@ -273,6 +332,7 @@ function popularFiltrosDinamicos() {
 }
 
 function alternarModoOperacao(modo) {
+  const modoAnterior = modoAtual;
   modoAtual = modo;
   document.querySelectorAll('.btn-toggle-tipo').forEach(b => b.classList.remove('active'));
 
@@ -317,6 +377,9 @@ function alternarModoOperacao(modo) {
     if (painelPrinc) painelPrinc.style.display = 'block';
     atualizarTextosHeaderPainel();
     processarPainel();
+    if (animacaoInicialKpisExecutada && ['MATRIZES', 'AUDITORIA', 'FECHAMENTO'].includes(modoAnterior)) {
+      animarEntradaKpis();
+    }
   }
 }
 
