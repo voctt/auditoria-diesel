@@ -801,6 +801,77 @@ function renderizarSparklineVolumeCard(mesesDisponiveis, registros) {
   sparkVolumeCardInstance.render();
 }
 
+function gerarSilhuetaUfSvg(uf, compacta = false) {
+  if (!uf || !Array.isArray(dadosGeoJsonBr?.features) || typeof extrairSiglaUf !== 'function') return '';
+
+  const geometria = dadosGeoJsonBr.features.find(feature => extrairSiglaUf(feature.properties) === uf)?.geometry;
+  if (!geometria) return '';
+
+  const aneis = geometria.type === 'Polygon'
+    ? geometria.coordinates
+    : geometria.type === 'MultiPolygon'
+      ? geometria.coordinates.flat()
+      : [];
+  const pontos = aneis.flat().filter(ponto => Array.isArray(ponto) && Number.isFinite(ponto[0]) && Number.isFinite(ponto[1]));
+  if (pontos.length === 0) return '';
+
+  const largura = 140;
+  const altura = 100;
+  const margem = 8;
+  const longitudes = pontos.map(ponto => ponto[0]);
+  const latitudes = pontos.map(ponto => ponto[1]);
+  const minLon = Math.min(...longitudes);
+  const maxLon = Math.max(...longitudes);
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const escala = Math.min(
+    (largura - margem * 2) / Math.max(maxLon - minLon, 0.0001),
+    (altura - margem * 2) / Math.max(maxLat - minLat, 0.0001)
+  );
+  const larguraForma = (maxLon - minLon) * escala;
+  const alturaForma = (maxLat - minLat) * escala;
+  const deslocamentoX = (largura - larguraForma) / 2;
+  const deslocamentoY = (altura - alturaForma) / 2;
+  const caminho = aneis.map(anel => anel.map((ponto, indice) => {
+    const x = (deslocamentoX + (ponto[0] - minLon) * escala).toFixed(1);
+    const y = (altura - deslocamentoY - (ponto[1] - minLat) * escala).toFixed(1);
+    return `${indice === 0 ? 'M' : 'L'}${x} ${y}`;
+  }).join(' ') + ' Z').join(' ');
+  const classe = compacta ? ' kpi-uf-silhueta-compacta' : '';
+
+  return `<svg class="kpi-uf-silhueta${classe}" viewBox="0 0 ${largura} ${altura}" aria-hidden="true" focusable="false"><path d="${caminho}" fill-rule="evenodd"/></svg>`;
+}
+
+function gerarHtmlExtremoUnico(extremo, classeCor) {
+  if (!extremo) return `<div class="kpi-val ${classeCor}">--</div>`;
+
+  return `
+    <div class="kpi-extremo-unico" title="${extremo.posto}">
+      ${gerarSilhuetaUfSvg(extremo.uf)}
+      <div class="kpi-extremo-valor ${classeCor}">
+        <span>${extremo.uf || '--'}</span> - R$ ${extremo.preco.toFixed(3).replace('.', ',')}
+      </div>
+    </div>
+  `;
+}
+
+function gerarHtmlExtremoConsolidado(extremo, tipo, posicao, classeCor, rotulo) {
+  const ehRota = tipo === 'ROTA';
+  const titulo = `${rotulo}: ${extremo ? extremo.posto : 'ND'}`;
+  const separador = posicao === 'segundo' ? ' kpi-extremo-split-separador' : '';
+
+  return `
+    <div class="kpi-val-split kpi-extremo-split${separador} ${classeCor}" title="${titulo}">
+      ${extremo ? gerarSilhuetaUfSvg(extremo.uf, true) : ''}
+      <span class="kpi-extremo-identificacao">
+        <span class="badge-tipo ${ehRota ? 'tipo-rota' : 'tipo-interno'}">${tipo}</span>
+        <span class="kpi-extremo-uf">${extremo ? extremo.uf : '--'}</span>
+      </span>
+      <span class="kpi-extremo-preco">R$ ${extremo ? extremo.preco.toFixed(3).replace('.', ',') : '--'}</span>
+    </div>
+  `;
+}
+
 function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
   const containerMaior = document.getElementById('cardMaiorConteudo');
   const containerMenor = document.getElementById('cardMenorConteudo');
@@ -862,20 +933,8 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
 
     if (extRota.max || extInterno.max) {
       containerMaior.innerHTML = `
-        <div class="kpi-val-split text-danger" title="Pico Rota: ${extRota.max ? extRota.max.posto : 'ND'}">
-          <span class="d-flex align-items-center gap-1">
-            <span class="badge-tipo tipo-rota">ROTA</span>
-            <span style="color: #334155; font-weight: 800;">${extRota.max ? extRota.max.uf : '--'}</span>
-          </span>
-          <span>R$ ${extRota.max ? extRota.max.preco.toFixed(3).replace('.', ',') : '--'}</span>
-        </div>
-        <div class="kpi-val-split text-danger pt-1 mt-1" style="border-top: 1px dotted #fecaca;" title="Maior Garagem: ${extInterno.max ? extInterno.max.posto : 'ND'}">
-          <span class="d-flex align-items-center gap-1">
-            <span class="badge-tipo tipo-interno">GARAGEM</span>
-            <span style="color: #334155; font-weight: 800;">${extInterno.max ? extInterno.max.uf : '--'}</span>
-          </span>
-          <span>R$ ${extInterno.max ? extInterno.max.preco.toFixed(3).replace('.', ',') : '--'}</span>
-        </div>
+        ${gerarHtmlExtremoConsolidado(extRota.max, 'ROTA', 'primeiro', 'text-danger', 'Pico Rota')}
+        ${gerarHtmlExtremoConsolidado(extInterno.max, 'GARAGEM', 'segundo', 'text-danger', 'Maior Garagem')}
       `;
       if (lblMaiorSub) lblMaiorSub.innerText = mesSel === 'YTD' ? "Últimos 20 dias ativos" : "Extremos da competência";
     } else {
@@ -885,20 +944,8 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
 
     if (extRota.min || extInterno.min) {
       containerMenor.innerHTML = `
-        <div class="kpi-val-split text-success" title="Menor Posto Rota: ${extRota.min ? extRota.min.posto : 'ND'}">
-          <span class="d-flex align-items-center gap-1">
-            <span class="badge-tipo tipo-rota">ROTA</span>
-            <span style="color: #334155; font-weight: 800;">${extRota.min ? extRota.min.uf : '--'}</span>
-          </span>
-          <span>R$ ${extRota.min ? extRota.min.preco.toFixed(3).replace('.', ',') : '--'}</span>
-        </div>
-        <div class="kpi-val-split text-success pt-1 mt-1" style="border-top: 1px dotted #bbf7d0;" title="Menor Garagem Ativa: ${extInterno.min ? extInterno.min.posto : 'ND'}">
-          <span class="d-flex align-items-center gap-1">
-            <span class="badge-tipo tipo-interno">GARAGEM</span>
-            <span style="color: #334155; font-weight: 800;">${extInterno.min ? extInterno.min.uf : '--'}</span>
-          </span>
-          <span>R$ ${extInterno.min ? extInterno.min.preco.toFixed(3).replace('.', ',') : '--'}</span>
-        </div>
+        ${gerarHtmlExtremoConsolidado(extRota.min, 'ROTA', 'primeiro', 'text-success', 'Menor Posto Rota')}
+        ${gerarHtmlExtremoConsolidado(extInterno.min, 'GARAGEM', 'segundo', 'text-success', 'Menor Garagem Ativa')}
       `;
       if (lblMenorSub) lblMenorSub.innerText = mesSel === 'YTD' ? "Últimos 20 dias ativos" : "Extremos da competência";
     } else {
@@ -912,11 +959,7 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
     const rotuloTipo = modoAtual === 'INTERNO' ? 'Garagem' : 'Rota';
 
     if (ext.max) {
-      containerMaior.innerHTML = `
-        <div class="kpi-val text-danger" title="${ext.max.posto}">
-          <span style="color: #334155;">${ext.max.uf}</span> - R$ ${ext.max.preco.toFixed(3).replace('.', ',')}
-        </div>
-      `;
+      containerMaior.innerHTML = gerarHtmlExtremoUnico(ext.max, 'text-danger');
       if (lblMaiorSub) lblMaiorSub.innerText = `${rotuloTipo} • ${ext.max.posto}`;
     } else {
       containerMaior.innerHTML = `<div class="kpi-val text-danger">--</div>`;
@@ -924,11 +967,7 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
     }
 
     if (ext.min) {
-      containerMenor.innerHTML = `
-        <div class="kpi-val text-success" title="${ext.min.posto}">
-          <span style="color: #334155;">${ext.min.uf}</span> - R$ ${ext.min.preco.toFixed(3).replace('.', ',')}
-        </div>
-      `;
+      containerMenor.innerHTML = gerarHtmlExtremoUnico(ext.min, 'text-success');
       if (lblMenorSub) lblMenorSub.innerText = `${rotuloTipo} • ${ext.min.posto}`;
     } else {
       containerMenor.innerHTML = `<div class="kpi-val text-success">--</div>`;

@@ -185,6 +185,77 @@ body {
   justify-content: space-between;
   align-items: center;
 }
+.kpi-extremo-unico {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+}
+.kpi-extremo-valor {
+  position: relative;
+  z-index: 1;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.kpi-extremo-valor span,
+.kpi-extremo-uf {
+  color: #334155;
+  font-weight: 800;
+}
+.kpi-uf-silhueta {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  z-index: 0;
+  width: 82px;
+  height: 60px;
+  opacity: 0.36;
+  transform: translateY(-50%);
+  filter: blur(0.55px);
+  pointer-events: none;
+}
+.kpi-uf-silhueta path {
+  fill: #d7e0e5;
+  stroke: #94a3b8;
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+.kpi-extremo-split {
+  position: relative;
+  isolation: isolate;
+  min-height: 25px;
+  overflow: hidden;
+  padding: 2px 3px;
+}
+.kpi-extremo-split > span {
+  position: relative;
+  z-index: 1;
+}
+.kpi-extremo-identificacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.kpi-extremo-preco {
+  white-space: nowrap;
+}
+.kpi-uf-silhueta-compacta {
+  right: 42px;
+  width: 44px;
+  height: 32px;
+  opacity: 0.25;
+  filter: blur(0.4px);
+}
+.kpi-extremo-split-separador {
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px dotted #fecaca;
+}
+.kpi-extremo-split-separador.text-success {
+  border-top-color: #bbf7d0;
+}
 .kpi-sub {
   font-size: 0.62rem;
   color: var(--text-muted);
