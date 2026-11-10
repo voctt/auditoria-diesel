@@ -590,6 +590,8 @@ function processarPainel() {
   }
 
   const mesesDisponiveis = [...new Set(baseRegistrosMensais.map(d => d.MES_ANO).filter(Boolean))].sort();
+  const mesesDisponiveisModo = [...new Set(registrosModo.map(d => d.MES_ANO).filter(Boolean))].sort();
+  const mesMaisRecenteModo = mesesDisponiveisModo[mesesDisponiveisModo.length - 1] || '';
 
   const postosMap = {};
   let somaLitrosCards = 0;
@@ -740,8 +742,20 @@ function processarPainel() {
 
   listaPostos.sort((a, b) => b.LITROS_TOTAL - a.LITROS_TOTAL);
 
-  // Média ponderada da seleção atual: gasto total dividido pelos litros do mesmo período.
-  const precoMedioCard = somaLitrosCards > 0 ? (somaGastoCards / somaLitrosCards) : 0;
+  // Em YTD, o card representa a competência mais recente; os demais totais continuam anuais.
+  let precoMedioCard = 0;
+  if (mesSel === 'YTD') {
+    const registrosMesRecente = registrosModo.filter(d => d.MES_ANO === mesMaisRecenteModo);
+    const litrosMesRecente = registrosMesRecente.reduce((total, registro) => total + parseFloat(registro.VOLUME_CICLO || 0), 0);
+    const valorMesRecente = registrosMesRecente.reduce((total, registro) => {
+      const litros = parseFloat(registro.VOLUME_CICLO || 0);
+      const valorTotal = parseFloat(registro.VALOR_TOTAL_CICLO || 0);
+      return total + (valorTotal > 0 ? valorTotal : litros * parseFloat(registro.VALOR_UNITARIO || 0));
+    }, 0);
+    precoMedioCard = litrosMesRecente > 0 ? valorMesRecente / litrosMesRecente : 0;
+  } else {
+    precoMedioCard = somaLitrosCards > 0 ? (somaGastoCards / somaLitrosCards) : 0;
+  }
 
   const elCardVol = document.getElementById('cardVolume');
   const elCardGasto = document.getElementById('cardGasto');
@@ -753,6 +767,12 @@ function processarPainel() {
     elCardPm.innerText = precoMedioCard > 0
       ? "R$ " + precoMedioCard.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
       : "R$ 0,000";
+  }
+  const elCardPmSub = document.getElementById('cardPrecoMedioSub');
+  if (elCardPmSub) {
+    elCardPmSub.innerText = mesSel === 'YTD'
+      ? `Média da última competência com dados: ${mesMaisRecenteModo || '--'}`
+      : `Média da competência ${mesSel}`;
   }
 
   const postosComDesvio = listaPostos
