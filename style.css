@@ -49,10 +49,37 @@ body {
 
 /* BARRA SUPERIOR MESTRE */
 .cockpit-bar-mestre {
-  background: linear-gradient(135deg, #062316 0%, #0f3d26 50%, #144e31 100%);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: #0c3825;
   border-radius: 10px;
   padding: 6px 14px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+.cockpit-bar-mestre::before,
+.cockpit-bar-mestre::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  width: 18%;
+  pointer-events: none;
+}
+.cockpit-bar-mestre::before {
+  left: 0;
+  background: linear-gradient(118deg, rgba(147, 255, 202, 0.2), rgba(147, 255, 202, 0.04) 48%, transparent 82%);
+  clip-path: polygon(0 0, 100% 0, 72% 100%, 0 100%);
+}
+.cockpit-bar-mestre::after {
+  right: 0;
+  background: linear-gradient(242deg, rgba(147, 255, 202, 0.22), rgba(147, 255, 202, 0.04) 48%, transparent 82%);
+  clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);
+}
+.cockpit-bar-mestre > * {
+  position: relative;
+  z-index: 1;
 }
 .cockpit-bar-mestre .form-select {
   background-color: rgba(255, 255, 255, 0.12);
@@ -452,6 +479,46 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+.panel-header-termometro {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+}
+.termometro-titulo {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+.termometro-filtros {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+.termometro-filtros > div:has(#filtroPosto) {
+  flex: 1 1 190px;
+  min-width: 165px;
+}
+.termometro-filtros #filtroPosto {
+  width: 100%;
+}
+.termometro-filtros > div:has(#campoBusca) {
+  flex: 0 1 230px;
+  min-width: 180px;
+}
+@media (max-width: 1280px) {
+  .panel-header-termometro {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .termometro-filtros {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 .card-posto-termometro {

@@ -259,14 +259,13 @@
 
     <!-- SEÇÃO 1: LISTAGEM ANALÍTICA DO TERMÔMETRO OPERACIONAL -->
     <div id="secaoPainelPrincipal" class="panel-box">
-      <div class="panel-header">
-        <div>
+      <div class="panel-header panel-header-termometro">
+        <div class="termometro-titulo">
           <strong class="text-dark" id="lblTituloPainel" style="font-size: 0.88rem;"><i class="bi bi-speedometer2 me-1 text-success"></i> Painel Consolidado &bull; Visão Integrada da Frota</strong>
-          <div class="small text-muted" id="lblSubtituloTabela" style="font-size: 0.72rem;">Garagens internas (Barueri, Ribeirão, Eusébio, Colombo, etc.) e postos de rodovia</div>
         </div>
 
         <!-- FILTROS OPERACIONAIS -->
-        <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="termometro-filtros">
           <div class="d-flex align-items-center gap-1">
             <label class="small fw-bold text-muted text-uppercase mb-0" style="font-size: 0.65rem;">UF:</label>
             <select id="filtroUfSelect" class="form-select form-select-sm" style="min-width: 80px;" onchange="aplicarFiltroUfSelect()">
