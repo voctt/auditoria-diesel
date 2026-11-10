@@ -222,6 +222,87 @@ body {
 #gridKpisPrincipais .card-kpi-media .kpi-val-grande {
   font-size: 1.55rem;
 }
+.kpi-dashboard-rail {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  height: 100%;
+  min-height: 360px;
+}
+.kpi-dashboard-rail .card-kpi,
+.kpi-reference-row .card-kpi {
+  min-width: 0;
+  min-height: 0;
+}
+.kpi-reference-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-height: 0;
+}
+.map-container-dashboard {
+  height: 100%;
+  min-height: 360px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+.mapa-dashboard-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 285px;
+  margin: 4px 0 8px;
+}
+.map-container-dashboard #miniMapaBrasil {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.card-tabela-resumo-dashboard {
+  min-height: 0;
+  padding: 8px 14px;
+}
+.card-tabela-resumo-dashboard .tabela-sintetica th,
+.card-tabela-resumo-dashboard .tabela-sintetica td {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+@media (max-width: 1199.98px) {
+  .kpi-dashboard-rail {
+    height: auto;
+    min-height: 0;
+    grid-template-rows: repeat(2, minmax(150px, auto));
+  }
+  .kpi-dashboard-rail .card-kpi,
+  .kpi-reference-row .card-kpi {
+    min-height: 150px;
+  }
+  .map-container-dashboard {
+    min-height: 330px;
+  }
+  .mapa-dashboard-canvas {
+    min-height: 255px;
+  }
+}
+@media (max-width: 575.98px) {
+  .kpi-dashboard-rail {
+    grid-template-rows: repeat(2, minmax(145px, auto));
+  }
+  .kpi-reference-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .kpi-reference-row .card-kpi {
+    min-height: 140px;
+  }
+  .map-container-dashboard {
+    min-height: 300px;
+  }
+  .mapa-dashboard-canvas {
+    min-height: 230px;
+  }
+}
 .card-animacao-entrada {
   animation: entrada-kpi 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: var(--atraso-entrada-kpi, 0ms);

@@ -87,151 +87,45 @@
       </div>
     </div>
 
-    <!-- LINHA 2: GRID SIMÉTRICO DOS KPIS PRINCIPAIS -->
-    <div class="row g-2 mb-3 align-items-stretch" id="gridKpisPrincipais">
-      <div class="col-12 col-xl-8 d-flex flex-column justify-content-between">
-        
-        <!-- FILEIRA SUPERIOR -->
-        <div class="row g-2 mb-2 flex-grow-1">
-          <!-- CARD 1: VOLUME & GASTO TOTAL -->
-          <div class="col-12 col-md-4">
-            <div class="card-kpi card-kpi-volume">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="kpi-label mb-0">VOLUME E GASTO</div>
-                <i class="bi bi-fuel-pump-fill kpi-card-icon" aria-hidden="true"></i>
-              </div>
-              <div class="kpi-volume-pair my-auto py-2">
-                <div class="kpi-volume-item">
-                  <span class="kpi-metric-label">Litros</span>
-                  <div class="kpi-val" id="cardVolume">-- L</div>
-                </div>
-                <div class="kpi-volume-divider" aria-hidden="true"></div>
-                <div class="kpi-volume-item">
-                  <span class="kpi-metric-label">Total abastecido</span>
-                  <div class="kpi-val" id="cardGasto">R$ --</div>
-                </div>
-              </div>
-              <div class="kpi-sub">Auditado na competência</div>
-              <div id="sparkVolumeBg" class="sparkline-kpi-bg"></div>
+    <!-- VISÃO EXECUTIVA: INDICADORES, MAPA E REFERÊNCIAS -->
+    <div class="row g-3 mb-3 align-items-stretch" id="gridKpisPrincipais">
+      <div class="col-12 col-xl-3">
+        <div class="kpi-dashboard-rail kpi-dashboard-rail-volume">
+          <div class="card-kpi card-kpi-volume">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="kpi-label mb-0">VOLUME E GASTO</div>
+              <i class="bi bi-fuel-pump-fill kpi-card-icon" aria-hidden="true"></i>
             </div>
-          </div>
-          
-          <!-- CARD 2: PREÇO MÉDIO REAL -->
-          <div class="col-12 col-md-3">
-            <div class="card-kpi card-kpi-media">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="kpi-label mb-0" id="cardPrecoMedioLabel">PREÇO MÉDIO REAL</div>
-                <i class="bi bi-speedometer2 kpi-card-icon" aria-hidden="true"></i>
+            <div class="kpi-volume-pair my-auto py-2">
+              <div class="kpi-volume-item">
+                <span class="kpi-metric-label">Litros</span>
+                <div class="kpi-val" id="cardVolume">-- L</div>
               </div>
-              <div class="my-auto py-2">
-                <div class="kpi-val-grande text-success" id="cardPrecoMedio">R$ --</div>
+              <div class="kpi-volume-divider" aria-hidden="true"></div>
+              <div class="kpi-volume-item">
+                <span class="kpi-metric-label">Total abastecido</span>
+                <div class="kpi-val" id="cardGasto">R$ --</div>
               </div>
-              <div class="kpi-sub" id="cardPrecoMedioSub">Média frota auditada</div>
             </div>
+            <div class="kpi-sub">Auditado na competência</div>
+            <div id="sparkVolumeBg" class="sparkline-kpi-bg"></div>
           </div>
 
-          <!-- CARD 3: POSTOS COM PRIORIDADE DE AÇÃO -->
-          <div class="col-12 col-md-5">
-            <div class="card-kpi card-kpi-ineficiencia card-kpi-prioridade">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <div class="kpi-label text-warning-emphasis mb-0">POSTOS COM PRIORIDADE DE AÇÃO</div>
-                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.52rem;">TOP 3</span>
-              </div>
-              <div class="lista-top3-acao" id="listaTop3Acao">
-                <div class="text-muted small" style="font-size: 0.65rem;">Calculando...</div>
-              </div>
-              <div class="kpi-sub" style="font-size: 0.58rem;">Maior desvio financeiro acumulado</div>
+          <div class="card-kpi card-kpi-ineficiencia card-kpi-prioridade">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div class="kpi-label text-warning-emphasis mb-0">POSTOS COM PRIORIDADE DE AÇÃO</div>
+              <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.52rem;">TOP 3</span>
             </div>
-          </div>
-        </div>
-
-        <!-- FILEIRA INFERIOR -->
-        <div class="row g-2 flex-grow-1">
-          <!-- CARD MAIOR PREÇO UF -->
-          <div class="col-6 col-md-3">
-            <div class="card-kpi card-kpi-alerta card-kpi-extremo">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <div class="kpi-label text-danger mb-0">MAIOR PREÇO UF</div>
-                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.52rem;">PICO RECENTE</span>
-              </div>
-              <div id="cardMaiorConteudo" class="my-auto py-1">
-                <div class="kpi-val text-danger" id="cardMaiorUf">--</div>
-              </div>
-              <div class="kpi-sub text-truncate" id="cardMaiorUfSub">Últimos 20 dias ativos</div>
+            <div class="lista-top3-acao" id="listaTop3Acao">
+              <div class="text-muted small" style="font-size: 0.65rem;">Calculando...</div>
             </div>
-          </div>
-
-          <!-- CARD MENOR PREÇO UF -->
-          <div class="col-6 col-md-3">
-            <div class="card-kpi card-kpi-destaque card-kpi-extremo">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <div class="kpi-label text-success mb-0">MENOR PREÇO UF</div>
-                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.52rem;">ECONOMIA RECENTE</span>
-              </div>
-              <div id="cardMenorConteudo" class="my-auto py-1">
-                <div class="kpi-val text-success" id="cardMenorUf">--</div>
-              </div>
-              <div class="kpi-sub text-truncate" id="cardMenorUfSub">Últimos 20 dias ativos</div>
-            </div>
-          </div>
-
-          <!-- CARD ANP / ANTT BRASIL -->
-          <div class="col-6 col-md-2">
-            <div class="card-kpi card-kpi-anp card-kpi-oficial">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <div class="kpi-label text-primary mb-0">ANP / ANTT</div>
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.50rem;">OFICIAL</span>
-              </div>
-              <div class="my-auto py-1">
-                <div class="kpi-val-grande text-primary" id="cardAnpAntt">--</div>
-              </div>
-              <div class="kpi-sub text-truncate" id="cardAnpAnttSub" style="font-size: 0.56rem;">
-                Sem publicação
-              </div>
-            </div>
-          </div>
-
-          <!-- TABELA SINTÉTICA -->
-          <div class="col-12 col-md-4">
-            <div class="card-tabela-resumo">
-              <table class="table tabela-sintetica text-end">
-                <thead>
-                  <tr>
-                    <th class="text-start">Tipo Operação</th>
-                    <th>Qtd</th>
-                    <th>Vol (Lts)</th>
-                    <th>Total (R$)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="text-start fw-bold" style="color: #c2410c;">Rota Rodoviária</td>
-                    <td class="font-monospace" id="tbResumoQtdRota">--</td>
-                    <td class="font-monospace fw-semibold" id="tbResumoVolRota">--</td>
-                    <td class="font-monospace" id="tbResumoGastoRota">--</td>
-                  </tr>
-                  <tr>
-                    <td class="text-start fw-bold" style="color: #15803d;">Tanques Próprios</td>
-                    <td class="font-monospace" id="tbResumoQtdInterno">--</td>
-                    <td class="font-monospace fw-semibold" id="tbResumoVolInterno">--</td>
-                    <td class="font-monospace" id="tbResumoGastoInterno">--</td>
-                  </tr>
-                  <tr class="fw-bold" style="background-color: #f8fafc; border-top: 1px solid var(--border-color);">
-                    <td class="text-start text-dark">Consolidado Geral</td>
-                    <td class="font-monospace text-dark" id="tbResumoQtdTotal">--</td>
-                    <td class="font-monospace text-dark" id="tbResumoVolTotal">--</td>
-                    <td class="font-monospace text-dark" id="tbResumoGastoTotal">--</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <div class="kpi-sub" style="font-size: 0.58rem;">Maior desvio financeiro acumulado</div>
           </div>
         </div>
       </div>
 
-      <!-- COLUNA DO MINI MAPA -->
-      <div class="col-12 col-xl-4">
-        <div class="map-container">
+      <div class="col-12 col-xl-5">
+        <div class="map-container map-container-dashboard">
           <div class="d-flex justify-content-between align-items-center mb-1">
             <span class="small fw-bold text-dark text-uppercase" style="font-size: 0.68rem;">
               <i class="bi bi-geo-alt-fill me-1 text-success"></i> FILTRO POR ESTADO
@@ -239,7 +133,7 @@
             <span class="text-muted" style="font-size: 0.62rem;" id="lblHoverEstado">Passe o mouse ou clique</span>
           </div>
 
-          <div class="flex-grow-1 position-relative my-1" style="min-height: 215px;">
+          <div class="mapa-dashboard-canvas">
             <div id="miniMapaBrasil"></div>
           </div>
 
@@ -253,6 +147,93 @@
               <span class="legend-indicator" style="background:#062316;" title="Muito Alto"></span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-4">
+        <div class="kpi-dashboard-rail kpi-dashboard-rail-referencias">
+          <div class="kpi-reference-row">
+            <div class="card-kpi card-kpi-media">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="kpi-label mb-0" id="cardPrecoMedioLabel">PREÇO MÉDIO REAL</div>
+                <i class="bi bi-speedometer2 kpi-card-icon" aria-hidden="true"></i>
+              </div>
+              <div class="my-auto py-2">
+                <div class="kpi-val-grande text-success" id="cardPrecoMedio">R$ --</div>
+              </div>
+              <div class="kpi-sub" id="cardPrecoMedioSub">Média frota auditada</div>
+            </div>
+
+            <div class="card-kpi card-kpi-anp card-kpi-oficial">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="kpi-label text-primary mb-0">ANP / ANTT</div>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.50rem;">OFICIAL</span>
+              </div>
+              <div class="my-auto py-1">
+                <div class="kpi-val-grande text-primary" id="cardAnpAntt">--</div>
+              </div>
+              <div class="kpi-sub text-truncate" id="cardAnpAnttSub" style="font-size: 0.56rem;">Sem publicação</div>
+            </div>
+          </div>
+
+          <div class="kpi-reference-row">
+            <div class="card-kpi card-kpi-alerta card-kpi-extremo">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="kpi-label text-danger mb-0">MAIOR PREÇO UF</div>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.52rem;">PICO RECENTE</span>
+              </div>
+              <div id="cardMaiorConteudo" class="my-auto py-1">
+                <div class="kpi-val text-danger" id="cardMaiorUf">--</div>
+              </div>
+              <div class="kpi-sub text-truncate" id="cardMaiorUfSub">Últimos 20 dias ativos</div>
+            </div>
+
+            <div class="card-kpi card-kpi-destaque card-kpi-extremo">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="kpi-label text-success mb-0">MENOR PREÇO UF</div>
+                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.52rem;">ECONOMIA RECENTE</span>
+              </div>
+              <div id="cardMenorConteudo" class="my-auto py-1">
+                <div class="kpi-val text-success" id="cardMenorUf">--</div>
+              </div>
+              <div class="kpi-sub text-truncate" id="cardMenorUfSub">Últimos 20 dias ativos</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card-tabela-resumo card-tabela-resumo-dashboard">
+          <table class="table tabela-sintetica text-end">
+            <thead>
+              <tr>
+                <th class="text-start">Tipo Operação</th>
+                <th>Qtd</th>
+                <th>Vol (Lts)</th>
+                <th>Total (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-start fw-bold" style="color: #c2410c;">Rota Rodoviária</td>
+                <td class="font-monospace" id="tbResumoQtdRota">--</td>
+                <td class="font-monospace fw-semibold" id="tbResumoVolRota">--</td>
+                <td class="font-monospace" id="tbResumoGastoRota">--</td>
+              </tr>
+              <tr>
+                <td class="text-start fw-bold" style="color: #15803d;">Tanques Próprios</td>
+                <td class="font-monospace" id="tbResumoQtdInterno">--</td>
+                <td class="font-monospace fw-semibold" id="tbResumoVolInterno">--</td>
+                <td class="font-monospace" id="tbResumoGastoInterno">--</td>
+              </tr>
+              <tr class="fw-bold" style="background-color: #f8fafc; border-top: 1px solid var(--border-color);">
+                <td class="text-start text-dark">Consolidado Geral</td>
+                <td class="font-monospace text-dark" id="tbResumoQtdTotal">--</td>
+                <td class="font-monospace text-dark" id="tbResumoVolTotal">--</td>
+                <td class="font-monospace text-dark" id="tbResumoGastoTotal">--</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
