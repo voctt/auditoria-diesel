@@ -98,13 +98,38 @@ async function inicializarMiniMapaBrasil() {
   }
 }
 
-function obterCorPorVolume(vol) {
-  if (!vol || vol === 0) return '#e2e8f0';
-  if (vol < 50000) return '#4ade80';
-  if (vol < 150000) return '#22c55e';
-  if (vol < 350000) return '#1c483a';
-  if (vol < 700000) return '#14352a';
-  return '#062316';
+const CORES_CONCENTRACAO_MAPA = ['#4ade80', '#22c55e', '#1c483a', '#062316'];
+
+function obterCorPorVolume(vol, min, max) {
+  if (!Number.isFinite(vol) || vol <= 0) return '#e2e8f0';
+  if (max === min) return CORES_CONCENTRACAO_MAPA[1];
+
+  const normalizado = (vol - min) / (max - min);
+  const faixa = Math.min(CORES_CONCENTRACAO_MAPA.length - 1, Math.floor(normalizado * CORES_CONCENTRACAO_MAPA.length));
+  return CORES_CONCENTRACAO_MAPA[faixa];
+}
+
+function atualizarLegendaConcentracao(min, max) {
+  const legenda = document.getElementById('legendaConcentracao');
+  if (!legenda) return;
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    legenda.innerHTML = '<span class="text-muted">Sem dados</span>';
+    return;
+  }
+
+  if (min === max) {
+    legenda.innerHTML = `<span class="legend-indicator" style="background:${CORES_CONCENTRACAO_MAPA[1]};" title="Sem variação"></span><span class="text-muted">${Math.round(min).toLocaleString('pt-BR')} L (sem variação)</span>`;
+    return;
+  }
+
+  const passo = (max - min) / CORES_CONCENTRACAO_MAPA.length;
+  legenda.innerHTML = CORES_CONCENTRACAO_MAPA.map((cor, indice) => {
+    const inicio = min + passo * indice;
+    const fim = indice === CORES_CONCENTRACAO_MAPA.length - 1 ? max : min + passo * (indice + 1);
+    const intervalo = `${Math.round(inicio).toLocaleString('pt-BR')}–${Math.round(fim).toLocaleString('pt-BR')} L`;
+    return `<span class="d-inline-flex align-items-center text-muted" title="${intervalo}"><span class="legend-indicator" style="background:${cor};"></span>${intervalo}</span>`;
+  }).join('');
 }
 
 function gerarConteudoTooltipUf(uf) {
@@ -195,8 +220,14 @@ function atualizarCoresMiniMapa() {
   const volPorUf = {};
   regs.forEach(d => {
     if (!d.UF_POSTO) return;
-    volPorUf[d.UF_POSTO] = (volPorUf[d.UF_POSTO] || 0) + parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0);
+    const volume = parseFloat(d.VOLUME_CICLO || d.LITROS_MES || 0);
+    if (!Number.isFinite(volume)) return;
+    volPorUf[d.UF_POSTO] = (volPorUf[d.UF_POSTO] || 0) + volume;
   });
+  const volumesAtivos = Object.values(volPorUf).filter(volume => volume > 0);
+  const minVolume = volumesAtivos.length ? Math.min(...volumesAtivos) : NaN;
+  const maxVolume = volumesAtivos.length ? Math.max(...volumesAtivos) : NaN;
+  atualizarLegendaConcentracao(minVolume, maxVolume);
 
   camadaGeoJsonBrasil = L.geoJSON(dadosGeoJsonBr, {
     style: function(feature) {
@@ -205,7 +236,7 @@ function atualizarCoresMiniMapa() {
       const selecionado = (typeof ufFiltrada !== 'undefined' && ufFiltrada === sigla);
 
       return {
-        fillColor: obterCorPorVolume(vol),
+        fillColor: obterCorPorVolume(vol, minVolume, maxVolume),
         weight: selecionado ? 2.5 : 0.8,
         opacity: 1,
         color: selecionado ? '#f59e0b' : '#ffffff',
@@ -266,8 +297,8 @@ function atualizarCoresMiniMapa() {
     if (miniMapaLeaflet && camadaGeoJsonBrasil) {
       miniMapaLeaflet.invalidateSize();
       miniMapaLeaflet.fitBounds(camadaGeoJsonBrasil.getBounds(), {
-        padding: [0, 0],
-        maxZoom: 5.5
+        padding: [-10, -14],
+        maxZoom: 6
       });
     }
   }, 100);
