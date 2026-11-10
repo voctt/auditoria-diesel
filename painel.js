@@ -354,6 +354,11 @@ function aplicarFiltroRede() {
 }
 
 function filtrarPorPostoClique(nomePosto) {
+  if (postoFiltrado === nomePosto) {
+    limparFiltroPosto();
+    return;
+  }
+
   postoFiltrado = nomePosto;
   const filtroPosto = document.getElementById('filtroPosto');
   if (filtroPosto) filtroPosto.value = nomePosto;
