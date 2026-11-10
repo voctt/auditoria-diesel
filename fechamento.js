@@ -262,7 +262,7 @@ async function renderizarAbaFechamentoExecutivo() {
     </div>
 
     <!-- BLOCO 1: CARDS DE IMPACTO COM NÚMEROS AMPLIADOS & NEON GLOW -->
-    <div class="row g-2 mb-3">
+    <div class="row g-2 mb-3 cards-fechamento-principais">
       <!-- TERMÔMETRO MACRO DO MÊS -->
       <div class="col-12 col-md-3">
         <div class="card-exec-dark h-100 ${dados.operacaoVerde ? 'glow-verde' : 'glow-vermelho'} d-flex flex-column justify-content-between">
