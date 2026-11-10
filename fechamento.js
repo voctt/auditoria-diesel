@@ -867,7 +867,7 @@ function renderizarLinhasTabelaFechamento(linhas) {
         <td class="text-end font-monospace fw-bold" style="color: #f8fafc !important;">
           ${Math.round(l.volume).toLocaleString('pt-BR')} L
         </td>
-        <td class="text-end font-monospace fw-bold" style="color: ${corGanho} !important;">
+        <td class="text-end font-monospace fw-bold" style="color: #4ade80 !important;">
           ${l.hardSaving > 0 ? `+ R$ ${Math.round(l.hardSaving).toLocaleString('pt-BR')}` : '--'}
         </td>
       </tr>
