@@ -595,6 +595,7 @@ function processarPainel() {
   let somaLitrosCards = 0;
   let somaGastoCards = 0;
 
+  // YTD cobre todos os meses do ano-base; uma competência selecionada restringe ao mês correspondente.
   let baseCalculo = registrosModo;
   if (mesSel !== 'YTD') {
     baseCalculo = registrosModo.filter(d => d.MES_ANO === mesSel);
@@ -638,7 +639,9 @@ function processarPainel() {
       : `${d.POSTO}_${d.UF_POSTO}`;
 
     const litros = parseFloat(d.VOLUME_CICLO || 0);
-    const valor = parseFloat(d.VALOR_TOTAL_CICLO || 0);
+    const precoUnitarioInformado = parseFloat(d.VALOR_UNITARIO || 0);
+    const valorTotalInformado = parseFloat(d.VALOR_TOTAL_CICLO || 0);
+    const valor = valorTotalInformado > 0 ? valorTotalInformado : litros * precoUnitarioInformado;
 
     somaLitrosCards += litros;
     somaGastoCards += valor;
@@ -652,7 +655,6 @@ function processarPainel() {
         LITROS_TOTAL: 0,
         VALOR_TOTAL: 0,
         IMPACTO_REAIS: 0,
-        ECONOMIA_ANP_REAIS: 0,
         ULTIMO_PRECO: parseFloat(d.VALOR_UNITARIO || 0),
         DATA_MAIS_RECENTE: d.DATA_FIM_CICLO || "",
         MES_MAIS_RECENTE: d.MES_ANO
@@ -664,11 +666,11 @@ function processarPainel() {
 
     const tabelaAnpCiclo = d.TIPO_OPERACAO === 'INTERNO' ? anpDistribuicao : anpRevenda;
     const referenciaAnpCiclo = tabelaAnpCiclo[d.UF_POSTO]?.[d.MES_ANO] || 0;
-    const precoPagoCiclo = parseFloat(d.VALOR_UNITARIO || 0);
+    const precoPagoCiclo = litros > 0 ? valor / litros : precoUnitarioInformado;
     if (referenciaAnpCiclo > 0 && precoPagoCiclo > 0 && litros > 0) {
+      // Soma assinada: sobrepreços aumentam o impacto e compras abaixo da ANP o reduzem.
       const diferencaCiclo = (precoPagoCiclo - referenciaAnpCiclo) * litros;
-      if (diferencaCiclo > 0) postosMap[chave].IMPACTO_REAIS += diferencaCiclo;
-      else postosMap[chave].ECONOMIA_ANP_REAIS -= diferencaCiclo;
+      postosMap[chave].IMPACTO_REAIS += diferencaCiclo;
     }
 
     if ((d.DATA_FIM_CICLO || "") > postosMap[chave].DATA_MAIS_RECENTE) {
@@ -687,7 +689,11 @@ function processarPainel() {
         (p.TIPO_OPERACAO !== 'INTERNO' || r.MUNICIPIO_POSTO === p.MUNICIPIO_POSTO)
       );
       const litMes = ciclosVigentes.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0);
-      const valMes = ciclosVigentes.reduce((acc, c) => acc + parseFloat(c.VALOR_TOTAL_CICLO || 0), 0);
+      const valMes = ciclosVigentes.reduce((acc, c) => {
+        const litros = parseFloat(c.VOLUME_CICLO || 0);
+        const total = parseFloat(c.VALOR_TOTAL_CICLO || 0);
+        return acc + (total > 0 ? total : litros * parseFloat(c.VALOR_UNITARIO || 0));
+      }, 0);
       precoMedioExibicao = litMes > 0 ? (valMes / litMes) : 0;
     } else {
       precoMedioExibicao = p.LITROS_TOTAL > 0 ? (p.VALOR_TOTAL / p.LITROS_TOTAL) : 0;
@@ -723,7 +729,6 @@ function processarPainel() {
       GAP_MERCADO: gapMercado,
       GAP_PERC: gapPerc,
       IMPACTO_REAIS: p.IMPACTO_REAIS,
-      ECONOMIA_ANP_REAIS: p.ECONOMIA_ANP_REAIS,
       DIFF_LOCAL: diffLocal,
       NOME_MELHOR_LOCAL: nomeMelhorLocal,
       PRECO_MELHOR_LOCAL: precoMelhorLocal,
@@ -1173,8 +1178,8 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     let impactoHtml = `<span class="text-muted small">R$ 0,00</span>`;
     if (p.IMPACTO_REAIS > 0) {
       impactoHtml = `<span class="text-danger fw-bold small">+R$ ${Math.round(p.IMPACTO_REAIS).toLocaleString('pt-BR')}</span>`;
-    } else if (p.ECONOMIA_ANP_REAIS > 0) {
-      impactoHtml = `<span class="text-success fw-bold small">-R$ ${Math.round(p.ECONOMIA_ANP_REAIS).toLocaleString('pt-BR')}</span>`;
+    } else if (p.IMPACTO_REAIS < 0) {
+      impactoHtml = `<span class="text-success fw-bold small">-R$ ${Math.round(Math.abs(p.IMPACTO_REAIS)).toLocaleString('pt-BR')}</span>`;
     }
 
     let tagDispersao = "";
@@ -1232,7 +1237,11 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
       let precoKmmMes = null;
       if (ciclosMes.length > 0) {
         const litrosMes = ciclosMes.reduce((acc, c) => acc + parseFloat(c.VOLUME_CICLO || 0), 0);
-        const valorMes = ciclosMes.reduce((acc, c) => acc + parseFloat(c.VALOR_TOTAL_CICLO || 0), 0);
+        const valorMes = ciclosMes.reduce((acc, c) => {
+          const litros = parseFloat(c.VOLUME_CICLO || 0);
+          const total = parseFloat(c.VALOR_TOTAL_CICLO || 0);
+          return acc + (total > 0 ? total : litros * parseFloat(c.VALOR_UNITARIO || 0));
+        }, 0);
         if (litrosMes > 0) precoKmmMes = (valorMes / litrosMes);
       }
 
@@ -1324,7 +1333,7 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
         </div>
 
         <div class="col-m-impacto">
-          <div class="small text-muted text-uppercase" style="font-size: 0.58rem; font-weight: 800;">Impacto R$</div>
+          <div class="small text-muted text-uppercase" style="font-size: 0.58rem; font-weight: 800;">Impacto líquido</div>
           <div class="font-monospace">${impactoHtml}</div>
         </div>
 
@@ -1443,7 +1452,7 @@ function renderizarResumoAnualPosto(postos) {
     const precoUnitario = parseFloat(registro.VALOR_UNITARIO || 0) || 0;
     dadosMes[indiceMes].litros += litros;
     dadosMes[indiceMes].valor += valorInformado > 0 ? valorInformado : litros * precoUnitario;
-    dadosMes[indiceMes].valorCiclo += valorInformado;
+    dadosMes[indiceMes].valorCiclo += valorInformado > 0 ? valorInformado : litros * precoUnitario;
   });
 
   const totalLitros = dadosMes.reduce((total, mes) => total + mes.litros, 0);
