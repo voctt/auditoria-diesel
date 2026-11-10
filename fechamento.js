@@ -280,6 +280,22 @@ async function renderizarAbaFechamentoExecutivo() {
   const container = document.getElementById('secaoFechamentoExecutivo');
   if (!container) return;
 
+  try {
+    await renderizarConteudoFechamentoExecutivo();
+  } catch (erro) {
+    console.error('Falha ao renderizar o Fechamento Executivo:', erro);
+    container.replaceChildren();
+    const alerta = document.createElement('div');
+    alerta.className = 'alert alert-danger p-3 text-center';
+    alerta.textContent = `Não foi possível carregar o Fechamento Executivo: ${erro?.message || 'erro inesperado'}`;
+    container.appendChild(alerta);
+  }
+}
+
+async function renderizarConteudoFechamentoExecutivo() {
+  const container = document.getElementById('secaoFechamentoExecutivo');
+  if (!container) return;
+
   if (typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais) || baseRegistrosMensais.length === 0) {
     container.innerHTML = `
       <div class="alert alert-dark p-3 text-center border-secondary">
@@ -1531,7 +1547,14 @@ async function carregarDossieMesFirestore(mesAno) {
     const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
     const headers = token ? { "Authorization": `Bearer ${token}` } : {};
 
-    const resp = await fetch(`${FIRESTORE_BASE_DOSSIE}/${mesAno}`, { headers });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    let resp;
+    try {
+      resp = await fetch(`${FIRESTORE_BASE_DOSSIE}/${mesAno}`, { headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (resp.status === 404) {
       cacheDossieMes[mesAno] = '';
       cachePareceresGestor[mesAno] = [];

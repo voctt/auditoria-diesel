@@ -901,19 +901,31 @@ function gerarHtmlExtremoUnico(extremo, classeCor) {
   `;
 }
 
+function escaparTextoHtml(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, caractere => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[caractere]);
+}
+
 function gerarHtmlExtremoConsolidado(extremo, tipo, posicao, classeCor, rotulo) {
   const ehRota = tipo === 'ROTA';
-  const titulo = `${rotulo}: ${extremo ? extremo.posto : 'ND'}`;
+  const posto = escaparTextoHtml(extremo?.posto || 'Sem posto com preço válido');
+  const uf = escaparTextoHtml(extremo?.uf || '--');
+  const preco = extremo ? `R$ ${extremo.preco.toFixed(3).replace('.', ',')}` : '--';
+  const titulo = escaparTextoHtml(`${rotulo}: ${posto} (${uf}) · ${preco}`);
   const separador = posicao === 'segundo' ? ' kpi-extremo-split-separador' : '';
 
   return `
-    <div class="kpi-val-split kpi-extremo-split${separador} ${classeCor}" title="${titulo}">
+    <div class="kpi-val-split kpi-extremo-split${separador} ${classeCor}" title="${titulo}" aria-label="${titulo}">
       ${extremo ? gerarSilhuetaUfSvg(extremo.uf, true) : ''}
-      <span class="kpi-extremo-identificacao">
-        <span class="badge-tipo ${ehRota ? 'tipo-rota' : 'tipo-interno'}">${tipo}</span>
-        <span class="kpi-extremo-uf">${extremo ? extremo.uf : '--'}</span>
-      </span>
-      <span class="kpi-extremo-preco">R$ ${extremo ? extremo.preco.toFixed(3).replace('.', ',') : '--'}</span>
+      <div class="kpi-extremo-split-top">
+        <span class="kpi-extremo-identificacao">
+          <span class="badge-tipo ${ehRota ? 'tipo-rota' : 'tipo-interno'}">${tipo}</span>
+          <span class="kpi-extremo-uf">${uf}</span>
+        </span>
+        <span class="kpi-extremo-preco">${preco}</span>
+      </div>
+      <span class="kpi-extremo-posto">${posto}</span>
     </div>
   `;
 }

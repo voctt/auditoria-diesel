@@ -561,13 +561,36 @@ body {
 .kpi-extremo-split {
   position: relative;
   isolation: isolate;
-  min-height: 25px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  min-height: 37px;
   overflow: hidden;
   padding: 2px 3px;
 }
+.kpi-extremo-split-top,
 .kpi-extremo-split > span {
   position: relative;
   z-index: 1;
+}
+.kpi-extremo-split-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+}
+.kpi-extremo-posto {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .kpi-extremo-identificacao {
   display: inline-flex;
