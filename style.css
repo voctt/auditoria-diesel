@@ -52,10 +52,12 @@ body {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: #0c3825;
+  background: linear-gradient(180deg, #12442f 0%, #0c3825 100%);
+  border: 1px solid rgba(204, 255, 229, 0.26);
   border-radius: 10px;
   padding: 6px 14px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  box-shadow: inset 0 1px 0 rgba(240, 255, 247, 0.18), inset 0 -1px 0 rgba(2, 20, 12, 0.22), 0 4px 14px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px) saturate(125%);
 }
 .cockpit-bar-mestre::before,
 .cockpit-bar-mestre::after {
@@ -69,13 +71,15 @@ body {
 }
 .cockpit-bar-mestre::before {
   left: 0;
-  background: linear-gradient(118deg, rgba(147, 255, 202, 0.2), rgba(147, 255, 202, 0.04) 48%, transparent 82%);
+  background: linear-gradient(118deg, rgba(206, 255, 230, 0.34), rgba(147, 255, 202, 0.11) 48%, transparent 82%);
   clip-path: polygon(0 0, 100% 0, 72% 100%, 0 100%);
+  filter: blur(0.7px);
 }
 .cockpit-bar-mestre::after {
   right: 0;
-  background: linear-gradient(242deg, rgba(147, 255, 202, 0.22), rgba(147, 255, 202, 0.04) 48%, transparent 82%);
+  background: linear-gradient(242deg, rgba(206, 255, 230, 0.36), rgba(147, 255, 202, 0.12) 48%, transparent 82%);
   clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);
+  filter: blur(0.7px);
 }
 .cockpit-bar-mestre > * {
   position: relative;
@@ -91,6 +95,15 @@ body {
 .cockpit-bar-mestre .form-select option {
   color: #0f172a;
   background: #ffffff;
+}
+.cockpit-modos {
+  align-self: center;
+  padding-bottom: 0 !important;
+  margin-bottom: 0;
+}
+.cockpit-modos .btn-toggle-tipo {
+  align-self: center;
+  margin-block: 0;
 }
 
 .btn-toggle-tipo {
@@ -340,11 +353,11 @@ body {
   white-space: nowrap;
 }
 .kpi-uf-silhueta-compacta {
-  right: 42px;
-  width: 44px;
-  height: 32px;
-  opacity: 0.25;
-  filter: blur(0.4px);
+  right: 74px;
+  width: 42px;
+  height: 30px;
+  opacity: 0.23;
+  filter: blur(0.35px);
 }
 .kpi-extremo-split-separador {
   margin-top: 3px;
