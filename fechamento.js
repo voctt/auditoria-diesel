@@ -350,7 +350,7 @@ async function renderizarAbaFechamentoExecutivo() {
           <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
             <i class="bi bi-graph-up-arrow text-success me-2"></i>Curva de Eficiência da Gestão: Evolução de Savings & Spread ANP
           </h6>
-          <span class="small text-muted" style="font-size: 0.68rem;">
+          <span class="small text-white-50" style="font-size: 0.68rem;">
             Evidência temporal do descolamento de custos a partir da atuação estratégica de compras na frota
           </span>
         </div>
@@ -368,7 +368,7 @@ async function renderizarAbaFechamentoExecutivo() {
           <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
             <i class="bi bi-fuel-pump-fill text-success me-2"></i>Estratégia de Tanques Próprios & Margem de Garagem (Matrizes)
           </h6>
-          <span class="small text-muted" style="font-size: 0.68rem;">
+          <span class="small text-white-50" style="font-size: 0.68rem;">
             Auditoria de compras no atacado vs. ANP Distribuição e ganho unitário contra a bomba de rua
           </span>
         </div>
@@ -1241,10 +1241,16 @@ function calcularMetricasFechamento(mesAlvo) {
   let savingGaragemMes = 0;
 
   const garagensRegs = regsMes.filter(r => r.TIPO_OPERACAO === 'INTERNO');
-  const garagensChaves = [...new Set(garagensRegs.map(r => r.POSTO))];
+  const garagensPorNome = new Map();
+  garagensRegs.forEach(r => {
+    const nomeGaragem = typeof identificarNomePonto === 'function'
+      ? identificarNomePonto(r.POSTO, r.MUNICIPIO_POSTO, r.UF_POSTO, 'INTERNO')
+      : (r.MUNICIPIO_POSTO || r.POSTO || 'Garagem Interna');
+    if (!garagensPorNome.has(nomeGaragem)) garagensPorNome.set(nomeGaragem, []);
+    garagensPorNome.get(nomeGaragem).push(r);
+  });
 
-  garagensChaves.forEach(nomeGaragem => {
-    const regsG = garagensRegs.filter(r => r.POSTO === nomeGaragem);
+  garagensPorNome.forEach((regsG, nomeGaragem) => {
     let vG = 0;
     let vtG = 0;
     let ufG = regsG[0]?.UF_POSTO || 'SP';
