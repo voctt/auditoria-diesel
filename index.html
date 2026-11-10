@@ -89,42 +89,7 @@
 
     <!-- VISÃO EXECUTIVA: INDICADORES, MAPA E REFERÊNCIAS -->
     <div class="row g-3 mb-3 align-items-stretch" id="gridKpisPrincipais">
-      <div class="col-12 col-xl-3">
-        <div class="kpi-dashboard-rail kpi-dashboard-rail-volume">
-          <div class="card-kpi card-kpi-volume">
-            <div class="d-flex justify-content-between align-items-center">
-              <div class="kpi-label mb-0">VOLUME E GASTO</div>
-              <i class="bi bi-fuel-pump-fill kpi-card-icon" aria-hidden="true"></i>
-            </div>
-            <div class="kpi-volume-pair my-auto py-2">
-              <div class="kpi-volume-item">
-                <span class="kpi-metric-label">Litros</span>
-                <div class="kpi-val" id="cardVolume">-- L</div>
-              </div>
-              <div class="kpi-volume-divider" aria-hidden="true"></div>
-              <div class="kpi-volume-item">
-                <span class="kpi-metric-label">Total abastecido</span>
-                <div class="kpi-val" id="cardGasto">R$ --</div>
-              </div>
-            </div>
-            <div class="kpi-sub">Auditado na competência</div>
-            <div id="sparkVolumeBg" class="sparkline-kpi-bg"></div>
-          </div>
-
-          <div class="card-kpi card-kpi-ineficiencia card-kpi-prioridade">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <div class="kpi-label text-warning-emphasis mb-0">POSTOS COM PRIORIDADE DE AÇÃO</div>
-              <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.52rem;">TOP 3</span>
-            </div>
-            <div class="lista-top3-acao" id="listaTop3Acao">
-              <div class="text-muted small" style="font-size: 0.65rem;">Calculando...</div>
-            </div>
-            <div class="kpi-sub" style="font-size: 0.58rem;">Maior desvio financeiro acumulado</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-xl-5">
+      <div class="col-12 col-xl-8">
         <div class="map-container map-container-dashboard">
           <div class="d-flex justify-content-between align-items-center mb-1">
             <span class="small fw-bold text-dark text-uppercase" style="font-size: 0.68rem;">
@@ -202,7 +167,7 @@
         </div>
       </div>
 
-      <div class="col-12">
+      <div class="col-12 col-xl-5">
         <div class="card-tabela-resumo card-tabela-resumo-dashboard">
           <table class="table tabela-sintetica text-end">
             <thead>
@@ -234,6 +199,19 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-7">
+        <div class="card-kpi card-kpi-ineficiencia card-kpi-prioridade card-prioridade-dashboard">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <div class="kpi-label text-warning-emphasis mb-0">POSTOS COM PRIORIDADE DE AÇÃO</div>
+            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.52rem;">TOP 3</span>
+          </div>
+          <div class="lista-top3-acao" id="listaTop3Acao">
+            <div class="text-muted small" style="font-size: 0.65rem;">Calculando...</div>
+          </div>
+          <div class="kpi-sub" style="font-size: 0.58rem;">Maior desvio financeiro acumulado</div>
         </div>
       </div>
     </div>

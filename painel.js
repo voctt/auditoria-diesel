@@ -14,6 +14,7 @@ let modoAtual = "TODOS";
 let ufFiltrada = "";
 let postoFiltrado = "";
 let redeFiltrada = "";
+let postosExternosExpandidos = false;
 let animacaoInicialKpisExecutada = false;
 let sequenciaAnimacaoCards = 0;
 
@@ -1074,10 +1075,17 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
   if (!container) return;
   container.innerHTML = "";
 
-  const lblList = document.getElementById('lblListando');
-  if (lblList) lblList.innerText = `A listar ${postos.length} postos`;
+  const ehConsolidado = modoAtual === 'TODOS';
+  if (!ehConsolidado) postosExternosExpandidos = false;
+  const postosExternos = ehConsolidado ? postos.filter(p => p.TIPO_OPERACAO === 'EXTERNO') : [];
+  const postosInternos = ehConsolidado ? postos.filter(p => p.TIPO_OPERACAO === 'INTERNO') : [];
+  const postosOrdenados = ehConsolidado ? [...postosExternos, ...postosInternos] : postos;
+  const limitePostosExternos = 10;
 
-  if (postos.length === 0) {
+  const lblList = document.getElementById('lblListando');
+  if (lblList) lblList.innerText = `A listar ${postosOrdenados.length} postos`;
+
+  if (postosOrdenados.length === 0) {
     container.innerHTML = `<div class="text-center py-5 text-muted">Nenhum posto com movimentação no filtro atual.</div>`;
     return;
   }
@@ -1087,7 +1095,36 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
   });
   sparklineInstances = {};
 
-  postos.forEach((p, idx) => {
+  if (ehConsolidado && postosExternos.length > 0) {
+    const tituloExternos = document.createElement('div');
+    tituloExternos.className = 'cabecalho-grupo-postos titulo-grupo-externo';
+    tituloExternos.textContent = postosExternos.length > limitePostosExternos
+      ? `Rota rodoviária · 10 maiores volumes de ${postosExternos.length}`
+      : `Rota rodoviária · ${postosExternos.length} postos`;
+    container.appendChild(tituloExternos);
+  }
+
+  let botaoExpansaoInserido = false;
+  let cabecalhoInternosInserido = false;
+  postosOrdenados.forEach((p, idx) => {
+    if (ehConsolidado && p.TIPO_OPERACAO === 'EXTERNO' && idx === limitePostosExternos && !botaoExpansaoInserido) {
+      const botaoExpansao = document.createElement('button');
+      botaoExpansao.type = 'button';
+      botaoExpansao.className = 'btn-expandir-postos-externos';
+      botaoExpansao.dataset.quantidade = String(postosExternos.length - limitePostosExternos);
+      botaoExpansao.onclick = alternarExpansaoPostosExternos;
+      container.appendChild(botaoExpansao);
+      botaoExpansaoInserido = true;
+    }
+
+    if (ehConsolidado && p.TIPO_OPERACAO === 'INTERNO' && !cabecalhoInternosInserido) {
+      const tituloInternos = document.createElement('div');
+      tituloInternos.className = 'cabecalho-grupo-postos titulo-grupo-interno';
+      tituloInternos.textContent = `Tanques próprios · ${postosInternos.length} filiais`;
+      container.appendChild(tituloInternos);
+      cabecalhoInternosInserido = true;
+    }
+
     const chartDomId = `chart-bg-${idx}`;
     const ehInterno = (p.TIPO_OPERACAO === 'INTERNO');
     const badgeTipo = ehInterno 
@@ -1196,6 +1233,10 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
 
     const card = document.createElement('div');
     card.className = `card-posto-termometro ${ehZebrado}`;
+    card.dataset.tipoOperacao = p.TIPO_OPERACAO;
+    if (ehConsolidado && p.TIPO_OPERACAO === 'EXTERNO' && idx >= limitePostosExternos) {
+      card.classList.add('posto-externo-expandivel');
+    }
 
     card.innerHTML = `
       <div class="col-posto-identificacao">
@@ -1312,6 +1353,8 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
     sparkChart.render();
     sparklineInstances[chartDomId] = sparkChart;
   });
+
+  atualizarVisibilidadeListaPostos();
 }
 
 let resumoPostoAnualChartInstances = [];
@@ -1630,10 +1673,48 @@ function renderizarResumoAnualPosto(postos) {
   resumoPostoAnualChartInstances.forEach(grafico => grafico.render());
 }
 
-function filtrarTabelaTexto() {
-  const busca = document.getElementById('campoBusca').value.trim().toLowerCase();
-  document.querySelectorAll('.card-posto-termometro').forEach(card => {
-    const texto = card.innerText.toLowerCase();
-    card.style.display = texto.includes(busca) ? "flex" : "none";
+function atualizarVisibilidadeListaPostos() {
+  const busca = (document.getElementById('campoBusca')?.value || '').trim().toLowerCase();
+  const cards = Array.from(document.querySelectorAll('#listaTermometroPostos .card-posto-termometro'));
+
+  cards.forEach(card => {
+    const correspondeBusca = !busca || card.textContent.toLowerCase().includes(busca);
+    const recolhido = card.classList.contains('posto-externo-expandivel') && !postosExternosExpandidos && !busca;
+    card.style.display = correspondeBusca && !recolhido ? 'flex' : 'none';
   });
+
+  const botaoExpansao = document.querySelector('#listaTermometroPostos .btn-expandir-postos-externos');
+  if (botaoExpansao) {
+    botaoExpansao.hidden = Boolean(busca);
+    botaoExpansao.innerHTML = postosExternosExpandidos
+      ? `<i class="bi bi-chevron-up me-1"></i> Recolher postos externos`
+      : `<i class="bi bi-chevron-down me-1"></i> Expandir demais postos externos (${botaoExpansao.dataset.quantidade || 0})`;
+  }
+
+  const cabecalhoExternos = document.querySelector('#listaTermometroPostos .titulo-grupo-externo');
+  if (cabecalhoExternos) {
+    const temExternoVisivel = cards.some(card => card.dataset.tipoOperacao === 'EXTERNO' && card.style.display !== 'none');
+    cabecalhoExternos.style.display = temExternoVisivel ? 'flex' : 'none';
+  }
+
+  const cabecalhoInternos = document.querySelector('#listaTermometroPostos .titulo-grupo-interno');
+  if (cabecalhoInternos) {
+    const temInternoVisivel = cards.some(card => card.dataset.tipoOperacao === 'INTERNO' && card.style.display !== 'none');
+    cabecalhoInternos.style.display = temInternoVisivel ? 'flex' : 'none';
+  }
+
+  const lblListando = document.getElementById('lblListando');
+  if (lblListando) {
+    const visiveis = cards.filter(card => card.style.display !== 'none').length;
+    lblListando.innerText = `A listar ${visiveis} postos`;
+  }
+}
+
+function filtrarTabelaTexto() {
+  atualizarVisibilidadeListaPostos();
+}
+
+function alternarExpansaoPostosExternos() {
+  postosExternosExpandidos = !postosExternosExpandidos;
+  atualizarVisibilidadeListaPostos();
 }

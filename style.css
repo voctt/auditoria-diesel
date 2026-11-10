@@ -269,6 +269,65 @@ body {
   padding-top: 6px;
   padding-bottom: 6px;
 }
+.card-prioridade-dashboard {
+  min-height: 100%;
+  padding: 10px 14px;
+}
+.card-prioridade-dashboard .lista-top3-acao {
+  gap: 5px;
+}
+.card-prioridade-dashboard .item-top3-acao {
+  font-size: 0.72rem;
+  padding-bottom: 4px;
+}
+.card-prioridade-dashboard .item-top3-dados {
+  gap: 8px;
+}
+.card-prioridade-dashboard .item-top3-nome {
+  flex: 1 1 auto;
+  max-width: none;
+}
+.cabecalho-grupo-postos {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 8px;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.titulo-grupo-interno {
+  margin-top: 6px;
+  border-top: 1px solid #e2e8f0;
+  color: #15803d;
+}
+.btn-expandir-postos-externos {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  padding: 7px 10px;
+  color: #1c483a;
+  background: #f1f8f4;
+  border: 1px solid #cbded2;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.btn-expandir-postos-externos:hover,
+.btn-expandir-postos-externos:focus-visible {
+  background: #e5f2e9;
+  border-color: #9ab9a5;
+  outline: 2px solid rgba(28, 72, 58, 0.16);
+  outline-offset: 1px;
+}
+.btn-expandir-postos-externos[hidden] {
+  display: none;
+}
 @media (max-width: 1199.98px) {
   .kpi-dashboard-rail {
     height: auto;
