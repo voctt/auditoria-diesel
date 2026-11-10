@@ -8,6 +8,8 @@ const FIRESTORE_BASE_DOSSIE = "https://firestore.googleapis.com/v1/projects/carg
 
 let mesFechamentoAtivo = null;
 let cacheDossieMes = {};
+let cachePareceresGestor = {};
+const mesesDossieCarregados = new Set();
 let graficoEvolucaoInstancia = null;
 
 /**
@@ -118,74 +120,107 @@ let graficoEvolucaoInstancia = null;
         background: rgba(255, 255, 255, 0.03) !important;
       }
 
-      /* MODAL DO DOSSIÊ */
-      #modalDossieGestor .modal-content {
+      /* MODAL DE PARECER DA GESTÃO */
+      #modalParecerGestor .modal-content {
         background: #0f172a;
         color: #f8fafc;
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 12px;
         box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
       }
-      #modalDossieGestor .modal-header {
-        background: linear-gradient(135deg, #062316 0%, #0f3d26 50%, #144e31 100%);
+      #modalParecerGestor .modal-header {
+        background: linear-gradient(135deg, #3b2b08 0%, #6b4f0e 55%, #8a6715 100%);
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       }
-      #modalDossieGestor .form-control, #modalDossieGestor .form-select {
+      #modalParecerGestor .form-control, #modalParecerGestor .form-select {
         background: #1e293b;
         color: #f8fafc;
         border: 1px solid #334155;
       }
-      #modalDossieGestor .form-control:focus, #modalDossieGestor .form-select:focus {
+      #modalParecerGestor .form-control:focus, #modalParecerGestor .form-select:focus {
         background: #1e293b;
         color: #f8fafc;
-        border-color: #22c55e;
-        box-shadow: 0 0 0 0.2rem rgba(34, 197, 94, 0.25);
+        border-color: #eab308;
+        box-shadow: 0 0 0 0.2rem rgba(234, 179, 8, 0.2);
+      }
+      .parecer-manual-card {
+        height: 100%;
+        padding: 14px;
+        color: #f8fafc;
+        background: linear-gradient(135deg, #211b0d 0%, #171a22 100%);
+        border: 1px solid rgba(234, 179, 8, 0.34);
+        border-left: 4px solid #eab308;
+        border-radius: 8px;
+      }
+      .parecer-manual-subtitulo {
+        color: #facc15;
+        font-size: 0.72rem;
+      }
+      .parecer-manual-texto {
+        color: #e2e8f0;
+        font-size: 0.78rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      .parecer-manual-indicador {
+        min-width: 150px;
+        padding: 8px 10px;
+        background: rgba(234, 179, 8, 0.08);
+        border: 1px solid rgba(234, 179, 8, 0.2);
+        border-radius: 6px;
+      }
+      .parecer-manual-valor {
+        color: #facc15;
+        font-size: 0.88rem;
+        font-weight: 800;
       }
     `;
     document.head.appendChild(styleEl);
   }
 
-  if (!document.getElementById('modalDossieGestor')) {
+  const inserirModalParecer = () => {
+    if (!document.body || document.getElementById('modalParecerGestor')) return;
+
     const modalHtml = `
-      <div class="modal fade" id="modalDossieGestor" tabindex="-1" aria-labelledby="lblModalDossie" aria-hidden="true" style="z-index: 100060;">
-        <div class="modal-dialog modal-dialog-centered">
+      <div class="modal fade" id="modalParecerGestor" tabindex="-1" aria-labelledby="lblModalParecer" aria-hidden="true" style="z-index: 100060;">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
           <div class="modal-content">
             <div class="modal-header d-flex justify-content-between align-items-center py-2 px-3">
               <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-journal-plus text-success fs-5"></i>
-                <h6 class="modal-title fw-bold text-white mb-0" id="lblModalDossie">Registrar Parecer do Dossiê Estratégico</h6>
+                <i class="bi bi-chat-square-text text-warning fs-5"></i>
+                <h6 class="modal-title fw-bold text-white mb-0" id="lblModalParecer">Novo Parecer da Gestão</h6>
               </div>
               <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
             <div class="modal-body p-3">
-              <form id="formDossieGestorModal" onsubmit="salvarDossieModal(event)">
+              <form id="formParecerGestor" onsubmit="salvarParecerGestor(event)">
                 <div class="mb-2">
-                  <label class="form-label small fw-bold text-white-50 mb-1">Posto Relacionado / Escopo da Ação:</label>
-                  <select id="modalDossiePosto" class="form-select form-select-sm">
-                    <option value="GERAL">Frota Geral (Visão Macro do Fechamento)</option>
-                  </select>
+                  <label for="campoParecerTitulo" class="form-label small fw-bold text-white-50 mb-1">Título</label>
+                  <input id="campoParecerTitulo" class="form-control" maxlength="100" required placeholder="Ex.: Renegociação de abastecimento no corredor Sul">
                 </div>
                 <div class="mb-2">
-                  <label class="form-label small fw-bold text-white-50 mb-1">Tipo de Manobra / Justificativa:</label>
-                  <select id="modalDossieTipo" class="form-select form-select-sm">
-                    <option value="DIRECIONAMENTO">🔄 Manobra / Direcionamento de Rota</option>
-                    <option value="PRAZO">⏳ Renegociação de Prazo Faturado (D+X)</option>
-                    <option value="BALCAO">🛡️ Contenção de Reajuste de Balcão</option>
-                    <option value="GARAGEM">⛽ Estratégia de Abastecimento Interno</option>
-                    <option value="PARECER">📝 Parecer Geral da Gestão de Frota</option>
-                  </select>
+                  <label for="campoParecerSubtitulo" class="form-label small fw-bold text-white-50 mb-1">Subtítulo</label>
+                  <input id="campoParecerSubtitulo" class="form-control" maxlength="140" required placeholder="Ex.: Ação adotada para reduzir custo e garantir abastecimento">
                 </div>
                 <div class="mb-3">
-                  <label class="form-label small fw-bold text-white-50 mb-1">Observação Resumida do Gestor:</label>
-                  <textarea id="modalDossieTexto" class="form-control font-monospace" rows="4" required
-                    placeholder="Ex: Direcionamos volume para o Auto Posto São Jorge reduzindo R$ 0,352/L no corredor; renegociamos prazo faturado D+15 sem taxas adicionais..."></textarea>
+                  <label for="campoParecerTexto" class="form-label small fw-bold text-white-50 mb-1">Análise e observações</label>
+                  <textarea id="campoParecerTexto" class="form-control" rows="5" maxlength="3000" required placeholder="Registre o contexto, a decisão tomada, fatores que não aparecem nos dados e próximos passos."></textarea>
+                </div>
+                <div class="mb-3">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label small fw-bold text-white-50 mb-0">Indicadores manuais de saving</label>
+                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="adicionarIndicadorParecer()">
+                      <i class="bi bi-plus-lg me-1"></i> Adicionar indicador
+                    </button>
+                  </div>
+                  <div id="listaIndicadoresParecer"></div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center pt-2 border-top border-secondary">
-                  <span class="text-white-50 small" style="font-size: 0.65rem;" id="modalDossieInfoComp">--</span>
+                  <span class="text-white-50 small" style="font-size: 0.65rem;" id="parecerInfoCompetencia">--</span>
                   <div class="d-flex gap-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" id="btnSalvarDossieModal" class="btn btn-sm btn-success fw-bold px-3">
-                      <i class="bi bi-check-circle me-1"></i> Gravar no Dossiê
+                    <button type="submit" id="btnSalvarParecer" class="btn btn-sm btn-warning fw-bold px-3">
+                      <i class="bi bi-check-circle me-1"></i> Salvar Parecer
                     </button>
                   </div>
                 </div>
@@ -196,7 +231,10 @@ let graficoEvolucaoInstancia = null;
       </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
-  }
+  };
+
+  if (document.body) inserirModalParecer();
+  else document.addEventListener('DOMContentLoaded', inserirModalParecer, { once: true });
 })();
 
 /**
@@ -252,8 +290,8 @@ async function renderizarAbaFechamentoExecutivo() {
           onchange="trocarMesFechamento(this.value)">
           ${mesesDisponiveis.map(m => `<option value="${m}" ${m === mesFechamentoAtivo ? 'selected' : ''}>${formatarRotuloMes(m)}</option>`).join('')}
         </select>
-        <button class="btn btn-sm btn-clean-dark shadow-sm text-nowrap px-3" onclick="abrirModalDossie()">
-          <i class="bi bi-pencil-square me-1 text-success"></i> Inserir Dossiê
+        <button class="btn btn-sm btn-clean-dark shadow-sm text-nowrap px-3" onclick="abrirModalParecer()">
+          <i class="bi bi-chat-square-text me-1 text-warning"></i> Inserir Parecer
         </button>
         <button class="btn btn-sm btn-clean-dark shadow-sm text-nowrap px-3" onclick="emitirRelatorioFechamentoExecutivo()">
           <i class="bi bi-printer me-1 text-secondary"></i> Imprimir Dossiê
@@ -437,7 +475,7 @@ async function renderizarAbaFechamentoExecutivo() {
     </div>
 
     <!-- BLOCO 5: PARECER ESTRATÉGICO DO GESTOR -->
-    ${renderizarParecerExecutivoDossie()}
+    ${renderizarPareceresGestor()}
 
     <!-- BLOCO 6: RESUMO DE NEGOCIAÇÕES ATIVAS DO MÊS -->
     <div class="card-exec-dark mb-3 p-3">
@@ -540,121 +578,201 @@ async function renderizarAbaFechamentoExecutivo() {
 /**
  * Renderização Elegante do Parecer Executivo do Gestor
  */
-function renderizarParecerExecutivoDossie() {
-  const notaSalva = cacheDossieMes[mesFechamentoAtivo] || '';
+function escaparHtmlParecer(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, caractere => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[caractere]);
+}
 
-  if (!notaSalva) {
-    return `
-      <div class="card-exec-dark mb-3 p-3 d-flex justify-content-between align-items-center" style="background: rgba(15, 23, 42, 0.6); border-style: dashed;">
-        <div class="d-flex align-items-center gap-2 text-white-50 small">
-          <i class="bi bi-journal-text fs-5 text-secondary"></i>
-          <span>Nenhuma anotação estratégica ou parecer do gestor adicionado para o fechamento de <strong>${formatarRotuloMes(mesFechamentoAtivo)}</strong>.</span>
-        </div>
-        <button class="btn btn-sm btn-outline-success py-1 px-3" onclick="abrirModalDossie()">
-          <i class="bi bi-plus-circle me-1"></i> Inserir Parecer
-        </button>
-      </div>
-    `;
+function renderizarPareceresGestor() {
+  const pareceres = [...(cachePareceresGestor[mesFechamentoAtivo] || [])];
+  const notaLegada = cacheDossieMes[mesFechamentoAtivo] || '';
+  if (notaLegada) {
+    pareceres.unshift({
+      titulo: 'Observação anterior da gestão',
+      subtitulo: 'Registro salvo no formato anterior de parecer',
+      texto: notaLegada,
+      indicadores: []
+    });
   }
 
-  return `
-    <div class="card-exec-dark mb-3 p-3" style="background: linear-gradient(135deg, #0b1324 0%, #0f1e36 100%); border-left: 4px solid #22c55e !important;">
-      <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
-        <div class="d-flex align-items-center gap-2">
-          <i class="bi bi-chat-left-quote-fill text-success fs-5"></i>
-          <span class="fw-bold text-white small text-uppercase" style="letter-spacing: 0.05em;">Parecer Estratégico da Gestão de Frota</span>
-          <span class="badge bg-dark text-success border border-success-subtle font-monospace" style="font-size: 0.58rem;">Homologado</span>
+  const cards = pareceres.map(parecer => {
+    const indicadores = (parecer.indicadores || []).map(indicador => {
+      const valor = Number(indicador.valor);
+      const valorFormatado = Number.isFinite(valor)
+        ? valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        : '--';
+      return `
+        <div class="parecer-manual-indicador">
+          <div class="text-white-50 text-uppercase" style="font-size: 0.58rem; font-weight: 700;">${escaparHtmlParecer(indicador.titulo)}</div>
+          <div class="parecer-manual-valor font-monospace">${valorFormatado}</div>
         </div>
-        <button class="btn btn-sm btn-outline-light py-0 px-2 text-white-50" style="font-size: 0.65rem;" onclick="abrirModalDossie()">
-          <i class="bi bi-pencil me-1"></i> Editar Nota
-        </button>
+      `;
+    }).join('');
+    const dataRegistro = parecer.criadoEm ? new Date(parecer.criadoEm).toLocaleDateString('pt-BR') : '';
+
+    return `
+      <div class="col-12">
+        <article class="parecer-manual-card">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="min-w-0">
+              <span class="badge text-dark mb-1" style="background: #eab308; font-size: 0.58rem;">PARECER DA GESTÃO</span>
+              <h6 class="fw-bold text-white mb-1">${escaparHtmlParecer(parecer.titulo)}</h6>
+              <div class="parecer-manual-subtitulo">${escaparHtmlParecer(parecer.subtitulo)}</div>
+            </div>
+            ${dataRegistro ? `<span class="text-white-50 text-nowrap" style="font-size: 0.62rem;">${escaparHtmlParecer(dataRegistro)}</span>` : ''}
+          </div>
+          <div class="parecer-manual-texto">${escaparHtmlParecer(parecer.texto)}</div>
+          ${indicadores ? `<div class="d-flex flex-wrap gap-2 mt-3 pt-2 border-top border-secondary">${indicadores}</div>` : ''}
+        </article>
       </div>
-      <div class="text-white-50 font-monospace small px-1" style="font-size: 0.78rem; line-height: 1.5; white-space: pre-wrap;">${notaSalva}</div>
-    </div>
+    `;
+  }).join('');
+
+  return `
+    <section class="mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+        <div>
+          <h6 class="fw-bold text-white mb-0"><i class="bi bi-chat-square-text text-warning me-2"></i>Pareceres da Gestão</h6>
+          <span class="small text-white-50" style="font-size: 0.68rem;">Análises complementares registradas manualmente para ${escaparHtmlParecer(formatarRotuloMes(mesFechamentoAtivo))}</span>
+        </div>
+        <span class="badge bg-dark text-warning border border-warning-subtle font-monospace" style="font-size: 0.60rem;">${pareceres.length} pareceres</span>
+      </div>
+      ${cards ? `<div class="row g-2">${cards}</div>` : `<div class="small text-white-50 py-2">Nenhum parecer registrado para esta competência.</div>`}
+    </section>
   `;
 }
 
 /**
  * Abertura e População do Modal do Dossiê
  */
-function abrirModalDossie() {
-  const selPosto = document.getElementById('modalDossiePosto');
-  const txtArea = document.getElementById('modalDossieTexto');
-  const lblComp = document.getElementById('modalDossieInfoComp');
+function abrirModalParecer() {
+  const formulario = document.getElementById('formParecerGestor');
+  const listaIndicadores = document.getElementById('listaIndicadoresParecer');
+  const competencia = document.getElementById('parecerInfoCompetencia');
+  if (!formulario || !listaIndicadores) return;
 
-  if (lblComp) lblComp.innerText = `Competência Ativa: ${formatarRotuloMes(mesFechamentoAtivo)}`;
-  if (txtArea) txtArea.value = cacheDossieMes[mesFechamentoAtivo] || '';
+  formulario.reset();
+  listaIndicadores.innerHTML = '';
+  adicionarIndicadorParecer();
+  if (competencia) competencia.innerText = `Competência: ${formatarRotuloMes(mesFechamentoAtivo)}`;
 
-  if (selPosto && typeof baseRegistrosMensais !== 'undefined') {
-    const postosMes = [...new Set(baseRegistrosMensais.filter(r => r.MES_ANO === mesFechamentoAtivo).map(r => r.POSTO))].sort();
-    let opts = `<option value="GERAL">Frota Geral (Visão Macro do Fechamento)</option>`;
-    postosMes.forEach(p => {
-      opts += `<option value="${p}">${p}</option>`;
-    });
-    selPosto.innerHTML = opts;
-  }
-
-  const modalEl = document.getElementById('modalDossieGestor');
-  if (modalEl) {
-    const bsModal = new bootstrap.Modal(modalEl);
-    bsModal.show();
-  }
+  const modalEl = document.getElementById('modalParecerGestor');
+  if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
 }
 
-/**
- * Salvamento do Dossiê via Modal no Firestore
- */
-async function salvarDossieModal(event) {
-  event.preventDefault();
-  const txtArea = document.getElementById('modalDossieTexto');
-  const btn = document.getElementById('btnSalvarDossieModal');
-  const selPosto = document.getElementById('modalDossiePosto');
-  const selTipo = document.getElementById('modalDossieTipo');
-  if (!txtArea || !btn) return;
+function adicionarIndicadorParecer() {
+  const lista = document.getElementById('listaIndicadoresParecer');
+  if (!lista) return;
 
-  const texto = txtArea.value.trim();
-  const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
-  const autorEmail = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.email : "Gestor";
+  const linha = document.createElement('div');
+  linha.className = 'row g-2 align-items-center mb-2 item-indicador-parecer';
+  linha.innerHTML = `
+    <div class="col-12 col-md-7">
+      <input class="form-control form-control-sm campo-indicador-titulo" required maxlength="60" aria-label="Nome do indicador de saving" placeholder="Ex.: Saving realizado no mês">
+    </div>
+    <div class="col-9 col-md-4">
+      <div class="input-group input-group-sm">
+        <span class="input-group-text">R$</span>
+        <input class="form-control campo-indicador-valor" type="number" step="0.01" required aria-label="Valor do indicador em reais" placeholder="0,00">
+      </div>
+    </div>
+    <div class="col-3 col-md-1 text-end">
+      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="removerIndicadorParecer(this)" title="Remover indicador" aria-label="Remover indicador">
+        <i class="bi bi-trash"></i>
+      </button>
+    </div>
+  `;
+  lista.appendChild(linha);
+}
 
-  btn.disabled = true;
-  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Gravando...`;
+function removerIndicadorParecer(botao) {
+  const linha = botao.closest('.item-indicador-parecer');
+  const linhas = document.querySelectorAll('#listaIndicadoresParecer .item-indicador-parecer');
+  if (!linha) return;
 
-  const payload = {
-    fields: {
-      mes_ano: { stringValue: mesFechamentoAtivo },
-      notas_gestor: { stringValue: texto },
-      posto_referencia: { stringValue: selPosto ? selPosto.value : "GERAL" },
-      tipo_acao: { stringValue: selTipo ? selTipo.value : "PARECER" },
-      atualizado_em: { timestampValue: new Date().toISOString() },
-      autor: { stringValue: autorEmail }
+  if (linhas.length === 1) linha.querySelectorAll('input').forEach(campo => { campo.value = ''; });
+  else linha.remove();
+}
+
+function serializarParecerFirestore(parecer) {
+  const stringValue = valor => ({ stringValue: valor });
+  return {
+    mapValue: {
+      fields: {
+        titulo: stringValue(parecer.titulo),
+        subtitulo: stringValue(parecer.subtitulo),
+        texto: stringValue(parecer.texto),
+        criado_em: { timestampValue: parecer.criadoEm },
+        autor: stringValue(parecer.autor),
+        indicadores: {
+          arrayValue: {
+            values: parecer.indicadores.map(indicador => ({
+              mapValue: {
+                fields: {
+                  titulo: stringValue(indicador.titulo),
+                  valor: { doubleValue: indicador.valor }
+                }
+              }
+            }))
+          }
+        }
+      }
     }
   };
+}
+
+async function salvarParecerGestor(event) {
+  event.preventDefault();
+  const formulario = document.getElementById('formParecerGestor');
+  const botao = document.getElementById('btnSalvarParecer');
+  if (!formulario || !botao || !formulario.reportValidity()) return;
+
+  const indicadores = Array.from(document.querySelectorAll('#listaIndicadoresParecer .item-indicador-parecer')).map(linha => ({
+    titulo: linha.querySelector('.campo-indicador-titulo').value.trim(),
+    valor: linha.querySelector('.campo-indicador-valor').valueAsNumber
+  }));
+  const parecer = {
+    titulo: document.getElementById('campoParecerTitulo').value.trim(),
+    subtitulo: document.getElementById('campoParecerSubtitulo').value.trim(),
+    texto: document.getElementById('campoParecerTexto').value.trim(),
+    indicadores,
+    criadoEm: new Date().toISOString(),
+    autor: (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado?.email) || 'Gestor'
+  };
+  const pareceresAtualizados = [...(cachePareceresGestor[mesFechamentoAtivo] || []), parecer];
+  const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : '';
+
+  botao.disabled = true;
+  botao.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Salvando...`;
 
   try {
-    const url = `${FIRESTORE_BASE_DOSSIE}/${mesFechamentoAtivo}`;
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    const resp = await fetch(url, {
-      method: "PATCH",
-      headers: headers,
-      body: JSON.stringify(payload)
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const resp = await fetch(`${FIRESTORE_BASE_DOSSIE}/${mesFechamentoAtivo}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        fields: {
+          mes_ano: { stringValue: mesFechamentoAtivo },
+          pareceres: { arrayValue: { values: pareceresAtualizados.map(serializarParecerFirestore) } },
+          atualizado_em: { timestampValue: parecer.criadoEm }
+        }
+      })
     });
+    if (!resp.ok) throw new Error(`Erro HTTP ${resp.status}`);
 
-    if (!resp.ok) throw new Error("Erro HTTP " + resp.status);
-
-    cacheDossieMes[mesFechamentoAtivo] = texto;
-
-    const modalEl = document.getElementById('modalDossieGestor');
-    const inst = bootstrap.Modal.getInstance(modalEl);
-    if (inst) inst.hide();
-
-    renderizarAbaFechamentoExecutivo();
+    cachePareceresGestor[mesFechamentoAtivo] = pareceresAtualizados;
+    mesesDossieCarregados.add(mesFechamentoAtivo);
+    const modalEl = document.getElementById('modalParecerGestor');
+    const instancia = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+    if (instancia) instancia.hide();
+    await renderizarAbaFechamentoExecutivo();
   } catch (err) {
-    alert("Falha ao salvar dossiê: " + err.message);
+    alert(`Falha ao salvar parecer: ${err.message}`);
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<i class="bi bi-check-circle me-1"></i> Gravar no Dossiê`;
+    botao.disabled = false;
+    botao.innerHTML = `<i class="bi bi-check-circle me-1"></i> Salvar Parecer`;
   }
 }
 
@@ -1375,20 +1493,48 @@ function formatarRotuloMes(mesAnoStr) {
  * Leitura do Dossiê do Firestore
  */
 async function carregarDossieMesFirestore(mesAno) {
-  if (cacheDossieMes[mesAno]) return;
+  if (mesesDossieCarregados.has(mesAno)) return;
 
   try {
     const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
     const headers = token ? { "Authorization": `Bearer ${token}` } : {};
 
     const resp = await fetch(`${FIRESTORE_BASE_DOSSIE}/${mesAno}`, { headers });
+    if (resp.status === 404) {
+      cacheDossieMes[mesAno] = '';
+      cachePareceresGestor[mesAno] = [];
+      mesesDossieCarregados.add(mesAno);
+      return;
+    }
+    if (!resp.ok) throw new Error(`Erro HTTP ${resp.status}`);
+
     if (resp.ok) {
       const json = await resp.json();
-      cacheDossieMes[mesAno] = json.fields?.notas_gestor?.stringValue || "";
+      const fields = json.fields || {};
+      cacheDossieMes[mesAno] = fields.notas_gestor?.stringValue || '';
+      const pareceres = decodificarValorFirestore(fields.pareceres) || [];
+      cachePareceresGestor[mesAno] = Array.isArray(pareceres)
+        ? pareceres.map(parecer => ({ ...parecer, criadoEm: parecer.criado_em || parecer.criadoEm }))
+        : [];
+      mesesDossieCarregados.add(mesAno);
     }
   } catch (err) {
     console.warn("Aviso ao carregar dossiê do mês:", err);
   }
+}
+
+function decodificarValorFirestore(valor) {
+  if (!valor || typeof valor !== 'object') return null;
+  if ('stringValue' in valor) return valor.stringValue;
+  if ('integerValue' in valor) return Number(valor.integerValue);
+  if ('doubleValue' in valor) return valor.doubleValue;
+  if ('booleanValue' in valor) return valor.booleanValue;
+  if ('timestampValue' in valor) return valor.timestampValue;
+  if ('arrayValue' in valor) return (valor.arrayValue.values || []).map(decodificarValorFirestore);
+  if ('mapValue' in valor) {
+    return Object.fromEntries(Object.entries(valor.mapValue.fields || {}).map(([chave, campo]) => [chave, decodificarValorFirestore(campo)]));
+  }
+  return null;
 }
 
 /**
@@ -1434,6 +1580,21 @@ function emitirRelatorioFechamentoExecutivo() {
           margin-bottom: 10px !important;
           break-inside: avoid !important;
         }
+
+        .parecer-manual-card {
+          background: #fffbeb !important;
+          color: #0f172a !important;
+          border: 1px solid #d6a52e !important;
+          border-left: 4px solid #b7791f !important;
+          padding: 10px !important;
+          margin-bottom: 8px !important;
+          break-inside: avoid !important;
+        }
+        .parecer-manual-card .text-white { color: #0f172a !important; }
+        .parecer-manual-subtitulo { color: #854d0e !important; }
+        .parecer-manual-texto { color: #1e293b !important; }
+        .parecer-manual-indicador { background: #fef3c7 !important; border-color: #d6a52e !important; }
+        .parecer-manual-valor { color: #854d0e !important; }
 
         .num-kpi-grande { font-size: 1.4rem !important; color: #0f172a !important; text-shadow: none !important; }
         .num-neon-verde { color: #15803d !important; }
