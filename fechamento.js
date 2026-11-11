@@ -1249,7 +1249,10 @@ function calcularMetricasFechamento(mesAlvo) {
 
       if (statusTratativaMes === 'ACORDO_FECHADO' && vigencia) {
         const dtVig = new Date(`${vigencia.substring(0, 10)}T12:00:00Z`);
-        const dtRef = new Date(`${dataFimMes}T12:00:00Z`);
+        const hoje = new Date();
+        hoje.setUTCHours(12, 0, 0, 0);
+        const dtFimComp = new Date(`${dataFimMes}T12:00:00Z`);
+        const dtRef = dtFimComp > hoje ? hoje : dtFimComp;
         const dias = Math.round((dtRef - dtVig) / (1000 * 60 * 60 * 24));
         if (dias > 30) {
           postosParaRenovar.push({
