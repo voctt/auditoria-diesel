@@ -11,6 +11,7 @@ let baseRegistrosMensais = [];
 let dadosAnpBaseGlobal = null;
 let sparklineInstances = {};
 let sparkVolumeCardInstance = null;
+let resumoVolumeCharts = {};
 let modoAtual = "TODOS";
 let ufFiltrada = "";
 let postoFiltrado = "";
@@ -18,6 +19,10 @@ let redeFiltrada = "";
 let postosExternosExpandidos = false;
 let animacaoInicialKpisExecutada = false;
 let sequenciaAnimacaoCards = 0;
+
+const DIAS_LIMITE_TRATATIVA = 25;
+const JANELA_TRATATIVA_PROXIMA_DO_VENCIMENTO = 5;
+const MAX_POSTOS_PRIORIDADE = 5;
 
 const listaCidades = (typeof baseCidadesBrasil !== 'undefined' && Array.isArray(baseCidadesBrasil)) ? baseCidadesBrasil : [];
 
@@ -45,6 +50,43 @@ function obterAnoMaisRecenteBase(registros = baseRegistrosMensais) {
 function filtrarRegistrosYtd(registros) {
   const ano = obterAnoMaisRecenteBase();
   return ano ? registros.filter(d => d.MES_ANO && d.MES_ANO.startsWith(`${ano}-`)) : [];
+}
+
+function obterDiasAteVencimentoTratativa(vigencia, hoje = new Date()) {
+  const dataVigencia = String(vigencia || '').slice(0, 10);
+  const partes = dataVigencia.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!partes) return null;
+
+  const dataVigenciaMs = Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3]));
+  if (new Date(dataVigenciaMs).toISOString().slice(0, 10) !== dataVigencia) return null;
+
+  const hojeMs = Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const diasDesdeVigencia = Math.floor((hojeMs - dataVigenciaMs) / 86400000);
+  return DIAS_LIMITE_TRATATIVA - diasDesdeVigencia;
+}
+
+function complementarPostosPrioritariosComTratativas(postosPrioritarios, listaPostos, obterTratativa, hoje = new Date()) {
+  const vagas = MAX_POSTOS_PRIORIDADE - postosPrioritarios.length;
+  if (vagas <= 0 || typeof obterTratativa !== 'function') return postosPrioritarios;
+
+  const chavesPrioritarias = new Set(postosPrioritarios.map(p => `${p.TIPO_OPERACAO}|${p.POSTO}|${p.UF_POSTO}`));
+  const postosComTratativaProxima = listaPostos
+    .filter(p => p.TIPO_OPERACAO === 'EXTERNO' && !chavesPrioritarias.has(`${p.TIPO_OPERACAO}|${p.POSTO}|${p.UF_POSTO}`))
+    .map(p => {
+      const tratativa = obterTratativa(p.POSTO, p.UF_POSTO);
+      const diasAteVencimento = obterDiasAteVencimentoTratativa(tratativa?.vigencia, hoje);
+      return { posto: p, diasAteVencimento };
+    })
+    .filter(item => item.diasAteVencimento !== null && item.diasAteVencimento >= 0 && item.diasAteVencimento <= JANELA_TRATATIVA_PROXIMA_DO_VENCIMENTO)
+    .sort((a, b) => a.diasAteVencimento - b.diasAteVencimento || b.posto.IMPACTO_REAIS - a.posto.IMPACTO_REAIS)
+    .slice(0, vagas)
+    .map(item => ({
+      ...item.posto,
+      ORIGEM_PRIORIDADE: 'TRATATIVA',
+      DIAS_ATE_VENCIMENTO: item.diasAteVencimento
+    }));
+
+  return [...postosPrioritarios, ...postosComTratativaProxima];
 }
 
 // Centraliza a classificação para que contagens e filtros produzam os mesmos grupos.
@@ -742,20 +784,7 @@ function processarPainel() {
 
   listaPostos.sort((a, b) => b.LITROS_TOTAL - a.LITROS_TOTAL);
 
-  // Em YTD, o card representa a competência mais recente; os demais totais continuam anuais.
-  let precoMedioCard = 0;
-  if (mesSel === 'YTD') {
-    const registrosMesRecente = registrosModo.filter(d => d.MES_ANO === mesMaisRecenteModo);
-    const litrosMesRecente = registrosMesRecente.reduce((total, registro) => total + parseFloat(registro.VOLUME_CICLO || 0), 0);
-    const valorMesRecente = registrosMesRecente.reduce((total, registro) => {
-      const litros = parseFloat(registro.VOLUME_CICLO || 0);
-      const valorTotal = parseFloat(registro.VALOR_TOTAL_CICLO || 0);
-      return total + (valorTotal > 0 ? valorTotal : litros * parseFloat(registro.VALOR_UNITARIO || 0));
-    }, 0);
-    precoMedioCard = litrosMesRecente > 0 ? valorMesRecente / litrosMesRecente : 0;
-  } else {
-    precoMedioCard = somaLitrosCards > 0 ? (somaGastoCards / somaLitrosCards) : 0;
-  }
+  const precoMedioCard = somaLitrosCards > 0 ? somaGastoCards / somaLitrosCards : 0;
 
   const elCardVol = document.getElementById('cardVolume');
   const elCardGasto = document.getElementById('cardGasto');
@@ -768,36 +797,49 @@ function processarPainel() {
       ? "R$ " + precoMedioCard.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
       : "R$ 0,000";
   }
+  const elCardPmLabel = document.getElementById('cardPrecoMedioLabel');
+  if (elCardPmLabel) {
+    elCardPmLabel.innerText = mesSel === 'YTD' ? 'PREÇO MÉDIO ACUMULADO' : 'PREÇO MÉDIO MENSAL';
+  }
   const elCardPmSub = document.getElementById('cardPrecoMedioSub');
   if (elCardPmSub) {
     elCardPmSub.innerText = mesSel === 'YTD'
-      ? `Média da última competência com dados: ${mesMaisRecenteModo || '--'}`
+      ? `Média acumulada até ${mesMaisRecenteModo || '--'}`
       : `Média da competência ${mesSel}`;
+    elCardPmSub.title = elCardPmSub.innerText;
   }
 
   const postosComDesvio = listaPostos
     .filter(p => p.TIPO_OPERACAO === 'EXTERNO' && p.IMPACTO_REAIS > 0)
     .sort((a, b) => b.IMPACTO_REAIS - a.IMPACTO_REAIS)
-    .slice(0, 3);
+    .slice(0, MAX_POSTOS_PRIORIDADE);
+  const postosPrioritarios = complementarPostosPrioritariosComTratativas(
+    postosComDesvio,
+    listaPostos,
+    typeof obterTratativaPosto === 'function' ? obterTratativaPosto : null
+  );
 
-  const containerTop3 = document.getElementById('listaTop3Acao');
-  if (containerTop3) {
-    if (postosComDesvio.length > 0) {
-      containerTop3.innerHTML = postosComDesvio.map(p => {
+  const containerPrioridade = document.getElementById('listaPrioridadeAcao');
+  if (containerPrioridade) {
+    if (postosPrioritarios.length > 0) {
+      containerPrioridade.innerHTML = postosPrioritarios.map(p => {
         const dataFmt = formatarDataDiaMes(p.DATA_MAIS_RECENTE);
+        const detalhesPrioridade = p.ORIGEM_PRIORIDADE === 'TRATATIVA'
+          ? `<span class="item-prioridade-status">Vence ${p.DIAS_ATE_VENCIMENTO === 0 ? 'hoje' : `em ${p.DIAS_ATE_VENCIMENTO} ${p.DIAS_ATE_VENCIMENTO === 1 ? 'dia' : 'dias'}`}</span>`
+          : `<span class="item-prioridade-valor">+R$ ${Math.round(p.IMPACTO_REAIS).toLocaleString('pt-BR')}</span>`;
         return `
-          <div class="item-top3-acao">
-            <div class="item-top3-dados">
+          <div class="item-prioridade-acao${p.ORIGEM_PRIORIDADE === 'TRATATIVA' ? ' item-prioridade-tratativa' : ''}">
+            <div class="item-prioridade-dados">
               <span class="badge bg-dark text-white p-1" style="font-size:0.58rem;">${p.UF_POSTO}</span>
-              <span class="item-top3-nome" title="${p.NOME_EXIBICAO}">${p.NOME_EXIBICAO}</span>
-              <span class="item-top3-historico">R$ ${p.ULTIMO_PRECO.toFixed(2)} (${dataFmt})</span>
+              <span class="item-prioridade-nome" title="${p.NOME_EXIBICAO}">${p.NOME_EXIBICAO}</span>
+              <span class="item-prioridade-historico">R$ ${p.ULTIMO_PRECO.toFixed(2)} (${dataFmt})</span>
             </div>
-            <span class="item-top3-val">+R$ ${Math.round(p.IMPACTO_REAIS).toLocaleString('pt-BR')}</span>
+            ${detalhesPrioridade}
           </div>
         `;
       }).join('');
     } else {
-      containerTop3.innerHTML = `<div class="text-muted small" style="font-size: 0.65rem;">Nenhum posto com ágio no filtro atual.</div>`;
+      containerPrioridade.innerHTML = `<div class="text-muted small" style="font-size: 0.65rem;">Nenhum posto com ágio no filtro atual.</div>`;
     }
   }
 
@@ -805,6 +847,7 @@ function processarPainel() {
     ? mesesDisponiveis.filter(mes => mes.startsWith(`${obterAnoMaisRecenteBase()}-`))
     : mesesDisponiveis;
   renderizarSparklineVolumeCard(mesesGrafico, registrosModo);
+  renderizarSparklinesResumo(mesesGrafico, registros);
   atualizarCardsExtremosSemPonderada(registros, mesSel);
   renderizarTermometroPostos(listaPostos, mesesGrafico);
   renderizarResumoAnualPosto(listaPostos);
@@ -845,6 +888,52 @@ function renderizarSparklineVolumeCard(mesesDisponiveis, registros) {
 
   sparkVolumeCardInstance = new ApexCharts(container, options);
   sparkVolumeCardInstance.render();
+}
+
+function renderizarSparklinesResumo(mesesDisponiveis, registros) {
+  Object.values(resumoVolumeCharts).forEach(chart => chart.destroy());
+  resumoVolumeCharts = {};
+
+  const seriesResumo = [
+    { id: 'sparkResumoVolumeRota', operacao: 'EXTERNO', cor: '#f97316' },
+    { id: 'sparkResumoVolumeInterno', operacao: 'INTERNO', cor: '#22c55e' }
+  ];
+
+  seriesResumo.forEach(({ id, operacao, cor }) => {
+    const container = document.getElementById(id);
+    if (!container) return;
+
+    const dadosVolume = mesesDisponiveis.map(mes => Math.round(
+      registros
+        .filter(registro => registro.MES_ANO === mes && registro.TIPO_OPERACAO === operacao)
+        .reduce((total, registro) => total + (parseFloat(registro.VOLUME_CICLO || 0) || 0), 0)
+    ));
+
+    const chart = new ApexCharts(container, {
+      series: [{ name: 'Volume mensal', data: dadosVolume }],
+      chart: {
+        type: 'area',
+        height: '100%',
+        width: '100%',
+        sparkline: { enabled: true },
+        animations: { enabled: false },
+        parentHeightOffset: 0
+      },
+      colors: [cor],
+      stroke: { curve: 'smooth', width: 2 },
+      fill: {
+        type: 'gradient',
+        gradient: { shadeIntensity: 0, opacityFrom: 0.42, opacityTo: 0.02, stops: [0, 100] }
+      },
+      dataLabels: { enabled: false },
+      markers: { size: 0 },
+      xaxis: { categories: mesesDisponiveis },
+      tooltip: { enabled: false }
+    });
+
+    chart.render();
+    resumoVolumeCharts[id] = chart;
+  });
 }
 
 function gerarSilhuetaUfSvg(uf, compacta = false) {
@@ -1248,7 +1337,7 @@ function renderizarTermometroPostos(postos, mesesDisponiveis) {
         const agora = new Date();
         const hojeMs = Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate());
         const diasDesdeTratativa = Math.floor((hojeMs - dataVigenciaMs) / 86400000);
-        classeBotaoTratativa = diasDesdeTratativa > 25 ? 'tratativa-atrasada' : 'tratativa-recente';
+        classeBotaoTratativa = diasDesdeTratativa > DIAS_LIMITE_TRATATIVA ? 'tratativa-atrasada' : 'tratativa-recente';
         tituloBotaoTratativa = `Última tratativa registrada há ${diasDesdeTratativa} dias`;
       }
     }
