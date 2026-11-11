@@ -420,7 +420,7 @@ body {
     padding: 0;
   }
   .mapa-dashboard-canvas {
-    min-height: 100%;
+    min-height: 0;
     margin: 2px 0 6px;
   }
   .kpi-dashboard-rail {
