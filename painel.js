@@ -951,7 +951,7 @@ function renderizarSparklinesResumo(mesesDisponiveis, registros) {
   });
 }
 
-function gerarSilhuetaUfSvg(uf, compacta = false) {
+function gerarSilhuetaUfSvg(uf, compacta = false, classeAdicional = '') {
   if (!uf || !Array.isArray(dadosGeoJsonBr?.features) || typeof extrairSiglaUf !== 'function') return '';
 
   const geometria = dadosGeoJsonBr.features.find(feature => extrairSiglaUf(feature.properties) === uf)?.geometry;
@@ -987,7 +987,7 @@ function gerarSilhuetaUfSvg(uf, compacta = false) {
     const y = (altura - deslocamentoY - (ponto[1] - minLat) * escala).toFixed(1);
     return `${indice === 0 ? 'M' : 'L'}${x} ${y}`;
   }).join(' ') + ' Z').join(' ');
-  const classe = compacta ? ' kpi-uf-silhueta-compacta' : '';
+  const classe = `${compacta ? ' kpi-uf-silhueta-compacta' : ''}${classeAdicional ? ` ${classeAdicional}` : ''}`;
 
   return `<svg class="kpi-uf-silhueta${classe}" viewBox="0 0 ${largura} ${altura}" aria-hidden="true" focusable="false"><path d="${caminho}" fill-rule="evenodd"/></svg>`;
 }
@@ -997,7 +997,7 @@ function gerarHtmlExtremoUnico(extremo, classeCor) {
 
   return `
     <div class="kpi-extremo-unico" title="${extremo.posto}">
-      ${gerarSilhuetaUfSvg(extremo.uf)}
+      ${gerarSilhuetaUfSvg(extremo.uf, false, 'kpi-uf-silhueta-unica')}
       <div class="kpi-extremo-valor ${classeCor}">
         <span>${extremo.uf || '--'}</span> - R$ ${extremo.preco.toFixed(3).replace('.', ',')}
       </div>
@@ -1011,7 +1011,7 @@ function escaparTextoHtml(valor) {
   })[caractere]);
 }
 
-function gerarHtmlExtremoConsolidado(extremo, tipo, posicao, classeCor, rotulo) {
+function gerarHtmlExtremoConsolidado(extremo, tipo, posicao, classeCor, rotulo, mostrarSilhueta = true) {
   const ehRota = tipo === 'ROTA';
   const posto = escaparTextoHtml(extremo?.posto || 'Sem posto com preço válido');
   const uf = escaparTextoHtml(extremo?.uf || '--');
@@ -1021,7 +1021,7 @@ function gerarHtmlExtremoConsolidado(extremo, tipo, posicao, classeCor, rotulo) 
 
   return `
     <div class="kpi-val-split kpi-extremo-split${separador} ${classeCor}" title="${titulo}" aria-label="${titulo}">
-      ${extremo ? gerarSilhuetaUfSvg(extremo.uf, true) : ''}
+      ${extremo && mostrarSilhueta ? gerarSilhuetaUfSvg(extremo.uf, true) : ''}
       <div class="kpi-extremo-split-top">
         <span class="kpi-extremo-identificacao">
           <span class="badge-tipo ${ehRota ? 'tipo-rota' : 'tipo-interno'}">${tipo}</span>
@@ -1041,6 +1041,8 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
   const lblMenorSub = document.getElementById('cardMenorUfSub');
 
   if (!containerMaior || !containerMenor) return;
+  containerMaior.classList.remove('kpi-extremos-consolidados-compartilhados');
+  containerMenor.classList.remove('kpi-extremos-consolidados-compartilhados');
 
   let amostra = todosRegistros.filter(d => parseFloat(d.VALOR_UNITARIO || 0) > 0 && d.DATA_FIM_CICLO);
 
@@ -1092,12 +1094,16 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
 
     const extRota = extrairExtremos(rotaRegs);
     const extInterno = extrairExtremos(internoRegs);
+    const ufMaiorCompartilhada = extRota.max?.uf && extRota.max.uf === extInterno.max?.uf;
+    const ufMenorCompartilhada = extRota.min?.uf && extRota.min.uf === extInterno.min?.uf;
 
     if (extRota.max || extInterno.max) {
       containerMaior.innerHTML = `
-        ${gerarHtmlExtremoConsolidado(extRota.max, 'ROTA', 'primeiro', 'text-danger', 'Pico Rota')}
-        ${gerarHtmlExtremoConsolidado(extInterno.max, 'GARAGEM', 'segundo', 'text-danger', 'Maior Garagem')}
+        ${ufMaiorCompartilhada ? gerarSilhuetaUfSvg(extRota.max.uf, false, 'kpi-uf-silhueta-compartilhada') : ''}
+        ${gerarHtmlExtremoConsolidado(extRota.max, 'ROTA', 'primeiro', 'text-danger', 'Pico Rota', !ufMaiorCompartilhada)}
+        ${gerarHtmlExtremoConsolidado(extInterno.max, 'GARAGEM', 'segundo', 'text-danger', 'Maior Garagem', !ufMaiorCompartilhada)}
       `;
+      containerMaior.classList.toggle('kpi-extremos-consolidados-compartilhados', Boolean(ufMaiorCompartilhada));
       if (lblMaiorSub) lblMaiorSub.innerText = mesSel === 'YTD' ? "Últimos 20 dias ativos" : "Extremos da competência";
     } else {
       containerMaior.innerHTML = `<div class="kpi-val text-danger">--</div>`;
@@ -1106,9 +1112,11 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
 
     if (extRota.min || extInterno.min) {
       containerMenor.innerHTML = `
-        ${gerarHtmlExtremoConsolidado(extRota.min, 'ROTA', 'primeiro', 'text-success', 'Menor Posto Rota')}
-        ${gerarHtmlExtremoConsolidado(extInterno.min, 'GARAGEM', 'segundo', 'text-success', 'Menor Garagem Ativa')}
+        ${ufMenorCompartilhada ? gerarSilhuetaUfSvg(extRota.min.uf, false, 'kpi-uf-silhueta-compartilhada') : ''}
+        ${gerarHtmlExtremoConsolidado(extRota.min, 'ROTA', 'primeiro', 'text-success', 'Menor Posto Rota', !ufMenorCompartilhada)}
+        ${gerarHtmlExtremoConsolidado(extInterno.min, 'GARAGEM', 'segundo', 'text-success', 'Menor Garagem Ativa', !ufMenorCompartilhada)}
       `;
+      containerMenor.classList.toggle('kpi-extremos-consolidados-compartilhados', Boolean(ufMenorCompartilhada));
       if (lblMenorSub) lblMenorSub.innerText = mesSel === 'YTD' ? "Últimos 20 dias ativos" : "Extremos da competência";
     } else {
       containerMenor.innerHTML = `<div class="kpi-val text-success">--</div>`;

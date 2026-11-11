@@ -565,8 +565,8 @@ async function renderizarConteudoFechamentoExecutivo() {
     <div class="row g-2">
       <!-- GLOSAS E FUROS A CONTESTAR -->
       <div class="col-12 col-md-6">
-        <div class="card-exec-dark glow-vermelho h-100 p-3">
-          <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+        <div class="card-exec-dark glow-vermelho h-100 p-3 d-flex flex-column" style="max-height: 480px;">
+          <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary flex-shrink-0">
             <h6 class="fw-bold mb-0 text-danger" style="font-size: 0.85rem;">
               <i class="bi bi-exclamation-octagon-fill me-1"></i> Desvios do Mês: Passíveis de Glosa Quinzenal
             </h6>
@@ -575,7 +575,7 @@ async function renderizarConteudoFechamentoExecutivo() {
 
           ${dados.postosComFuro.length === 0 
             ? `<div class="p-2 border border-success rounded bg-dark text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Nenhum furo comercial apurado na competência. Todos os postos sob acordo faturaram em conformidade.</div>` 
-            : `<div class="d-flex flex-column gap-2">
+            : `<div class="d-flex flex-column gap-2 flex-grow-1" style="min-height: 0; overflow-y: auto; scrollbar-width: thin;">
                 ${dados.postosComFuro.map(f => `
                   <div class="p-2 border rounded" style="background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3) !important; font-size: 0.72rem;">
                     <div class="d-flex justify-content-between">
@@ -597,8 +597,8 @@ async function renderizarConteudoFechamentoExecutivo() {
 
       <!-- SLA DE RENOVAÇÃO PARA O PRÓXIMO MÊS -->
       <div class="col-12 col-md-6">
-        <div class="card-exec-dark glow-laranja h-100 p-3">
-          <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+        <div class="card-exec-dark glow-laranja h-100 p-3 d-flex flex-column" style="max-height: 480px;">
+          <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary flex-shrink-0">
             <h6 class="fw-bold mb-0 text-warning" style="font-size: 0.85rem;">
               <i class="bi bi-clock-history text-warning me-1"></i> Foco de Compras: Renovar Negociação (SLA > 30d)
             </h6>
@@ -607,7 +607,7 @@ async function renderizarConteudoFechamentoExecutivo() {
 
           ${dados.postosParaRenovar.length === 0 
             ? `<div class="p-2 border border-secondary rounded bg-dark text-white-50 small mb-0"><i class="bi bi-shield-check text-success me-1"></i> Todas as tabelas ativas estão vigentes e dentro do SLA de 30 dias.</div>` 
-            : `<div class="d-flex flex-column gap-2" style="max-height: 220px; overflow-y: auto;">
+            : `<div class="d-flex flex-column gap-2 flex-grow-1" style="min-height: 0; overflow-y: auto; scrollbar-width: thin;">
                 ${dados.postosParaRenovar.map(p => `
                   <div class="p-2 border rounded d-flex justify-content-between align-items-center" style="background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3) !important; font-size: 0.72rem;">
                     <div>
@@ -1633,7 +1633,14 @@ function emitirRelatorioFechamentoExecutivo() {
           box-shadow: none !important;
           padding: 10px !important;
           margin-bottom: 10px !important;
+          max-height: none !important;
+          overflow: visible !important;
           break-inside: avoid !important;
+        }
+
+        .card-exec-dark .d-flex {
+          max-height: none !important;
+          overflow: visible !important;
         }
 
         .parecer-manual-card {

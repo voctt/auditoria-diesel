@@ -648,7 +648,7 @@ body {
   isolation: isolate;
   display: flex;
   align-items: center;
-  min-height: 48px;
+  min-height: 88px;
 }
 .kpi-extremo-valor {
   position: relative;
@@ -723,11 +723,34 @@ body {
   white-space: nowrap;
 }
 .kpi-uf-silhueta-compacta {
-  right: 82px;
-  width: 56px;
-  height: 40px;
+  right: auto;
+  left: 50%;
+  width: 84px;
+  height: 60px;
   opacity: 0.28;
   filter: blur(0.15px);
+  transform: translate(-50%, -50%);
+}
+.kpi-uf-silhueta-unica {
+  right: 8px;
+  width: 132px;
+  height: 94px;
+  opacity: 0.3;
+}
+.kpi-extremos-consolidados-compartilhados {
+  position: relative;
+  isolation: isolate;
+}
+.kpi-uf-silhueta-compartilhada {
+  right: auto;
+  left: 50%;
+  width: 142px;
+  height: 100px;
+  opacity: 0.24;
+  transform: translate(-50%, -50%);
+}
+.kpi-extremos-consolidados-compartilhados > .kpi-extremo-split {
+  z-index: 1;
 }
 .kpi-extremo-split-separador {
   margin-top: 3px;
