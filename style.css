@@ -300,6 +300,9 @@ body {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-color);
 }
+.resumo-dashboard-titulo .kpi-label {
+  font-size: 0.82rem;
+}
 .resumo-tabela-area {
   position: relative;
   flex: 1 1 0;
@@ -307,14 +310,21 @@ body {
 }
 .resumo-volume-wave {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: -12px;
+  right: -12px;
   z-index: 0;
   height: 25.33%;
   overflow: hidden;
-  opacity: 0.3;
-  filter: blur(1.25px);
+  opacity: 0.55;
+  filter: blur(1px);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 9%, #000 91%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 9%, #000 91%, transparent 100%);
   pointer-events: none;
+}
+.resumo-volume-wave .apexcharts-canvas {
+  /* ApexCharts sizes to the full table area; scale each plot back to one row. */
+  transform: scaleY(0.2533);
+  transform-origin: top left;
 }
 .resumo-volume-wave-rota {
   top: 24%;
@@ -342,7 +352,10 @@ body {
   vertical-align: middle;
 }
 .card-tabela-resumo-dashboard .tabela-sintetica th {
-  font-size: 0.64rem;
+  font-size: 0.72rem;
+}
+.card-tabela-resumo-dashboard .tabela-sintetica td {
+  font-size: 0.76rem;
 }
 .card-tabela-resumo-dashboard .tabela-sintetica td {
   padding-top: 9px;
@@ -508,6 +521,40 @@ body {
 @media (max-width: 575.98px) {
   .kpi-dashboard-rail {
     grid-template-rows: repeat(2, minmax(145px, auto));
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica th,
+  .card-tabela-resumo-dashboard .tabela-sintetica td {
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica th {
+    font-size: 0.66rem;
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica td {
+    font-size: 0.7rem;
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica th:first-child,
+  .card-tabela-resumo-dashboard .tabela-sintetica td:first-child {
+    width: 36%;
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica th:nth-child(2),
+  .card-tabela-resumo-dashboard .tabela-sintetica td:nth-child(2) {
+    width: 16%;
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica th:nth-child(3),
+  .card-tabela-resumo-dashboard .tabela-sintetica td:nth-child(3) {
+    width: 21%;
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica th:nth-child(4),
+  .card-tabela-resumo-dashboard .tabela-sintetica td:nth-child(4) {
+    width: 27%;
+  }
+  .card-tabela-resumo-dashboard .tabela-sintetica td:first-child {
+    font-size: 0.68rem;
+  }
+  .card-tabela-resumo-dashboard .resumo-tipo-icon {
+    width: 14px;
+    margin-right: 2px;
   }
   .kpi-reference-row {
     grid-template-columns: minmax(0, 1fr);

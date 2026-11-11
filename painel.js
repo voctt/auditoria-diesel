@@ -12,6 +12,7 @@ let dadosAnpBaseGlobal = null;
 let sparklineInstances = {};
 let sparkVolumeCardInstance = null;
 let resumoVolumeCharts = {};
+let resumoVolumeResizeTimer = null;
 let modoAtual = "TODOS";
 let ufFiltrada = "";
 let postoFiltrado = "";
@@ -19,6 +20,20 @@ let redeFiltrada = "";
 let postosExternosExpandidos = false;
 let animacaoInicialKpisExecutada = false;
 let sequenciaAnimacaoCards = 0;
+
+window.addEventListener('resize', () => {
+  clearTimeout(resumoVolumeResizeTimer);
+  resumoVolumeResizeTimer = setTimeout(() => {
+    Object.entries(resumoVolumeCharts).forEach(([id, chart]) => {
+      const container = document.getElementById(id);
+      const canvas = container && container.querySelector('.apexcharts-canvas');
+      const largura = container && Math.round(container.clientWidth);
+      if (canvas && largura > 0 && Math.round(canvas.getBoundingClientRect().width) !== largura) {
+        chart.updateOptions({ chart: { width: largura } }, false, false, false);
+      }
+    });
+  }, 150);
+});
 
 const DIAS_LIMITE_TRATATIVA = 25;
 const JANELA_TRATATIVA_PROXIMA_DO_VENCIMENTO = 5;
@@ -923,7 +938,7 @@ function renderizarSparklinesResumo(mesesDisponiveis, registros) {
       stroke: { curve: 'smooth', width: 2 },
       fill: {
         type: 'gradient',
-        gradient: { shadeIntensity: 0, opacityFrom: 0.42, opacityTo: 0.02, stops: [0, 100] }
+        gradient: { shadeIntensity: 0, opacityFrom: 0.62, opacityTo: 0.08, stops: [0, 100] }
       },
       dataLabels: { enabled: false },
       markers: { size: 0 },
