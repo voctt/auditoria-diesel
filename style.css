@@ -1724,13 +1724,23 @@ body.preparando-impressao-roteiro #mapLeaflet .leaflet-tile {
 }
 
 .apexcharts-legend-marker {
+    display: inline-block !important;
+    width: 11px !important;
+    height: 11px !important;
     border-radius: 50% !important;
-    overflow: hidden !important;
-    vertical-align: middle !important;
     margin-right: 6px !important;
+    vertical-align: middle !important;
 }
 
 .apexcharts-legend-marker svg {
     display: none !important;
+}
+
+.apexcharts-legend-series[seriesname*="Saving"] .apexcharts-legend-marker {
+    background-color: #22c55e !important;
+}
+
+.apexcharts-legend-series[seriesname*="Spread"] .apexcharts-legend-marker {
+    background-color: #38bdf8 !important;
 }
 
