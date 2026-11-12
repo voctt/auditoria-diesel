@@ -1714,3 +1714,23 @@ body.preparando-impressao-roteiro #mapLeaflet .leaflet-tile {
     display: none !important;
     transition: none !important;
 }
+
+/* ==========================================================================
+   LEGENDA APEXCHARTS: MARCADORES CIRCULARES FIXOS & LIMPEZA DE OVERFLOW
+   ========================================================================== */
+.apexcharts-legend {
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+.apexcharts-legend-marker {
+    border-radius: 50% !important;
+    overflow: hidden !important;
+    vertical-align: middle !important;
+    margin-right: 6px !important;
+}
+
+.apexcharts-legend-marker svg {
+    display: none !important;
+}
+

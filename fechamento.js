@@ -1067,10 +1067,48 @@ function renderizarGraficoEvolucaoSavings() {
       width: [0, 3],
       curve: 'smooth'
     },
+    markers: {
+      size: [0, 4],
+      colors: ['#22c55e', '#38bdf8'],
+      strokeColors: '#0f172a',
+      strokeWidth: 2,
+      hover: {
+        size: 6
+      }
+    },
+    dataLabels: {
+      enabled: true,
+      enabledOnSeries: [0, 1],
+      formatter: function (val, opts) {
+        if (val === null || val === undefined) return '';
+        if (opts.seriesIndex === 0) {
+          if (val === 0) return '';
+          return val >= 1000 ? `R$ ${(val / 1000).toFixed(0)}k` : `R$ ${Math.round(val)}`;
+        }
+        return (val >= 0 ? '+' : '') + Number(val).toFixed(2);
+      },
+      style: {
+        fontSize: '10px',
+        fontWeight: 'bold',
+        colors: ['#86efac', '#7dd3fc']
+      },
+      background: {
+        enabled: true,
+        foreColor: '#0f172a',
+        padding: 3,
+        borderRadius: 3,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        opacity: 0.85
+      }
+    },
     plotOptions: {
       bar: {
         columnWidth: '40%',
-        borderRadius: 4
+        borderRadius: 4,
+        dataLabels: {
+          position: 'top'
+        }
       }
     },
     fill: {
@@ -1111,9 +1149,20 @@ function renderizarGraficoEvolucaoSavings() {
       strokeDashArray: 3
     },
     legend: {
+      show: true,
       position: 'top',
       horizontalAlign: 'right',
-      labels: { colors: '#cbd5e1' }
+      labels: { colors: '#cbd5e1' },
+      markers: {
+        width: 10,
+        height: 10,
+        radius: 12,
+        fillColors: ['#22c55e', '#38bdf8']
+      },
+      itemMargin: {
+        horizontal: 8,
+        vertical: 4
+      }
     },
     tooltip: {
       theme: 'dark',

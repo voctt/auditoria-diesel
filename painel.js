@@ -1071,6 +1071,60 @@ function atualizarCardsExtremosSemPonderada(todosRegistros, mesSel) {
     }
   }
 
+  // Saneamento de outliers na amostra usando referência ANP histórica (ou mediana por UF/competência como fallback)
+  const gruposUfComp = {};
+  amostra.forEach(d => {
+    const uf = (d.UF_POSTO || '').toUpperCase().trim();
+    const comp = d.MES_ANO || (d.DATA_FIM_CICLO ? d.DATA_FIM_CICLO.substring(0, 7) : '');
+    const chave = `${uf}_${comp}`;
+    if (!gruposUfComp[chave]) gruposUfComp[chave] = [];
+    const val = parseFloat(d.VALOR_UNITARIO);
+    if (!isNaN(val) && val > 0) gruposUfComp[chave].push(val);
+  });
+
+  const medianasUfComp = {};
+  Object.keys(gruposUfComp).forEach(chave => {
+    const vals = gruposUfComp[chave].slice().sort((a, b) => a - b);
+    if (vals.length > 0) {
+      const mid = Math.floor(vals.length / 2);
+      medianasUfComp[chave] = vals.length % 2 !== 0 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
+    }
+  });
+
+  amostra = amostra.filter(d => {
+    const val = parseFloat(d.VALOR_UNITARIO);
+    if (isNaN(val) || val <= 0) return false;
+    const uf = (d.UF_POSTO || '').toUpperCase().trim();
+    const comp = d.MES_ANO || (d.DATA_FIM_CICLO ? d.DATA_FIM_CICLO.substring(0, 7) : '');
+
+    let refPreco = null;
+
+    if (typeof obterPrecoMedioANP === 'function') {
+      const pAnp = obterPrecoMedioANP(uf, d.DATA_FIM_CICLO || comp);
+      if (typeof pAnp === 'number' && !isNaN(pAnp) && pAnp > 0) refPreco = pAnp;
+    }
+
+    if (!refPreco && typeof tabelaANP !== 'undefined' && tabelaANP) {
+      const registroUf = tabelaANP[uf];
+      if (registroUf) {
+        if (typeof registroUf === 'number') {
+          refPreco = registroUf;
+        } else if (typeof registroUf === 'object') {
+          refPreco = registroUf[comp] || registroUf.preco || registroUf.PRECO_MEDIO || null;
+        }
+      }
+    }
+
+    if (!refPreco) {
+      const chave = `${uf}_${comp}`;
+      refPreco = medianasUfComp[chave] || null;
+    }
+
+    if (!refPreco || refPreco <= 0) return true;
+
+    return val >= refPreco * 0.70 && val <= refPreco * 1.40;
+  });
+
   function extrairExtremos(lista) {
     if (!lista || lista.length === 0) return { max: null, min: null };
     let maxReg = lista[0];
