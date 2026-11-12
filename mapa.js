@@ -469,6 +469,136 @@ function verificarSePrecoDesatualizado(dataString) {
   return diferencaDias > 30;
 }
 
+// -------------------------------------------------------------------------
+// INTELIGÊNCIA DE PREÇOS ANP E TRIANGULAÇÃO POR UF
+// -------------------------------------------------------------------------
+function obterReferenciaAnpPorUf(uf, dataString, tipoOperacao = 'EXTERNO') {
+  const ufNorm = (uf || '').trim().toUpperCase();
+  const tabela = (tipoOperacao === 'INTERNO' && typeof anpDistribuicao !== 'undefined' && anpDistribuicao[ufNorm])
+    ? anpDistribuicao[ufNorm]
+    : ((typeof anpRevenda !== 'undefined' && anpRevenda[ufNorm]) ? anpRevenda[ufNorm] : null);
+
+  if (!tabela || typeof tabela !== 'object') return null;
+
+  // Tenta extrair a competência (AAAA-MM) da data do posto
+  let mesRef = "";
+  if (dataString) {
+    const matchIso = String(dataString).match(/^(\d{4})-(\d{2})/);
+    if (matchIso) {
+      mesRef = `${matchIso[1]}-${matchIso[2]}`;
+    } else {
+      const matchBarra = String(dataString).match(/(\d{2})\/(\d{4})/);
+      if (matchBarra) mesRef = `${matchBarra[2]}-${matchBarra[1]}`;
+    }
+  }
+
+  if (mesRef && Number(tabela[mesRef]) > 0) {
+    return Number(tabela[mesRef]);
+  }
+
+  // Se não encontrar o mês exato, pega a competência mais recente disponível da UF
+  const competencias = Object.keys(tabela).filter(m => Number(tabela[m]) > 0).sort();
+  if (competencias.length > 0) {
+    return Number(tabela[competencias[competencias.length - 1]]);
+  }
+
+  return null;
+}
+
+function calcularExtremosPrecoPorUf(postos) {
+  const extremos = {}; // { UF: { min: number, max: number } }
+
+  postos.forEach(p => {
+    const ufNorm = (p.uf || '').trim().toUpperCase();
+    if (!ufNorm) return;
+
+    // Considera apenas postos com abastecimento recente (<= 30 dias) e preço válido
+    const desatualizado = verificarSePrecoDesatualizado(p.data);
+    const preco = Number(p.preco || 0);
+
+    if (desatualizado || preco <= 0) return;
+
+    if (!extremos[ufNorm]) {
+      extremos[ufNorm] = { min: preco, max: preco };
+    } else {
+      if (preco < extremos[ufNorm].min) extremos[ufNorm].min = preco;
+      if (preco > extremos[ufNorm].max) extremos[ufNorm].max = preco;
+    }
+  });
+
+  return extremos;
+}
+
+function classificarPostoPorAnpEUf(posto, extremosPorUf = {}) {
+  const isDesatualizado = verificarSePrecoDesatualizado(posto.data);
+  const preco = Number(posto.preco || 0);
+  const ufNorm = (posto.uf || '').trim().toUpperCase();
+  const refAnp = obterReferenciaAnpPorUf(ufNorm, posto.data, posto.tipo);
+  const extremosUf = extremosPorUf[ufNorm] || null;
+
+  // 1. Posto com abastecimento com mais de 30 dias: sempre CINZA
+  if (isDesatualizado || preco <= 0) {
+    return {
+      corPin: "#475569",
+      statusTexto: "POSTO DESATUALIZADO (+30 dias)",
+      isDesatualizado: true,
+      refAnp: refAnp,
+      categoria: "desatualizado"
+    };
+  }
+
+  const minUf = extremosUf ? extremosUf.min : null;
+  const maxUf = extremosUf ? extremosUf.max : null;
+
+  const precoFormatado = `R$ ${preco.toFixed(3)}`;
+  const anpFormatada = refAnp ? `R$ ${refAnp.toFixed(3)}` : null;
+
+  // 2. Acima da ANP: sempre VERMELHO
+  if (refAnp !== null && preco > refAnp) {
+    return {
+      corPin: "#dc2626",
+      statusTexto: `Alerta: Preço Alto (Acima da ANP ${anpFormatada})`,
+      isDesatualizado: false,
+      refAnp: refAnp,
+      categoria: "alto"
+    };
+  }
+
+  // 3. Maior valor pago na UF: VERMELHO (mesmo que abaixo da ANP, se houver dispersão na UF)
+  if (maxUf !== null && minUf !== null && maxUf > minUf && preco === maxUf) {
+    const complemento = refAnp ? ` | ANP: ${anpFormatada}` : '';
+    return {
+      corPin: "#dc2626",
+      statusTexto: `Alerta: Maior Preço na UF ${ufNorm}${complemento}`,
+      isDesatualizado: false,
+      refAnp: refAnp,
+      categoria: "alto"
+    };
+  }
+
+  // 4. Melhor valor pago na UF sendo menor ou igual à ANP: VERDE
+  if (minUf !== null && preco === minUf && (refAnp === null || preco <= refAnp)) {
+    const complemento = refAnp ? ` (ANP: ${anpFormatada})` : '';
+    return {
+      corPin: "#16a34a",
+      statusTexto: `Recomendado: Menor Preço na UF ${ufNorm}${complemento}`,
+      isDesatualizado: false,
+      refAnp: refAnp,
+      categoria: "melhor"
+    };
+  }
+
+  // 5. Valores intermediários (abaixo da ANP, entre o menor e o maior): LARANJA
+  const infoAnp = refAnp ? ` (Abaixo da ANP ${anpFormatada})` : '';
+  return {
+    corPin: "#f59e0b",
+    statusTexto: `Preço Aceitável${infoAnp}`,
+    isDesatualizado: false,
+    refAnp: refAnp,
+    categoria: "aceitavel"
+  };
+}
+
 // Interceptador para fundir Base KMM com Base de Tratativas
 function aplicarTratativasNosPostos(postos) {
   postos.forEach(p => {
@@ -1112,6 +1242,9 @@ async function plotarPostosComDuploRaio(routeCoords) {
   // Aplica o cruzamento das tratativas para sobrepor preço/data
   aplicarTratativasNosPostos(postos);
 
+  // Calcula extremos de preço por UF para triangulação dinâmica
+  const extremosPorUf = calcularExtremosPrecoPorUf(postos);
+
   const segmentosRota = prepararSegmentosRota(routeCoords);
 
   const btnRota = document.getElementById('btnCalcularRotaLeaflet');
@@ -1134,16 +1267,16 @@ async function plotarPostosComDuploRaio(routeCoords) {
     const menorDist = posicaoNaRota.distanciaKm;
 
     if (menorDist <= 400) {
-      const isDesatualizado = verificarSePrecoDesatualizado(p.data);
+      const classificacao = classificarPostoPorAnpEUf(p, extremosPorUf);
       let corPin = "#94a3b8";
       let statusTexto = "Posto em Raio Expandido de Apoio";
 
-      if (isDesatualizado) {
-        corPin = "#475569";
-        statusTexto = "POSTO DESATUALIZADO";
+      if (classificacao.isDesatualizado) {
+        corPin = classificacao.corPin;
+        statusTexto = classificacao.statusTexto;
       } else if (menorDist <= 200) {
-        corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
-        statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
+        corPin = classificacao.corPin;
+        statusTexto = classificacao.statusTexto;
       }
 
       let raioDinamico = 6;
@@ -1165,13 +1298,18 @@ async function plotarPostosComDuploRaio(routeCoords) {
         finalLon += raioGraus * Math.sin(angulo);
       }
 
+      const infoAnpTexto = classificacao.refAnp
+        ? `<span class="small text-muted">Média ANP ${p.uf}: <b>R$ ${classificacao.refAnp.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b></span><br>`
+        : '';
+
       const popupPosto = `
         <strong style="color:#1c483a;">${p.posto}</strong><br>
         Cidade: ${p.municipio}/${p.uf}<br>
         Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b> <span style="font-size:0.6rem; color:#64748b;">(${p.origemPreco})</span><br>
+        ${infoAnpTexto}
         Tipo: ${p.tipo}<br>
         Status: <b>${statusTexto}</b><br>
-        ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
+        ${classificacao.isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
         <span class="small text-muted d-block mb-2">Aprox. ${Math.round(menorDist)} km da rota<br>~${Math.round(posicaoNaRota.kmNaRota)} km percorridos desde a origem</span>
         <button class="btn btn-sm btn-success w-100 fw-bold shadow-sm" style="font-size:0.7rem;" onclick="window.adicionarPostoComoParada('${`${p.municipio}, ${p.uf}`.replace(/'/g, "\\'")}', ${coords.lat}, ${coords.lon})">
           ➕ Incluir na Rota
@@ -1183,6 +1321,12 @@ async function plotarPostosComDuploRaio(routeCoords) {
         marker.bindPopup(popupPosto);
         markersPostosLeaflet.push(marker);
         postosSugeridosUltimaRota.push({
+          posto: p.posto, cidade: `${p.municipio}/${p.uf}`, preco: p.preco,
+          distancia: Math.round(menorDist), kmNaRota: Math.round(posicaoNaRota.kmNaRota),
+          tipo: p.tipo, desatualizado: classificacao.isDesatualizado, statusTexto: statusTexto,
+          corStatus: corPin, origemPreco: p.origemPreco, refAnp: classificacao.refAnp
+        });
+      } else {
           posto: p.posto, cidade: `${p.municipio}/${p.uf}`, preco: p.preco,
           distancia: Math.round(menorDist), kmNaRota: Math.round(posicaoNaRota.kmNaRota),
           tipo: p.tipo, desatualizado: isDesatualizado, origemPreco: p.origemPreco
@@ -1278,6 +1422,9 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
     return;
   }
 
+  // Triangulação por UF para filtro livre
+  const extremosPorUf = calcularExtremosPrecoPorUf(postos);
+
   const bounds = L.latLngBounds();
   const controleSobreposicao = {};
 
@@ -1287,17 +1434,9 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
     if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     if (!coords) continue;
 
-    const isDesatualizado = verificarSePrecoDesatualizado(p.data);
-    let corPin = "#94a3b8";
-    let statusTexto = "";
-
-    if (isDesatualizado) {
-      corPin = "#475569";
-      statusTexto = "POSTO DESATUALIZADO";
-    } else {
-      corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
-      statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
-    }
+    const classificacao = classificarPostoPorAnpEUf(p, extremosPorUf);
+    const corPin = classificacao.corPin;
+    const statusTexto = classificacao.statusTexto;
 
     let raioDinamico = 6;
     if (p.volumeTotal > 50000) raioDinamico = 13;
@@ -1319,13 +1458,18 @@ window.plotarPostosPorUfLivre = async function(ufSelecionada) {
 
     const marker = criarMarcadorPosto([finalLat, finalLon], corPin, raioDinamico);
 
+    const infoAnpTexto = classificacao.refAnp
+      ? `<span class="small text-muted">Média ANP ${p.uf}: <b>R$ ${classificacao.refAnp.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b></span><br>`
+      : '';
+
     marker.bindPopup(`
       <strong style="color:#1c483a;">${p.posto}</strong><br>
       Cidade: ${p.municipio}/${p.uf}<br>
       Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b> <span style="font-size:0.6rem; color:#64748b;">(${p.origemPreco})</span><br>
+      ${infoAnpTexto}
       Tipo: ${p.tipo}<br>
       Status: <b>${statusTexto}</b><br>
-      ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
+      ${classificacao.isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
     `);
 
     markersPostosLeaflet.push(marker);
@@ -1407,6 +1551,9 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
     return;
   }
 
+  // Triangulação por UF para filtro livre por rede
+  const extremosPorUf = calcularExtremosPrecoPorUf(postos);
+
   const bounds = L.latLngBounds();
   const controleSobreposicao = {};
 
@@ -1416,17 +1563,9 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
     if (versaoOperacao !== versaoOperacaoRoteirizador) return;
     if (!coords) continue;
 
-    const isDesatualizado = verificarSePrecoDesatualizado(p.data);
-    let corPin = "#94a3b8";
-    let statusTexto = "";
-
-    if (isDesatualizado) {
-      corPin = "#475569";
-      statusTexto = "POSTO DESATUALIZADO";
-    } else {
-      corPin = p.preco < 6.40 ? "#16a34a" : (p.preco < 6.75 ? "#eab308" : "#dc2626");
-      statusTexto = p.preco < 6.40 ? "Recomendado (Melhor Preço)" : (p.preco < 6.75 ? "Preço Aceitável" : "Alerta de Preço Alto");
-    }
+    const classificacao = classificarPostoPorAnpEUf(p, extremosPorUf);
+    const corPin = classificacao.corPin;
+    const statusTexto = classificacao.statusTexto;
 
     let raioDinamico = 6;
     if (p.volumeTotal > 50000) raioDinamico = 13;
@@ -1448,13 +1587,18 @@ window.plotarPostosPorRedeLivre = async function(redeSelecionada) {
 
     const marker = criarMarcadorPosto([finalLat, finalLon], corPin, raioDinamico);
 
+    const infoAnpTexto = classificacao.refAnp
+      ? `<span class="small text-muted">Média ANP ${p.uf}: <b>R$ ${classificacao.refAnp.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b></span><br>`
+      : '';
+
     marker.bindPopup(`
       <strong style="color:#1c483a;">${p.posto}</strong><br>
       Cidade: ${p.municipio}/${p.uf}<br>
       Último Preço: <b>R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</b> <span style="font-size:0.6rem; color:#64748b;">(${p.origemPreco})</span><br>
+      ${infoAnpTexto}
       Tipo: ${p.tipo}<br>
       Status: <b>${statusTexto}</b><br>
-      ${isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
+      ${classificacao.isDesatualizado ? `<span class="small text-danger">Data do Preço: ${p.data || 'Indisponível'}</span><br>` : ''}
     `);
 
     markersPostosLeaflet.push(marker);
@@ -1582,13 +1726,24 @@ function renderizarTabelaPostosSugeridos() {
   `;
 
   postosSugeridosUltimaRota.forEach(p => {
-    const alertaPreco = p.desatualizado ? `<br><span style="color:#dc2626; font-size:0.7em;">(Preço Desatualizado)</span>` : '';
+    let classeCorPreco = "text-success fw-bold";
+    if (p.desatualizado) {
+      classeCorPreco = "text-secondary fw-bold";
+    } else if (p.corStatus === '#dc2626') {
+      classeCorPreco = "text-danger fw-bold";
+    } else if (p.corStatus === '#f59e0b') {
+      classeCorPreco = "text-warning text-dark fw-bold";
+    }
+
+    const badgeStatus = p.statusTexto ? `<br><span style="color:${p.corStatus || '#64748b'}; font-size:0.7em;">(${p.statusTexto})</span>` : '';
+    const refAnpHtml = p.refAnp ? `<br><span class="text-muted" style="font-size:0.68em;">ANP: R$ ${p.refAnp.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</span>` : '';
+
     htmlTabela += `
       <tr>
         <td class="coluna-selecao-posto"><input class="form-check-input checkbox-posto-roteiro" type="checkbox" checked aria-label="Incluir ${p.posto} no roteiro"></td>
         <td><b>${p.posto}</b></td>
         <td>${p.cidade}</td>
-        <td class="text-success fw-bold">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} <span style="font-size:0.8em; color:#6c757d;">(${p.origemPreco})</span>${alertaPreco}</td>
+        <td class="${classeCorPreco}">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 3})} <span style="font-size:0.8em; color:#6c757d;">(${p.origemPreco})</span>${badgeStatus}${refAnpHtml}</td>
         <td>${p.kmNaRota.toLocaleString('pt-BR')} km</td>
         <td>${p.distancia} km</td>
         <td>${p.tipo}</td>
