@@ -211,6 +211,24 @@ function obterDataFimCompetencia(mes) {
         font-size: 0.88rem;
         font-weight: 800;
       }
+
+      /* REGRAS DE IMPRESSÃO DO DOSSIÊ */
+      @media print {
+        body.printing-dossie #secaoFechamentoExecutivo {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        body.printing-dossie .btn,
+        body.printing-dossie select,
+        body.printing-dossie #seletorMesFechamento {
+          display: none !important;
+        }
+        body.printing-dossie .dossie-pareceres-vazio {
+          display: none !important;
+        }
+      }
     `;
     document.head.appendChild(styleEl);
   }
@@ -691,7 +709,7 @@ function renderizarPareceresGestor() {
         </div>
         <span class="badge bg-dark text-warning border border-warning-subtle font-monospace" style="font-size: 0.60rem;">${pareceres.length} pareceres</span>
       </div>
-      ${cards ? `<div class="row g-2">${cards}</div>` : `<div class="small text-white-50 py-2">Nenhum parecer registrado para esta competência.</div>`}
+      ${cards ? `<div class="row g-2">${cards}</div>` : `<div class="small text-white-50 py-2 dossie-pareceres-vazio">Nenhum parecer registrado para esta competência.</div>`}
     </section>
   `;
 }
@@ -1599,93 +1617,109 @@ function decodificarValorFirestore(valor) {
 /**
  * Impressão Executiva Sem Sobreposições (Folha A4 Paisagem)
  */
-function emitirRelatorioFechamentoExecutivo() {
+async function emitirRelatorioFechamentoExecutivo() {
   const container = document.getElementById('secaoFechamentoExecutivo');
   if (!container) return;
 
-  const conteudo = container.cloneNode(true);
-  const botoes = conteudo.querySelectorAll('button, select, #graficoEvolucaoSavings');
-  botoes.forEach(b => b.remove());
+  // 1) Configurações de tema claro para o ApexCharts
+  const opcoesTemaClaro = {
+    chart: {
+      background: 'transparent'
+    },
+    theme: {
+      mode: 'light'
+    },
+    xaxis: {
+      axisBorder: { color: '#cbd5e1' },
+      axisTicks: { color: '#cbd5e1' },
+      labels: { style: { colors: '#1e293b' } }
+    },
+    yaxis: [
+      {
+        title: { style: { color: '#15803d' } },
+        labels: { style: { colors: '#1e293b' } }
+      },
+      {
+        opposite: true,
+        title: { style: { color: '#0369a1' } },
+        labels: { style: { colors: '#1e293b' } }
+      }
+    ],
+    grid: {
+      borderColor: '#e2e8f0'
+    },
+    legend: {
+      labels: { colors: '#1e293b' }
+    }
+  };
 
-  const janela = window.open('', '_blank', 'width=1150,height=850');
-  janela.document.write(`
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-      <meta charset="UTF-8">
-      <title>Relatório Executivo Mensal - Cargosoft</title>
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-      <style>
-        @page { size: A4 landscape; margin: 8mm; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #ffffff; color: #0f172a; padding: 4px; }
-        
-        .row { display: block !important; margin: 0 !important; }
-        .col-12, .col-md-3, .col-md-6 { 
-          display: block !important; 
-          width: 100% !important; 
-          float: none !important; 
-          position: static !important;
-          margin-bottom: 12px !important;
-          break-inside: avoid !important;
-          page-break-inside: avoid !important;
-        }
+  const opcoesTemaEscuro = {
+    chart: {
+      background: 'transparent'
+    },
+    theme: {
+      mode: 'dark'
+    },
+    xaxis: {
+      axisBorder: { color: '#334155' },
+      axisTicks: { color: '#334155' },
+      labels: { style: { colors: '#94a3b8' } }
+    },
+    yaxis: [
+      {
+        title: { style: { color: '#22c55e' } },
+        labels: { style: { colors: '#94a3b8' } }
+      },
+      {
+        opposite: true,
+        title: { style: { color: '#38bdf8' } },
+        labels: { style: { colors: '#94a3b8' } }
+      }
+    ],
+    grid: {
+      borderColor: 'rgba(255, 255, 255, 0.05)'
+    },
+    legend: {
+      labels: { colors: '#cbd5e1' }
+    }
+  };
 
-        .card-exec-dark {
-          background: #ffffff !important;
-          color: #0f172a !important;
-          border: 1px solid #cbd5e1 !important;
-          box-shadow: none !important;
-          padding: 10px !important;
-          margin-bottom: 10px !important;
-          max-height: none !important;
-          overflow: visible !important;
-          break-inside: avoid !important;
-        }
+  // Atualiza para o tema claro e dispara resize antes da impressão
+  if (graficoEvolucaoInstancia) {
+    try {
+      await graficoEvolucaoInstancia.updateOptions(opcoesTemaClaro, false, false);
+      window.dispatchEvent(new Event('resize'));
+    } catch (e) {
+      console.warn('Aviso ao aplicar tema claro no gráfico:', e);
+    }
+  }
 
-        .card-exec-dark .d-flex {
-          max-height: none !important;
-          overflow: visible !important;
-        }
+  // 2) Adiciona classe auxiliar no body
+  document.body.classList.add('printing-dossie');
 
-        .parecer-manual-card {
-          background: #fffbeb !important;
-          color: #0f172a !important;
-          border: 1px solid #d6a52e !important;
-          border-left: 4px solid #b7791f !important;
-          padding: 10px !important;
-          margin-bottom: 8px !important;
-          break-inside: avoid !important;
-        }
-        .parecer-manual-card .text-white { color: #0f172a !important; }
-        .parecer-manual-subtitulo { color: #854d0e !important; }
-        .parecer-manual-texto { color: #1e293b !important; }
-        .parecer-manual-indicador { background: #fef3c7 !important; border-color: #d6a52e !important; }
-        .parecer-manual-valor { color: #854d0e !important; }
+  // 3) Limpeza e restauração após impressão (via window.onafterprint e fallback)
+  let restaurado = false;
+  const restaurarEstadoOriginal = async () => {
+    if (restaurado) return;
+    restaurado = true;
+    window.removeEventListener('afterprint', restaurarEstadoOriginal);
+    document.body.classList.remove('printing-dossie');
+    if (graficoEvolucaoInstancia) {
+      try {
+        await graficoEvolucaoInstancia.updateOptions(opcoesTemaEscuro, false, false);
+        window.dispatchEvent(new Event('resize'));
+      } catch (e) {
+        console.warn('Aviso ao restaurar tema escuro no gráfico:', e);
+      }
+    }
+  };
 
-        .num-kpi-grande { font-size: 1.4rem !important; color: #0f172a !important; text-shadow: none !important; }
-        .num-neon-verde { color: #15803d !important; }
-        .num-neon-azul { color: #0369a1 !important; }
-        .text-white, .text-white-50 { color: #334155 !important; }
-        .text-muted { color: #64748b !important; }
+  window.addEventListener('afterprint', restaurarEstadoOriginal, { once: true });
 
-        .tabela-fechamento-dark { color: #0f172a !important; font-size: 0.64rem !important; }
-        .tabela-fechamento-dark thead th { background: #f1f5f9 !important; color: #1e293b !important; border-bottom: 1px solid #94a3b8 !important; }
-        .tabela-fechamento-dark tbody td { border-color: #e2e8f0 !important; color: #0f172a !important; padding: 3px 4px !important; }
-      </style>
-    </head>
-    <body onload="window.print(); window.close();">
-      <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
-        <div>
-          <h4 class="fw-bold mb-0 text-dark">Cargosoft Transportes - Fechamento Executivo de Combustível</h4>
-          <span class="text-muted small">Competência Auditada: ${formatarRotuloMes(mesFechamentoAtivo)} | Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</span>
-        </div>
-        <div class="text-end text-muted small">
-          Base Homologada KMM, ANP Oficial & Rolodex
-        </div>
-      </div>
-      ${conteudo.innerHTML}
-    </body>
-    </html>
-  `);
-  janela.document.close();
+  try {
+    window.print();
+  } finally {
+    // Fallback assíncrono para garantir restauração caso onafterprint não dispare
+    setTimeout(restaurarEstadoOriginal, 1000);
+  }
 }
