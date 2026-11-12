@@ -20,9 +20,11 @@ const DE_PARA_NOMES_UFS = {
 };
 
 // Variáveis de controlo do Mini Mapa do Brasil
-let miniMapaLeaflet = null;
-let camadaGeoJsonBrasil = null;
-let dadosGeoJsonBr = null;
+var miniMapaLeaflet = null;
+var camadaGeoJsonBrasil = null;
+var dadosGeoJsonBr = null;
+window.dadosGeoJsonBr = null;
+window.miniMapaLeaflet = null;
 
 // Variáveis de controlo do Roteirizador de Postos
 let leafletMapInstance = null;
@@ -1325,11 +1327,6 @@ async function plotarPostosComDuploRaio(routeCoords) {
           distancia: Math.round(menorDist), kmNaRota: Math.round(posicaoNaRota.kmNaRota),
           tipo: p.tipo, desatualizado: classificacao.isDesatualizado, statusTexto: statusTexto,
           corStatus: corPin, origemPreco: p.origemPreco, refAnp: classificacao.refAnp
-        });
-      } else {
-          posto: p.posto, cidade: `${p.municipio}/${p.uf}`, preco: p.preco,
-          distancia: Math.round(menorDist), kmNaRota: Math.round(posicaoNaRota.kmNaRota),
-          tipo: p.tipo, desatualizado: isDesatualizado, origemPreco: p.origemPreco
         });
       } else {
         postosApoioPendentes.push({ coords: [finalLat, finalLon], cor: corPin, raio: raioDinamico, popup: popupPosto });

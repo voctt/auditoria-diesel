@@ -216,8 +216,12 @@ async function carregarDados() {
 
     if (json && json.status === "sucesso" && Array.isArray(json.dados)) {
       baseRegistrosMensais = json.dados;
-      if (typeof inicializarMiniMapaBrasil === 'function') {
-        await inicializarMiniMapaBrasil();
+      try {
+        if (typeof inicializarMiniMapaBrasil === 'function') {
+          await inicializarMiniMapaBrasil();
+        }
+      } catch (mapaErr) {
+        console.warn("Aviso ao carregar mini-mapa do Brasil:", mapaErr);
       }
       popularFiltrosDinamicos();
       processarPainel();
