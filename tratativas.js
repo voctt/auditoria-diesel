@@ -1,6 +1,8 @@
 /* ==========================================================================
    MÓDULO DE TRATATIVAS COMERCIAIS & PERSISTÊNCIA FIRESTORE - VOCTT
    ARQUITETURA DUAL: ROLODEX DE HISTÓRICO EM LEQUE + COCKPIT DE DECISÃO & SPREAD
+   Controla o cadastro, histórico em formato Rolodex e negociações comerciais
+   de preços por posto com persistência no Google Cloud Firestore.
    ========================================================================== */
 
 const FIRESTORE_BASE_TRATATIVAS = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/tratativas_diesel";

@@ -1,6 +1,8 @@
 /* ==========================================================================
    MÓDULO DO PAINEL PRINCIPAL & TERMÔMETRO OPERACIONAL KMM
    CARGOSOFT | VOCTT DATA ANALYTICS DIESEL
+   Controla os KPIs do dashboard principal, consumo por frota/placa, gráficos
+   de volume e integração das APIs de abastecimento KMM e dados ANP.
    ========================================================================== */
 
 const WORKER_URL = "https://api-abastecimentos.klapowsko.workers.dev";

@@ -1,5 +1,7 @@
 /* ==========================================================================
    LÓGICA E INJEÇÃO VISUAL DO LOGIN - VOCTT FUEL INTELLIGENCE
+   Controla a autenticação com Firebase Auth, validação de sessão, injeção
+   dinâmica do formulário de login e proteção de acesso às telas do sistema.
    ========================================================================== */
 
 const FIREBASE_API_KEY = "AIzaSyDT2fbjOk1TvkzJhiw_Wm5Xf9sIO1WH-PA";

@@ -1,7 +1,8 @@
 /* ==========================================================================
    MÓDULO DE FECHAMENTO MENSAL EXECUTIVO & DOSSIÊ DA DIRETORIA (DARK MODE)
    CARGOSOFT | VOCTT INTELIGÊNCIA DE FROTAS
-   Consolidação KMM, Rolodex, Matrizes de Garagem e Linha do Tempo Blindada
+   Controla a geração do dossiê executivo mensal, relatórios gerenciais,
+   consolidação KMM/ANP, pareceres de gestores e sincronização via Firestore.
    ========================================================================== */
 
 const FIRESTORE_BASE_DOSSIE = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/fechamentos_dossie";

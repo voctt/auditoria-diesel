@@ -1,6 +1,8 @@
 /* ==========================================================================
    MÓDULO DE AUDITORIA COMERCIAL, GOVERNANÇA DE SPREADS & MICRO-DRILLDOWN
    CARGOSOFT | VOCTT INTELIGÊNCIA DE FROTAS
+   Controla a auditoria de abastecimentos, cálculo de savings, spread vs ANP,
+   filtros avançados, ordenação e exibição detalhada de transações KMM.
    ========================================================================== */
 
 // Estado global de ordenação da tabela master de auditoria

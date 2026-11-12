@@ -1,4 +1,5 @@
 // Base Expandida de Cidades e Polos Rodoviários / Logísticos do Brasil
+// Controla o catálogo de coordenadas geográficas (latitude/longitude) das cidades e polos logísticos para suporte ao mapa e rotas.
 const baseCidadesBrasil = [
   // PARANÁ (PR)
   { nome: "Colombo, PR", lat: -25.2917, lon: -49.2242 },

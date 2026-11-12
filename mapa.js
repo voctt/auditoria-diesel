@@ -2,6 +2,7 @@
  * CARGOSOFT | Data Analytics Diesel
  * Módulo de Inteligência Geográfica: Mini Mapa do Brasil & Roteirizador de Postos
  * Arquivo: mapa.js
+ * Controla a renderização do mapa Leaflet, malha dos estados, geolocalização de postos e roteirização logística.
  */
 
 // URL da malha GeoJSON oficial dos 27 estados do Brasil

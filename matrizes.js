@@ -1,4 +1,5 @@
 // Módulo de Matrizes Gerenciais e Auditoria Estratégica (Power BI Engine Alinhado)
+// Controla as matrizes de análise estratégica de garagens, postos conveniados e médias ponderadas via integração ANP/KMM.
 // Utiliza agregação Gaps and Islands (VOLUME_CICLO e VALOR_TOTAL_CICLO) para Média Ponderada Real
 
 let cacheAnpBase = null;
