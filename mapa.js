@@ -100,35 +100,92 @@ async function inicializarMiniMapaBrasil() {
 
 const CORES_CONCENTRACAO_MAPA = ['#4ade80', '#22c55e', '#1c483a', '#062316'];
 
-function obterCorPorVolume(vol, min, max) {
-  if (!Number.isFinite(vol) || vol <= 0) return '#e2e8f0';
-  if (max === min) return CORES_CONCENTRACAO_MAPA[1];
+function calcularFaixasConcentracao(min, max) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max <= 0) {
+    return null;
+  }
 
-  const normalizado = (vol - min) / (max - min);
-  const faixa = Math.min(CORES_CONCENTRACAO_MAPA.length - 1, Math.floor(normalizado * CORES_CONCENTRACAO_MAPA.length));
-  return CORES_CONCENTRACAO_MAPA[faixa];
+  // Define passo arredondado (números redondos e amigáveis como 5k, 10k, 20k, 50k, 100k...)
+  const amplitude = Math.max(max, 1000);
+  const passoBruto = amplitude / CORES_CONCENTRACAO_MAPA.length;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(passoBruto)));
+  const fracao = passoBruto / magnitude;
+
+  let fatorPasso = 1;
+  if (fracao <= 1.2) fatorPasso = 1;
+  else if (fracao <= 2.5) fatorPasso = 2;
+  else if (fracao <= 6) fatorPasso = 5;
+  else fatorPasso = 10;
+
+  const passoArredondado = Math.max(1000, Math.round(fatorPasso * magnitude));
+
+  // Faixas com limites fixos redondos: [0 a passo], [passo a 2*passo], etc.
+  const faixas = [];
+  for (let i = 0; i < CORES_CONCENTRACAO_MAPA.length; i++) {
+    const inicio = i * passoArredondado;
+    const fim = (i + 1) * passoArredondado;
+    faixas.push({
+      cor: CORES_CONCENTRACAO_MAPA[i],
+      min: inicio,
+      max: fim,
+      limiteSuperior: fim
+    });
+  }
+
+  return faixas;
+}
+
+let faixasConcentracaoAtuais = null;
+
+function formatarVolumeFaixa(valor) {
+  if (valor >= 1000000) {
+    const m = valor / 1000000;
+    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
+  }
+  if (valor >= 1000) {
+    const k = valor / 1000;
+    return `${k % 1 === 0 ? k : k.toFixed(0)}k`;
+  }
+  return valor.toLocaleString('pt-BR');
+}
+
+function obterCorPorVolume(vol) {
+  if (!Number.isFinite(vol) || vol <= 0) return '#e2e8f0';
+  if (!faixasConcentracaoAtuais || !faixasConcentracaoAtuais.length) return CORES_CONCENTRACAO_MAPA[0];
+
+  for (let i = 0; i < faixasConcentracaoAtuais.length; i++) {
+    if (vol <= faixasConcentracaoAtuais[i].limiteSuperior || i === faixasConcentracaoAtuais.length - 1) {
+      return faixasConcentracaoAtuais[i].cor;
+    }
+  }
+  return CORES_CONCENTRACAO_MAPA[CORES_CONCENTRACAO_MAPA.length - 1];
 }
 
 function atualizarLegendaConcentracao(min, max) {
   const legenda = document.getElementById('legendaConcentracao');
   if (!legenda) return;
 
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= 0) {
+    faixasConcentracaoAtuais = null;
     legenda.innerHTML = '<span class="text-muted">Sem dados</span>';
     return;
   }
 
-  if (min === max) {
-    legenda.innerHTML = `<span class="legend-indicator" style="background:${CORES_CONCENTRACAO_MAPA[1]};" title="Sem variação"></span><span class="text-muted">${Math.round(min).toLocaleString('pt-BR')} L (sem variação)</span>`;
+  const faixas = calcularFaixasConcentracao(min, max);
+  faixasConcentracaoAtuais = faixas;
+
+  if (!faixas) {
+    legenda.innerHTML = '<span class="text-muted">Sem dados</span>';
     return;
   }
 
-  const passo = (max - min) / CORES_CONCENTRACAO_MAPA.length;
-  legenda.innerHTML = CORES_CONCENTRACAO_MAPA.map((cor, indice) => {
-    const inicio = min + passo * indice;
-    const fim = indice === CORES_CONCENTRACAO_MAPA.length - 1 ? max : min + passo * (indice + 1);
-    const intervalo = `${Math.round(inicio).toLocaleString('pt-BR')}–${Math.round(fim).toLocaleString('pt-BR')} L`;
-    return `<span class="d-inline-flex align-items-center text-muted" title="${intervalo}"><span class="legend-indicator" style="background:${cor};"></span>${intervalo}</span>`;
+  legenda.innerHTML = faixas.map((f, indice) => {
+    const inicioRotulo = formatarVolumeFaixa(f.min);
+    const fimRotulo = formatarVolumeFaixa(f.max);
+    const textoRotulo = `${inicioRotulo} a ${fimRotulo}`;
+    const textoTooltip = `${Math.round(f.min).toLocaleString('pt-BR')} até ${Math.round(f.max).toLocaleString('pt-BR')} L`;
+
+    return `<span class="d-inline-flex align-items-center text-muted me-1" title="${textoTooltip}"><span class="legend-indicator" style="background:${f.cor};"></span>${textoRotulo}</span>`;
   }).join('');
 }
 
