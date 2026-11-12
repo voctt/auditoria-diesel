@@ -349,7 +349,7 @@ async function renderizarConteudoFechamentoExecutivo() {
           <i class="bi bi-briefcase-fill text-success fs-4"></i>
           <span>Fechamento Executivo & Prestação de Contas da Frota</span>
         </h5>
-        <span class="small text-muted" style="font-size: 0.72rem;">
+        <span class="small text-white-50" style="font-size: 0.72rem;">
           Consolidação Operacional, Estratégia de Garagens e Economia Real Auditada no Caixa da Cargosoft
         </span>
       </div>
