@@ -1753,6 +1753,14 @@ function renderizarTabelaPostosSugeridos() {
   area.style.display = "block";
 }
 
+// Mantém o mapa sincronizado com a altura do card de filtros ao lado.
+if (typeof ResizeObserver !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('mapLeaflet');
+    if (el) new ResizeObserver(() => leafletMapInstance && leafletMapInstance.invalidateSize({ pan: false })).observe(el);
+  });
+}
+
 function definirSelecaoPostosRoteiro(selecionar) {
   document.querySelectorAll('#tabelaPostosSugeridos .checkbox-posto-roteiro').forEach(checkbox => {
     checkbox.checked = selecionar;
