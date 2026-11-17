@@ -67,6 +67,43 @@ function obterDataFimCompetencia(mes) {
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
       }
 
+      /* BARRA DE ROLAGEM DARK ARREDONDADA E ELEGANTE */
+      #secaoFechamentoExecutivo [style*="overflow-y: auto"],
+      #secaoFechamentoExecutivo [style*="overflow-y:auto"] {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.28) rgba(9, 13, 22, 0.45);
+        padding-right: 4px;
+      }
+      #secaoFechamentoExecutivo [style*="overflow-y: auto"]::-webkit-scrollbar,
+      #secaoFechamentoExecutivo [style*="overflow-y:auto"]::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      #secaoFechamentoExecutivo [style*="overflow-y: auto"]::-webkit-scrollbar-button,
+      #secaoFechamentoExecutivo [style*="overflow-y:auto"]::-webkit-scrollbar-button {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+      #secaoFechamentoExecutivo [style*="overflow-y: auto"]::-webkit-scrollbar-track,
+      #secaoFechamentoExecutivo [style*="overflow-y:auto"]::-webkit-scrollbar-track {
+        background: rgba(9, 13, 22, 0.45);
+        border-radius: 999px;
+      }
+      #secaoFechamentoExecutivo [style*="overflow-y: auto"]::-webkit-scrollbar-thumb,
+      #secaoFechamentoExecutivo [style*="overflow-y:auto"]::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.28);
+        border-radius: 999px;
+      }
+      #secaoFechamentoExecutivo [style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover,
+      #secaoFechamentoExecutivo [style*="overflow-y:auto"]::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.5);
+      }
+      #secaoFechamentoExecutivo [style*="overflow-y: auto"]::-webkit-scrollbar-corner,
+      #secaoFechamentoExecutivo [style*="overflow-y:auto"]::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+
       /* CARDS EXECUTIVOS COM GLOW NEON */
       .card-exec-dark {
         background: #111827;
