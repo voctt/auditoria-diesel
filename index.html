@@ -175,42 +175,59 @@
 
       <div class="col-12 col-xl-5">
         <div class="card-tabela-resumo card-tabela-resumo-dashboard">
-          <div class="resumo-dashboard-titulo">
+          <div class="resumo-dashboard-titulo d-flex justify-content-between align-items-center gap-2">
             <span class="kpi-label mb-0"><i class="bi bi-bar-chart-line-fill me-1 text-success"></i> RESUMO DE ABASTECIMENTOS</span>
+            <span class="resumo-periodo-pill" id="lblResumoPeriodo">
+              <i class="bi bi-calendar3"></i> Consolidado
+            </span>
           </div>
-          <div class="resumo-tabela-area">
-            <div id="sparkResumoVolumeRota" class="resumo-volume-wave resumo-volume-wave-rota" aria-hidden="true"></div>
-            <div id="sparkResumoVolumeInterno" class="resumo-volume-wave resumo-volume-wave-interno" aria-hidden="true"></div>
-            <table class="table tabela-sintetica text-end">
-              <thead>
-                <tr>
-                  <th class="text-start">Tipo Operação</th>
-                  <th>Qtd</th>
-                  <th>Vol (Lts)</th>
-                  <th>Total (R$)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="resumo-linha-rota">
-                  <td class="text-start fw-bold" style="color: #c2410c;"><i class="bi bi-truck resumo-tipo-icon"></i>Rota Rodoviária</td>
-                  <td class="font-monospace" id="tbResumoQtdRota">--</td>
-                  <td class="font-monospace fw-semibold" id="tbResumoVolRota">--</td>
-                  <td class="font-monospace" id="tbResumoGastoRota">--</td>
-                </tr>
-                <tr class="resumo-linha-proprios">
-                  <td class="text-start fw-bold" style="color: #15803d;"><i class="bi bi-fuel-pump-fill resumo-tipo-icon"></i>Tanques Próprios</td>
-                  <td class="font-monospace" id="tbResumoQtdInterno">--</td>
-                  <td class="font-monospace fw-semibold" id="tbResumoVolInterno">--</td>
-                  <td class="font-monospace" id="tbResumoGastoInterno">--</td>
-                </tr>
-                <tr class="fw-bold resumo-linha-total">
-                  <td class="text-start text-dark"><i class="bi bi-bar-chart-steps resumo-tipo-icon"></i>Consolidado Geral</td>
-                  <td class="font-monospace text-dark" id="tbResumoQtdTotal">--</td>
-                  <td class="font-monospace text-dark" id="tbResumoVolTotal">--</td>
-                  <td class="font-monospace text-dark" id="tbResumoGastoTotal">--</td>
-                </tr>
-              </tbody>
-            </table>
+
+          <div class="resumo-consolidado-topo">
+            <div class="resumo-consolidado-label">Consolidado Geral</div>
+            <div class="resumo-consolidado-valores">
+              <div class="kpi-val-grande text-dark resumo-valor-total" id="tbResumoGastoTotal">R$ --</div>
+              <div class="resumo-consolidado-meta">
+                <span><strong id="tbResumoQtdTotal">--</strong> abastecimentos</span>
+                <span><strong id="tbResumoVolTotal">--</strong> LTS</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="resumo-distribuicao-bloco">
+            <div class="resumo-stacked-bar" role="img" aria-label="Proporção de investimento entre Rota Rodoviária e Tanques Próprios">
+              <div class="resumo-stacked-seg resumo-stacked-rota" id="barraResumoRota" style="width: 50%;"></div>
+              <div class="resumo-stacked-seg resumo-stacked-interno" id="barraResumoInterno" style="width: 50%;"></div>
+            </div>
+            <div class="resumo-stacked-pills">
+              <span class="resumo-pct-pill resumo-pct-rota" id="pctResumoBarraRota">--%</span>
+              <span class="resumo-pct-pill resumo-pct-interno" id="pctResumoBarraInterno">--%</span>
+            </div>
+          </div>
+
+          <div class="resumo-cards-comparativos">
+            <div class="resumo-subcard resumo-subcard-rota">
+              <div class="resumo-subcard-header">
+                <span class="resumo-subcard-titulo text-rota"><i class="bi bi-truck"></i> Rota Rodoviária</span>
+                <span class="resumo-pct-pill resumo-pct-rota" id="pctResumoGastoRota">--%</span>
+              </div>
+              <div class="resumo-subcard-valor" id="tbResumoGastoRota">R$ --</div>
+              <div class="resumo-subcard-detalhes">
+                <span><strong id="tbResumoQtdRota">--</strong> abast. <span class="resumo-detalhe-pct" id="pctResumoQtdRota">(--%)</span></span>
+                <span><strong id="tbResumoVolRota">--</strong> LTS <span class="resumo-detalhe-pct" id="pctResumoVolRota">(--%)</span></span>
+              </div>
+            </div>
+
+            <div class="resumo-subcard resumo-subcard-interno">
+              <div class="resumo-subcard-header">
+                <span class="resumo-subcard-titulo text-interno"><i class="bi bi-fuel-pump-fill"></i> Tanques Próprios</span>
+                <span class="resumo-pct-pill resumo-pct-interno" id="pctResumoGastoInterno">--%</span>
+              </div>
+              <div class="resumo-subcard-valor" id="tbResumoGastoInterno">R$ --</div>
+              <div class="resumo-subcard-detalhes">
+                <span><strong id="tbResumoQtdInterno">--</strong> abast. <span class="resumo-detalhe-pct" id="pctResumoQtdInterno">(--%)</span></span>
+                <span><strong id="tbResumoVolInterno">--</strong> LTS <span class="resumo-detalhe-pct" id="pctResumoVolInterno">(--%)</span></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
