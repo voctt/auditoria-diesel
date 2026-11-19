@@ -13,8 +13,6 @@ let baseRegistrosMensais = [];
 let dadosAnpBaseGlobal = null;
 let sparklineInstances = {};
 let sparkVolumeCardInstance = null;
-let resumoVolumeCharts = {};
-let resumoVolumeResizeTimer = null;
 let modoAtual = "TODOS";
 let ufFiltrada = "";
 let postoFiltrado = "";
@@ -22,20 +20,6 @@ let redeFiltrada = "";
 let postosExternosExpandidos = false;
 let animacaoInicialKpisExecutada = false;
 let sequenciaAnimacaoCards = 0;
-
-window.addEventListener('resize', () => {
-  clearTimeout(resumoVolumeResizeTimer);
-  resumoVolumeResizeTimer = setTimeout(() => {
-    Object.entries(resumoVolumeCharts).forEach(([id, chart]) => {
-      const container = document.getElementById(id);
-      const canvas = container && container.querySelector('.apexcharts-canvas');
-      const largura = container && Math.round(container.clientWidth);
-      if (canvas && largura > 0 && Math.round(canvas.getBoundingClientRect().width) !== largura) {
-        chart.updateOptions({ chart: { width: largura } }, false, false, false);
-      }
-    });
-  }, 150);
-});
 
 const DIAS_LIMITE_TRATATIVA = 25;
 const JANELA_TRATATIVA_PROXIMA_DO_VENCIMENTO = 5;
@@ -601,7 +585,7 @@ function processarPainel() {
     baseCalculoGeral = registros.filter(d => d.MES_ANO === mesSel);
   }
 
-  // 1. Tabela Sintética de Conferência (Agora soma os ciclos)
+  // 1. Card Resumo de Abastecimentos (Consolidado + Divisão Percentual)
   let qtdRota = 0, volRota = 0, gastoRota = 0;
   let qtdInterno = 0, volInterno = 0, gastoInterno = 0;
 
@@ -625,6 +609,34 @@ function processarPainel() {
   const volTotal = volRota + volInterno;
   const gastoTotal = gastoRota + gastoInterno;
 
+  const formatarPct = (parte, total) => {
+    if (!total || total <= 0) return '0,0%';
+    return ((parte / total) * 100).toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    }) + '%';
+  };
+
+  const pctGastoRotaNum = gastoTotal > 0 ? (gastoRota / gastoTotal) * 100 : 0;
+  const pctGastoInternoNum = gastoTotal > 0 ? (gastoInterno / gastoTotal) * 100 : 0;
+
+  const pctGastoRotaTxt = formatarPct(gastoRota, gastoTotal);
+  const pctGastoInternoTxt = formatarPct(gastoInterno, gastoTotal);
+  const pctQtdRotaTxt = formatarPct(qtdRota, qtdTotal);
+  const pctQtdInternoTxt = formatarPct(qtdInterno, qtdTotal);
+  const pctVolRotaTxt = formatarPct(volRota, volTotal);
+  const pctVolInternoTxt = formatarPct(volInterno, volTotal);
+
+  const lblResumoPeriodo = document.getElementById('lblResumoPeriodo');
+  if (lblResumoPeriodo) {
+    if (mesSel === 'YTD') {
+      const anoAtualBase = obterAnoMaisRecenteBase();
+      lblResumoPeriodo.innerHTML = `<i class="bi bi-calendar3"></i> Ano ${anoAtualBase || 'Atual'}`;
+    } else {
+      lblResumoPeriodo.innerHTML = `<i class="bi bi-calendar3"></i> ${formatarMesReferenciaAnp(mesSel)}`;
+    }
+  }
+
   const tbQtdRota = document.getElementById('tbResumoQtdRota');
   const tbVolRota = document.getElementById('tbResumoVolRota');
   const tbGastoRota = document.getElementById('tbResumoGastoRota');
@@ -645,6 +657,31 @@ function processarPainel() {
   if (tbQtdTot) tbQtdTot.innerText = qtdTotal.toLocaleString('pt-BR');
   if (tbVolTot) tbVolTot.innerText = Math.round(volTotal).toLocaleString('pt-BR');
   if (tbGastoTot) tbGastoTot.innerText = "R$ " + Math.round(gastoTotal).toLocaleString('pt-BR');
+
+  const barraRota = document.getElementById('barraResumoRota');
+  const barraInterno = document.getElementById('barraResumoInterno');
+  if (barraRota) barraRota.style.width = `${gastoTotal > 0 ? pctGastoRotaNum.toFixed(2) : 50}%`;
+  if (barraInterno) barraInterno.style.width = `${gastoTotal > 0 ? pctGastoInternoNum.toFixed(2) : 50}%`;
+
+  const elPctBarraRota = document.getElementById('pctResumoBarraRota');
+  const elPctBarraInterno = document.getElementById('pctResumoBarraInterno');
+  if (elPctBarraRota) elPctBarraRota.innerText = pctGastoRotaTxt;
+  if (elPctBarraInterno) elPctBarraInterno.innerText = pctGastoInternoTxt;
+
+  const elPctGastoRota = document.getElementById('pctResumoGastoRota');
+  const elPctGastoInterno = document.getElementById('pctResumoGastoInterno');
+  if (elPctGastoRota) elPctGastoRota.innerText = pctGastoRotaTxt;
+  if (elPctGastoInterno) elPctGastoInterno.innerText = pctGastoInternoTxt;
+
+  const elPctQtdRota = document.getElementById('pctResumoQtdRota');
+  const elPctVolRota = document.getElementById('pctResumoVolRota');
+  if (elPctQtdRota) elPctQtdRota.innerText = `(${pctQtdRotaTxt})`;
+  if (elPctVolRota) elPctVolRota.innerText = `(${pctVolRotaTxt})`;
+
+  const elPctQtdInterno = document.getElementById('pctResumoQtdInterno');
+  const elPctVolInterno = document.getElementById('pctResumoVolInterno');
+  if (elPctQtdInterno) elPctQtdInterno.innerText = `(${pctQtdInternoTxt})`;
+  if (elPctVolInterno) elPctVolInterno.innerText = `(${pctVolInternoTxt})`;
 
   // 2. Filtro dos postos e listagem
   let registrosModo = registros;
@@ -868,7 +905,6 @@ function processarPainel() {
     ? mesesDisponiveis.filter(mes => mes.startsWith(`${obterAnoMaisRecenteBase()}-`))
     : mesesDisponiveis;
   renderizarSparklineVolumeCard(mesesGrafico, registrosModo);
-  renderizarSparklinesResumo(mesesGrafico, registros);
   atualizarCardsExtremosSemPonderada(registros, mesSel);
   renderizarTermometroPostos(listaPostos, mesesGrafico);
   renderizarResumoAnualPosto(listaPostos);
@@ -909,52 +945,6 @@ function renderizarSparklineVolumeCard(mesesDisponiveis, registros) {
 
   sparkVolumeCardInstance = new ApexCharts(container, options);
   sparkVolumeCardInstance.render();
-}
-
-function renderizarSparklinesResumo(mesesDisponiveis, registros) {
-  Object.values(resumoVolumeCharts).forEach(chart => chart.destroy());
-  resumoVolumeCharts = {};
-
-  const seriesResumo = [
-    { id: 'sparkResumoVolumeRota', operacao: 'EXTERNO', cor: '#f97316' },
-    { id: 'sparkResumoVolumeInterno', operacao: 'INTERNO', cor: '#22c55e' }
-  ];
-
-  seriesResumo.forEach(({ id, operacao, cor }) => {
-    const container = document.getElementById(id);
-    if (!container) return;
-
-    const dadosVolume = mesesDisponiveis.map(mes => Math.round(
-      registros
-        .filter(registro => registro.MES_ANO === mes && registro.TIPO_OPERACAO === operacao)
-        .reduce((total, registro) => total + (parseFloat(registro.VOLUME_CICLO || 0) || 0), 0)
-    ));
-
-    const chart = new ApexCharts(container, {
-      series: [{ name: 'Volume mensal', data: dadosVolume }],
-      chart: {
-        type: 'area',
-        height: '100%',
-        width: '100%',
-        sparkline: { enabled: true },
-        animations: { enabled: false },
-        parentHeightOffset: 0
-      },
-      colors: [cor],
-      stroke: { curve: 'smooth', width: 2 },
-      fill: {
-        type: 'gradient',
-        gradient: { shadeIntensity: 0, opacityFrom: 0.62, opacityTo: 0.08, stops: [0, 100] }
-      },
-      dataLabels: { enabled: false },
-      markers: { size: 0 },
-      xaxis: { categories: mesesDisponiveis },
-      tooltip: { enabled: false }
-    });
-
-    chart.render();
-    resumoVolumeCharts[id] = chart;
-  });
 }
 
 function gerarSilhuetaUfSvg(uf, compacta = false, classeAdicional = '') {
