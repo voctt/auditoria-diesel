@@ -1,8 +1,12 @@
 import io
 import os
+import ssl
 import json
 from datetime import datetime
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from urllib3.poolmanager import PoolManager
 import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -26,6 +30,7 @@ URL_ANP_BRASIL = (
     "precos-revenda-e-de-distribuicao-combustiveis/shlp/semanal/"
     "semanal-brasil-desde-2013.xlsx"
 )
+
 # Limita a carga ao ano corrente; o mesmo valor identifica o documento consumido pelo painel.
 ANO_REFERENCIA = datetime.now().year
 
@@ -40,8 +45,55 @@ MAPA_ESTADOS = {
 }
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*;q=0.8"
+    ),
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Referer": "https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1"
 }
+
+class TLSGovAdapter(HTTPAdapter):
+    """Adaptador TLS customizado para evitar bloqueio/reset no handshake do gov.br."""
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        ctx = ssl.create_default_context()
+        ctx.set_ciphers("DEFAULT@SECLEVEL=1")
+        ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+        self.poolmanager = PoolManager(
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            ssl_context=ctx,
+            **pool_kwargs
+        )
+
+def criar_sessao_http():
+    sessao = requests.Session()
+    estrategia_retry = Retry(
+        total=5,
+        connect=5,
+        read=5,
+        backoff_factor=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adaptador = TLSGovAdapter(max_retries=estrategia_retry)
+    sessao.mount("https://", adaptador)
+    sessao.mount("http://", adaptador)
+    sessao.headers.update(HEADERS)
+    return sessao
 
 def inicializar_firebase():
     if not firebase_admin._apps:
@@ -57,9 +109,9 @@ def inicializar_firebase():
             firebase_admin.initialize_app()
     return firestore.client()
 
-def extrair_revenda_estados():
+def extrair_revenda_estados(sessao):
     print("Descarregando Revenda Semanal por Estado...")
-    resp = requests.get(URL_REVENDA_ESTADOS, headers=HEADERS, timeout=180)
+    resp = sessao.get(URL_REVENDA_ESTADOS, timeout=180)
     resp.raise_for_status()
 
     # Cabecalho da planilha de Revenda Estados esta na linha 18 (skiprows=17)
@@ -99,9 +151,9 @@ def extrair_revenda_estados():
 
     return resultado
 
-def extrair_distribuicao_estados():
+def extrair_distribuicao_estados(sessao):
     print("Descarregando Distribuicao Semanal por Estado...")
-    resp = requests.get(URL_DISTRIBUICAO_ESTADOS, headers=HEADERS, timeout=180)
+    resp = sessao.get(URL_DISTRIBUICAO_ESTADOS, timeout=180)
     resp.raise_for_status()
 
     # Cabecalho da distribuicao na aba ESTADOS esta na linha 9 (skiprows=8)
@@ -141,9 +193,9 @@ def extrair_distribuicao_estados():
 
     return resultado
 
-def extrair_referencia_anp_brasil():
+def extrair_referencia_anp_brasil(sessao):
     print("Descarregando Media Brasil (ANTT)...")
-    resp = requests.get(URL_ANP_BRASIL, headers=HEADERS, timeout=180)
+    resp = sessao.get(URL_ANP_BRASIL, timeout=180)
     resp.raise_for_status()
 
     # Cabecalho da serie Brasil esta na linha 18 (skiprows=17)
@@ -176,9 +228,11 @@ def extrair_referencia_anp_brasil():
     return None
 
 def executar_atualizacao():
-    dados_revenda = extrair_revenda_estados()
-    dados_distribuicao = extrair_distribuicao_estados()
-    dados_anp_brasil = extrair_referencia_anp_brasil()
+    sessao = criar_sessao_http()
+
+    dados_revenda = extrair_revenda_estados(sessao)
+    dados_distribuicao = extrair_distribuicao_estados(sessao)
+    dados_anp_brasil = extrair_referencia_anp_brasil(sessao)
 
     db = inicializar_firebase()
     doc_ref = db.collection("anp_consolidada").document(f"mensal_{ANO_REFERENCIA}")
