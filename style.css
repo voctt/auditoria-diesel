@@ -301,6 +301,10 @@ body {
   justify-content: space-between;
   gap: 7px;
   font-variant-numeric: tabular-nums;
+   transition: transform 0.15s ease;
+}
+.card-tabela-resumo.card-tabela-resumo-dashboard:hover {
+  transform: translateY(-2px);
 }
 .resumo-dashboard-titulo {
   margin-bottom: 0;
