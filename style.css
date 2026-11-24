@@ -288,7 +288,7 @@ body {
   scrollbar-width: thin;
 }
 
-/* CARD EXECUTIVO: RESUMO DE ABASTECIMENTOS (LAYOUT HÍBRIDO MODERNO) */
+/* CARD EXECUTIVO: RESUMO DE ABASTECIMENTOS (BARRA DUPLA FINANCEIRO X VOLUME) */
 .card-tabela-resumo.card-tabela-resumo-dashboard {
   min-height: 0;
   padding: 10px 12px;
@@ -304,7 +304,7 @@ body {
 }
 .resumo-dashboard-titulo {
   margin-bottom: 0;
-  padding-bottom: 6px;
+  padding-bottom: 5px;
   border-bottom: 1px solid var(--border-color);
 }
 .resumo-dashboard-titulo .kpi-label {
@@ -327,10 +327,10 @@ body {
 .resumo-consolidado-topo {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 .resumo-consolidado-label {
-  font-size: 0.66rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -342,9 +342,9 @@ body {
   gap: 8px;
 }
 .resumo-valor-total {
-  font-size: 1.50rem;
+  font-size: 1.48rem;
   font-weight: 800;
-  color: #334155 !important;
+  color: #1e293b !important;
   letter-spacing: -0.02em;
   line-height: 1.05;
 }
@@ -352,7 +352,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  font-size: 0.68rem;
+  font-size: 0.67rem;
   line-height: 1.25;
   color: var(--text-muted);
 }
@@ -363,54 +363,73 @@ body {
 .resumo-distribuicao-bloco {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .resumo-stacked-bar {
   display: flex;
   align-items: stretch;
   width: 100%;
-  height: 8px;
-  border-radius: 999px;
+  height: 26px;
+  border-radius: 7px;
   background: #f1f5f9;
   overflow: hidden;
   gap: 2px;
 }
 .resumo-stacked-seg {
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  overflow: hidden;
   transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .resumo-stacked-rota {
   background: linear-gradient(90deg, #f97316 0%, #ea580c 100%);
-  border-radius: 999px 2px 2px 999px;
+  border-radius: 7px 2px 2px 7px;
 }
 .resumo-stacked-interno {
   background: linear-gradient(90deg, #16a34a 0%, #15803d 100%);
+  border-radius: 2px 7px 7px 2px;
+}
+.resumo-bar-label {
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.resumo-vol-bar {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  overflow: hidden;
+  gap: 2px;
+}
+.resumo-vol-seg {
+  height: 100%;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.resumo-vol-bar .resumo-stacked-rota {
+  border-radius: 999px 2px 2px 999px;
+}
+.resumo-vol-bar .resumo-stacked-interno {
   border-radius: 2px 999px 999px 2px;
 }
-.resumo-stacked-pills {
+.resumo-vol-legenda {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2px;
-}
-.resumo-pct-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 7px;
-  border-radius: 6px;
-  font-size: 0.64rem;
-  font-weight: 800;
-  line-height: 1.3;
-  white-space: nowrap;
-}
-.resumo-pct-rota {
-  background: #ffedd5;
-  color: #c2410c;
-}
-.resumo-pct-interno {
-  background: #dcfce7;
-  color: #15803d;
+  font-size: 0.61rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0 1px;
 }
 .resumo-cards-comparativos {
   display: grid;
@@ -460,15 +479,38 @@ body {
 .resumo-subcard-titulo.text-interno {
   color: #15803d;
 }
-.resumo-subcard-valor {
-  font-size: 1.00rem;
+.resumo-pm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.61rem;
   font-weight: 800;
-  color: #334155;
+  white-space: nowrap;
+  font-family: monospace;
+}
+.resumo-pm-rota {
+  background: #ffedd5;
+  color: #9a3412;
+}
+.resumo-pm-interno {
+  background: #dcfce7;
+  color: #166534;
+}
+.resumo-subcard-valor {
+  font-size: 1.04rem;
+  font-weight: 800;
+  color: #1e293b;
   letter-spacing: -0.02em;
   line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.resumo-subcard-valor small {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--text-muted);
 }
 .resumo-subcard-detalhes {
   display: flex;
@@ -487,6 +529,10 @@ body {
 .resumo-detalhe-pct {
   color: var(--text-muted);
   font-weight: 600;
+}
+.resumo-subcard-gasto-sec {
+  font-weight: 700;
+  color: #475569;
 }
 
 .card-prioridade-dashboard {
