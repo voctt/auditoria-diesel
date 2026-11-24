@@ -585,7 +585,7 @@ function processarPainel() {
     baseCalculoGeral = registros.filter(d => d.MES_ANO === mesSel);
   }
 
-  // 1. Card Resumo de Abastecimentos (Consolidado + Divisão Percentual)
+  // 1. Card Resumo de Abastecimentos (Barra Dupla Financeiro x Volume + Subcards Operacionais)
   let qtdRota = 0, volRota = 0, gastoRota = 0;
   let qtdInterno = 0, volInterno = 0, gastoInterno = 0;
 
@@ -619,6 +619,8 @@ function processarPainel() {
 
   const pctGastoRotaNum = gastoTotal > 0 ? (gastoRota / gastoTotal) * 100 : 0;
   const pctGastoInternoNum = gastoTotal > 0 ? (gastoInterno / gastoTotal) * 100 : 0;
+  const pctVolRotaNum = volTotal > 0 ? (volRota / volTotal) * 100 : 0;
+  const pctVolInternoNum = volTotal > 0 ? (volInterno / volTotal) * 100 : 0;
 
   const pctGastoRotaTxt = formatarPct(gastoRota, gastoTotal);
   const pctGastoInternoTxt = formatarPct(gastoInterno, gastoTotal);
@@ -626,6 +628,9 @@ function processarPainel() {
   const pctQtdInternoTxt = formatarPct(qtdInterno, qtdTotal);
   const pctVolRotaTxt = formatarPct(volRota, volTotal);
   const pctVolInternoTxt = formatarPct(volInterno, volTotal);
+
+  const pmRota = volRota > 0 ? gastoRota / volRota : 0;
+  const pmInterno = volInterno > 0 ? gastoInterno / volInterno : 0;
 
   const lblResumoPeriodo = document.getElementById('lblResumoPeriodo');
   if (lblResumoPeriodo) {
@@ -637,19 +642,22 @@ function processarPainel() {
     }
   }
 
+  const valorGastoRotaFmt = "R$ " + Math.round(gastoRota).toLocaleString('pt-BR');
+  const valorGastoInternoFmt = "R$ " + Math.round(gastoInterno).toLocaleString('pt-BR');
+
   const tbQtdRota = document.getElementById('tbResumoQtdRota');
   const tbVolRota = document.getElementById('tbResumoVolRota');
   const tbGastoRota = document.getElementById('tbResumoGastoRota');
   if (tbQtdRota) tbQtdRota.innerText = qtdRota.toLocaleString('pt-BR');
   if (tbVolRota) tbVolRota.innerText = Math.round(volRota).toLocaleString('pt-BR');
-  if (tbGastoRota) tbGastoRota.innerText = "R$ " + Math.round(gastoRota).toLocaleString('pt-BR');
+  if (tbGastoRota) tbGastoRota.innerText = valorGastoRotaFmt;
 
   const tbQtdInt = document.getElementById('tbResumoQtdInterno');
   const tbVolInt = document.getElementById('tbResumoVolInterno');
   const tbGastoInt = document.getElementById('tbResumoGastoInterno');
   if (tbQtdInt) tbQtdInt.innerText = qtdInterno.toLocaleString('pt-BR');
   if (tbVolInt) tbVolInt.innerText = Math.round(volInterno).toLocaleString('pt-BR');
-  if (tbGastoInt) tbGastoInt.innerText = "R$ " + Math.round(gastoInterno).toLocaleString('pt-BR');
+  if (tbGastoInt) tbGastoInt.innerText = valorGastoInternoFmt;
 
   const tbQtdTot = document.getElementById('tbResumoQtdTotal');
   const tbVolTot = document.getElementById('tbResumoVolTotal');
@@ -658,30 +666,53 @@ function processarPainel() {
   if (tbVolTot) tbVolTot.innerText = Math.round(volTotal).toLocaleString('pt-BR');
   if (tbGastoTot) tbGastoTot.innerText = "R$ " + Math.round(gastoTotal).toLocaleString('pt-BR');
 
+  // Barra Principal: Financeiro (R$)
   const barraRota = document.getElementById('barraResumoRota');
   const barraInterno = document.getElementById('barraResumoInterno');
   if (barraRota) barraRota.style.width = `${gastoTotal > 0 ? pctGastoRotaNum.toFixed(2) : 50}%`;
   if (barraInterno) barraInterno.style.width = `${gastoTotal > 0 ? pctGastoInternoNum.toFixed(2) : 50}%`;
 
-  const elPctBarraRota = document.getElementById('pctResumoBarraRota');
-  const elPctBarraInterno = document.getElementById('pctResumoBarraInterno');
-  if (elPctBarraRota) elPctBarraRota.innerText = pctGastoRotaTxt;
-  if (elPctBarraInterno) elPctBarraInterno.innerText = pctGastoInternoTxt;
+  const lblBarraGastoRota = document.getElementById('lblBarraGastoRota');
+  const lblBarraGastoInterno = document.getElementById('lblBarraGastoInterno');
+  if (lblBarraGastoRota) {
+    lblBarraGastoRota.innerText = `${pctGastoRotaTxt} • ${valorGastoRotaFmt}`;
+    lblBarraGastoRota.title = `Rota Rodoviária: ${pctGastoRotaTxt} (${valorGastoRotaFmt})`;
+  }
+  if (lblBarraGastoInterno) {
+    lblBarraGastoInterno.innerText = `${pctGastoInternoTxt} • ${valorGastoInternoFmt}`;
+    lblBarraGastoInterno.title = `Tanques Próprios: ${pctGastoInternoTxt} (${valorGastoInternoFmt})`;
+  }
 
-  const elPctGastoRota = document.getElementById('pctResumoGastoRota');
-  const elPctGastoInterno = document.getElementById('pctResumoGastoInterno');
-  if (elPctGastoRota) elPctGastoRota.innerText = pctGastoRotaTxt;
-  if (elPctGastoInterno) elPctGastoInterno.innerText = pctGastoInternoTxt;
+  // Micro-barra Secundária: Volume (Litros)
+  const barraVolRota = document.getElementById('barraVolRota');
+  const barraVolInterno = document.getElementById('barraVolInterno');
+  if (barraVolRota) barraVolRota.style.width = `${volTotal > 0 ? pctVolRotaNum.toFixed(2) : 50}%`;
+  if (barraVolInterno) barraVolInterno.style.width = `${volTotal > 0 ? pctVolInternoNum.toFixed(2) : 50}%`;
+
+  const lblVolBarraRota = document.getElementById('lblVolBarraRota');
+  const lblVolBarraInterno = document.getElementById('lblVolBarraInterno');
+  if (lblVolBarraRota) lblVolBarraRota.innerText = `Volume Rota: ${pctVolRotaTxt}`;
+  if (lblVolBarraInterno) lblVolBarraInterno.innerText = `Volume Próprio: ${pctVolInternoTxt}`;
+
+  // Preço Médio Efetivo nos Subcards
+  const elPmRota = document.getElementById('pmResumoRota');
+  const elPmInterno = document.getElementById('pmResumoInterno');
+  if (elPmRota) {
+    elPmRota.innerText = pmRota > 0
+      ? `R$ ${pmRota.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/L`
+      : 'R$ --/L';
+  }
+  if (elPmInterno) {
+    elPmInterno.innerText = pmInterno > 0
+      ? `R$ ${pmInterno.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/L`
+      : 'R$ --/L';
+  }
 
   const elPctQtdRota = document.getElementById('pctResumoQtdRota');
-  const elPctVolRota = document.getElementById('pctResumoVolRota');
   if (elPctQtdRota) elPctQtdRota.innerText = `(${pctQtdRotaTxt})`;
-  if (elPctVolRota) elPctVolRota.innerText = `(${pctVolRotaTxt})`;
 
   const elPctQtdInterno = document.getElementById('pctResumoQtdInterno');
-  const elPctVolInterno = document.getElementById('pctResumoVolInterno');
   if (elPctQtdInterno) elPctQtdInterno.innerText = `(${pctQtdInternoTxt})`;
-  if (elPctVolInterno) elPctVolInterno.innerText = `(${pctVolInternoTxt})`;
 
   // 2. Filtro dos postos e listagem
   let registrosModo = registros;
