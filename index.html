@@ -183,7 +183,7 @@
           </div>
 
           <div class="resumo-consolidado-topo">
-            <div class="resumo-consolidado-label">Consolidado Geral</div>
+            <div class="resumo-consolidado-label">Investimento Consolidado</div>
             <div class="resumo-consolidado-valores">
               <div class="kpi-val-grande text-dark resumo-valor-total" id="tbResumoGastoTotal">R$ --</div>
               <div class="resumo-consolidado-meta">
@@ -194,13 +194,24 @@
           </div>
 
           <div class="resumo-distribuicao-bloco">
-            <div class="resumo-stacked-bar" role="img" aria-label="Proporção de investimento entre Rota Rodoviária e Tanques Próprios">
-              <div class="resumo-stacked-seg resumo-stacked-rota" id="barraResumoRota" style="width: 50%;"></div>
-              <div class="resumo-stacked-seg resumo-stacked-interno" id="barraResumoInterno" style="width: 50%;"></div>
+            <!-- Barra Principal: Investimento Financeiro (R$) -->
+            <div class="resumo-stacked-bar" role="img" aria-label="Proporção de investimento financeiro entre Rota Rodoviária e Tanques Próprios">
+              <div class="resumo-stacked-seg resumo-stacked-rota" id="barraResumoRota" style="width: 50%;">
+                <span class="resumo-bar-label" id="lblBarraGastoRota">--%</span>
+              </div>
+              <div class="resumo-stacked-seg resumo-stacked-interno" id="barraResumoInterno" style="width: 50%;">
+                <span class="resumo-bar-label" id="lblBarraGastoInterno">--%</span>
+              </div>
             </div>
-            <div class="resumo-stacked-pills">
-              <span class="resumo-pct-pill resumo-pct-rota" id="pctResumoBarraRota">--%</span>
-              <span class="resumo-pct-pill resumo-pct-interno" id="pctResumoBarraInterno">--%</span>
+
+            <!-- Micro-barra Secundária: Contraste de Volume (Litros) -->
+            <div class="resumo-vol-bar" role="img" aria-label="Proporção de volume em litros entre Rota Rodoviária e Tanques Próprios">
+              <div class="resumo-vol-seg resumo-stacked-rota" id="barraVolRota" style="width: 50%;"></div>
+              <div class="resumo-vol-seg resumo-stacked-interno" id="barraVolInterno" style="width: 50%;"></div>
+            </div>
+            <div class="resumo-vol-legenda">
+              <span id="lblVolBarraRota">Volume Rota: --%</span>
+              <span id="lblVolBarraInterno">Volume Próprio: --%</span>
             </div>
           </div>
 
@@ -208,24 +219,24 @@
             <div class="resumo-subcard resumo-subcard-rota">
               <div class="resumo-subcard-header">
                 <span class="resumo-subcard-titulo text-rota"><i class="bi bi-truck"></i> Rota Rodoviária</span>
-                <span class="resumo-pct-pill resumo-pct-rota" id="pctResumoGastoRota">--%</span>
+                <span class="resumo-pm-badge resumo-pm-rota" id="pmResumoRota" title="Preço médio efetivo na rota">R$ --/L</span>
               </div>
-              <div class="resumo-subcard-valor" id="tbResumoGastoRota">R$ --</div>
+              <div class="resumo-subcard-valor"><span id="tbResumoVolRota">--</span> <small>LTS</small></div>
               <div class="resumo-subcard-detalhes">
                 <span><strong id="tbResumoQtdRota">--</strong> abast. <span class="resumo-detalhe-pct" id="pctResumoQtdRota">(--%)</span></span>
-                <span><strong id="tbResumoVolRota">--</strong> LTS <span class="resumo-detalhe-pct" id="pctResumoVolRota">(--%)</span></span>
+                <span class="resumo-subcard-gasto-sec" id="tbResumoGastoRota">R$ --</span>
               </div>
             </div>
 
             <div class="resumo-subcard resumo-subcard-interno">
               <div class="resumo-subcard-header">
                 <span class="resumo-subcard-titulo text-interno"><i class="bi bi-fuel-pump-fill"></i> Tanques Próprios</span>
-                <span class="resumo-pct-pill resumo-pct-interno" id="pctResumoGastoInterno">--%</span>
+                <span class="resumo-pm-badge resumo-pm-interno" id="pmResumoInterno" title="Custo médio efetivo interno">R$ --/L</span>
               </div>
-              <div class="resumo-subcard-valor" id="tbResumoGastoInterno">R$ --</div>
+              <div class="resumo-subcard-valor"><span id="tbResumoVolInterno">--</span> <small>LTS</small></div>
               <div class="resumo-subcard-detalhes">
                 <span><strong id="tbResumoQtdInterno">--</strong> abast. <span class="resumo-detalhe-pct" id="pctResumoQtdInterno">(--%)</span></span>
-                <span><strong id="tbResumoVolInterno">--</strong> LTS <span class="resumo-detalhe-pct" id="pctResumoVolInterno">(--%)</span></span>
+                <span class="resumo-subcard-gasto-sec" id="tbResumoGastoInterno">R$ --</span>
               </div>
             </div>
           </div>
