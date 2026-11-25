@@ -405,7 +405,9 @@ async function carregarTodasTratativasFirestore() {
               autor: m.autor?.stringValue || "",
               status: m.status?.stringValue || "EM_ABERTO",
               preco: parseFloat(m.preco?.doubleValue || m.preco?.integerValue || 0),
+              preco_base: parseFloat(m.preco_base?.doubleValue || m.preco_base?.integerValue || 0),
               preco_proposto: parseFloat(m.preco_proposto?.doubleValue || m.preco_proposto?.integerValue || 0),
+              volume_ref: parseFloat(m.volume_ref?.doubleValue || m.volume_ref?.integerValue || 0),
               saving: parseFloat(m.saving?.doubleValue || m.saving?.integerValue || 0),
               notas: m.notas?.stringValue || "",
               contato: m.contato?.stringValue || "",
@@ -420,7 +422,9 @@ async function carregarTodasTratativasFirestore() {
             autor: f.autor?.stringValue || "Gestor",
             status: f.status?.stringValue || "EM_ABERTO",
             preco: parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
+            preco_base: parseFloat(f.preco_base?.doubleValue || f.preco_base?.integerValue || 0),
             preco_proposto: parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
+            volume_ref: parseFloat(f.volume_ref?.doubleValue || f.volume_ref?.integerValue || 0),
             saving: 0,
             notas: f.notas?.stringValue || "",
             contato: f.contato?.stringValue || "",
@@ -441,7 +445,9 @@ async function carregarTodasTratativasFirestore() {
           municipio: f.municipio?.stringValue || "",
           status: fichaMaisRecente ? fichaMaisRecente.status : (f.status?.stringValue || "EM_ABERTO"),
           preco_acordado: fichaMaisRecente ? fichaMaisRecente.preco : parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
+          preco_base: fichaMaisRecente ? (fichaMaisRecente.preco_base || 0) : parseFloat(f.preco_base?.doubleValue || f.preco_base?.integerValue || 0),
           preco_proposto: fichaMaisRecente ? fichaMaisRecente.preco_proposto : parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
+          volume_ref: fichaMaisRecente ? (fichaMaisRecente.volume_ref || 0) : parseFloat(f.volume_ref?.doubleValue || f.volume_ref?.integerValue || 0),
           posto_destino: fichaMaisRecente ? fichaMaisRecente.posto_destino : (f.posto_destino?.stringValue || ""),
           posto_destino_uf: fichaMaisRecente ? fichaMaisRecente.posto_destino_uf : (f.posto_destino_uf?.stringValue || ""),
           contato: f.contato?.stringValue || (fichaMaisRecente ? fichaMaisRecente.contato : ""),
@@ -598,7 +604,9 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
               autor: m.autor?.stringValue || "",
               status: m.status?.stringValue || "EM_ABERTO",
               preco: parseFloat(m.preco?.doubleValue || m.preco?.integerValue || 0),
+              preco_base: parseFloat(m.preco_base?.doubleValue || m.preco_base?.integerValue || 0),
               preco_proposto: parseFloat(m.preco_proposto?.doubleValue || m.preco_proposto?.integerValue || 0),
+              volume_ref: parseFloat(m.volume_ref?.doubleValue || m.volume_ref?.integerValue || 0),
               saving: parseFloat(m.saving?.doubleValue || m.saving?.integerValue || 0),
               notas: m.notas?.stringValue || "",
               contato: m.contato?.stringValue || "",
@@ -613,7 +621,9 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
             autor: f.autor?.stringValue || "willian.klapowsko@cargosoft.com.br",
             status: f.status?.stringValue || "ACORDO_FECHADO",
             preco: parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
+            preco_base: parseFloat(f.preco_base?.doubleValue || f.preco_base?.integerValue || 0),
             preco_proposto: parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
+            volume_ref: parseFloat(f.volume_ref?.doubleValue || f.volume_ref?.integerValue || 0),
             saving: 0,
             notas: f.notas?.stringValue || "",
             contato: f.contato?.stringValue || "",
@@ -631,7 +641,9 @@ async function abrirModalTratativa(nomePosto, uf, municipio, precoMedio, refAnp,
           municipio: f.municipio?.stringValue || municipio,
           status: fichaAtiva ? fichaAtiva.status : (f.status?.stringValue || "ACORDO_FECHADO"),
           preco_acordado: fichaAtiva ? fichaAtiva.preco : parseFloat(f.preco_acordado?.doubleValue || f.preco_acordado?.integerValue || 0),
+          preco_base: fichaAtiva ? (fichaAtiva.preco_base || 0) : parseFloat(f.preco_base?.doubleValue || f.preco_base?.integerValue || 0),
           preco_proposto: fichaAtiva ? fichaAtiva.preco_proposto : parseFloat(f.preco_proposto?.doubleValue || f.preco_proposto?.integerValue || 0),
+          volume_ref: fichaAtiva ? (fichaAtiva.volume_ref || 0) : parseFloat(f.volume_ref?.doubleValue || f.volume_ref?.integerValue || 0),
           posto_destino: fichaAtiva ? fichaAtiva.posto_destino : (f.posto_destino?.stringValue || ""),
           posto_destino_uf: fichaAtiva ? fichaAtiva.posto_destino_uf : (f.posto_destino_uf?.stringValue || ""),
           contato: f.contato?.stringValue || "",
@@ -1127,11 +1139,18 @@ function renderizarLequeRolodex() {
       tagAvoidanceHtml = `<span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.55rem;">Avoidance: -R$ ${avoid.toFixed(3)}</span>`;
     }
 
+    let tagReducaoHtml = "";
+    if (card.status === 'ACORDO_FECHADO' && card.preco > 0 && card.preco_base > card.preco) {
+      const reducao = card.preco_base - card.preco;
+      tagReducaoHtml = `<span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size:0.55rem;">Redução: -R$ ${reducao.toFixed(3)}</span>`;
+    }
+
     htmlCards += `
       <div class="rolodex-card-item ${classePosicao}" style="border-left-color: ${corBorda};" onclick="indiceRolodexAtivo = ${idx}; renderizarLequeRolodex();">
         <div class="d-flex justify-content-between align-items-center mb-1">
           <div>
             ${badgeStatus}
+            ${tagReducaoHtml}
             ${tagAvoidanceHtml}
           </div>
           <span class="badge bg-light text-dark border font-monospace" style="font-size: 0.58rem;" title="Data de Início da Vigência">
@@ -1211,7 +1230,7 @@ async function salvarTratativaFirestore(event) {
     }
   }
 
-  // Nova ficha criada
+  // Nova ficha criada (congela preco_base e volume_ref da mesa)
   const dataRegistro = new Date().toISOString();
   const novaFicha = {
     data: dataRegistro,
@@ -1219,7 +1238,9 @@ async function salvarTratativaFirestore(event) {
     autor: autorEmail,
     status: status,
     preco: precoAcordado,
+    preco_base: pBase || 0,
     preco_proposto: precoProposto,
+    volume_ref: volCalc || 0,
     saving: savingCalculado,
     notas: notas,
     contato: contato,
@@ -1242,7 +1263,9 @@ async function salvarTratativaFirestore(event) {
         autor: { stringValue: h.autor },
         status: { stringValue: h.status },
         preco: { doubleValue: h.preco },
+        preco_base: { doubleValue: h.preco_base || 0 },
         preco_proposto: { doubleValue: h.preco_proposto || 0 },
+        volume_ref: { doubleValue: h.volume_ref || 0 },
         saving: { doubleValue: h.saving },
         notas: { stringValue: h.notas },
         contato: { stringValue: h.contato },
@@ -1260,7 +1283,9 @@ async function salvarTratativaFirestore(event) {
       status: { stringValue: fichaMaisRecente.status },
       vigencia: { stringValue: fichaMaisRecente.vigencia },
       preco_acordado: { doubleValue: fichaMaisRecente.preco },
+      preco_base: { doubleValue: fichaMaisRecente.preco_base || 0 },
       preco_proposto: { doubleValue: fichaMaisRecente.preco_proposto || 0 },
+      volume_ref: { doubleValue: fichaMaisRecente.volume_ref || 0 },
       posto_destino: { stringValue: fichaMaisRecente.posto_destino || "" },
       posto_destino_uf: { stringValue: fichaMaisRecente.posto_destino_uf || "" },
       contato: { stringValue: contato || fichaMaisRecente.contato || "" },
@@ -1293,7 +1318,9 @@ async function salvarTratativaFirestore(event) {
         autor: autorEmail,
         status: 'ACORDO_FECHADO',
         preco: precoDestinoNegociado,
+        preco_base: 0,
         preco_proposto: 0,
+        volume_ref: 0,
         saving: 0,
         notas: notaDestino,
         contato: '',
@@ -1312,7 +1339,9 @@ async function salvarTratativaFirestore(event) {
             autor: { stringValue: h.autor || '' },
             status: { stringValue: h.status || 'EM_ABERTO' },
             preco: { doubleValue: h.preco || 0 },
+            preco_base: { doubleValue: h.preco_base || 0 },
             preco_proposto: { doubleValue: h.preco_proposto || 0 },
+            volume_ref: { doubleValue: h.volume_ref || 0 },
             saving: { doubleValue: h.saving || 0 },
             notas: { stringValue: h.notas || '' },
             contato: { stringValue: h.contato || '' },
@@ -1329,7 +1358,9 @@ async function salvarTratativaFirestore(event) {
           status: { stringValue: fichaMaisRecenteDestino.status },
           vigencia: { stringValue: fichaMaisRecenteDestino.vigencia },
           preco_acordado: { doubleValue: fichaMaisRecenteDestino.preco },
+          preco_base: { doubleValue: fichaMaisRecenteDestino.preco_base || 0 },
           preco_proposto: { doubleValue: fichaMaisRecenteDestino.preco_proposto || 0 },
+          volume_ref: { doubleValue: fichaMaisRecenteDestino.volume_ref || 0 },
           posto_destino: { stringValue: fichaMaisRecenteDestino.posto_destino || '' },
           posto_destino_uf: { stringValue: fichaMaisRecenteDestino.posto_destino_uf || '' },
           contato: { stringValue: tratDestino.contato || '' },
@@ -1365,7 +1396,9 @@ async function salvarTratativaFirestore(event) {
         status: fichaMaisRecenteDestino.status,
         vigencia: fichaMaisRecenteDestino.vigencia,
         preco_acordado: fichaMaisRecenteDestino.preco,
+        preco_base: fichaMaisRecenteDestino.preco_base || 0,
         preco_proposto: fichaMaisRecenteDestino.preco_proposto || 0,
+        volume_ref: fichaMaisRecenteDestino.volume_ref || 0,
         posto_destino: '',
         posto_destino_uf: '',
         contato: '',
@@ -1391,7 +1424,9 @@ async function salvarTratativaFirestore(event) {
       status: fichaMaisRecente.status,
       vigencia: fichaMaisRecente.vigencia,
       preco_acordado: fichaMaisRecente.preco,
+      preco_base: fichaMaisRecente.preco_base || 0,
       preco_proposto: fichaMaisRecente.preco_proposto || 0,
+      volume_ref: fichaMaisRecente.volume_ref || 0,
       posto_destino: fichaMaisRecente.posto_destino || "",
       posto_destino_uf: fichaMaisRecente.posto_destino_uf || "",
       contato: contato || fichaMaisRecente.contato || "",
@@ -1448,6 +1483,8 @@ async function sanearBaseRolodexFirestore() {
       if (trat.vigencia !== maisRecente.vigencia || trat.preco_acordado !== maisRecente.preco) {
         trat.vigencia = maisRecente.vigencia;
         trat.preco_acordado = maisRecente.preco;
+        trat.preco_base = maisRecente.preco_base || 0;
+        trat.volume_ref = maisRecente.volume_ref || 0;
         trat.status = maisRecente.status;
         corrigidos++;
       }
