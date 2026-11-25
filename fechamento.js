@@ -2,7 +2,7 @@
    MÓDULO DE FECHAMENTO MENSAL EXECUTIVO & DOSSIÊ DA DIRETORIA (DARK MODE)
    CARGOSOFT | VOCTT INTELIGÊNCIA DE FROTAS
    Controla a geração do dossiê executivo mensal, relatórios gerenciais,
-   consolidação KMM/ANP, pareceres de gestores e sincronização via Firestore.
+   consolidação KMM/ANP, saving de negociação direta, pareceres e Firestore.
    ========================================================================== */
 
 const FIRESTORE_BASE_DOSSIE = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/fechamentos_dossie";
@@ -35,12 +35,69 @@ function obterFichaTratativaAteData(tratativa, dataLimite) {
       vigencia: tratativa.vigencia,
       status: tratativa.status,
       preco: tratativa.preco_acordado,
+      preco_base: tratativa.preco_base || 0,
       preco_proposto: tratativa.preco_proposto,
+      volume_ref: tratativa.volume_ref || 0,
       posto_destino: tratativa.posto_destino,
       posto_destino_uf: tratativa.posto_destino_uf
     };
   }
   return null;
+}
+
+// Resolve o Preço Base Pré-Acordo de uma ficha (congelado no Firestore ou retroativo no KMM antes da vigência).
+function obterPrecoBaseFichaFechamento(ficha, nomePosto, ufPosto) {
+  const baseSalva = parseFloat(ficha?.preco_base || 0);
+  if (baseSalva > 0) return baseSalva;
+
+  const vig = (ficha?.vigencia || '').substring(0, 10);
+  if (!vig || typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais)) return 0;
+
+  let ultData = '';
+  let ultPreco = 0;
+  baseRegistrosMensais.forEach(r => {
+    if (r.POSTO !== nomePosto || r.UF_POSTO !== ufPosto) return;
+    const dt = (r.DATA_FIM_CICLO || '').substring(0, 10);
+    const p = parseFloat(r.VALOR_UNITARIO || 0);
+    if (dt && dt < vig && p > 0 && dt >= ultData) {
+      ultData = dt;
+      ultPreco = p;
+    }
+  });
+  return ultPreco;
+}
+
+// Resolve o Volume Mensal de Referência de uma ficha (congelado ou média até 3 meses cheios anteriores à vigência).
+function obterVolumeRefFichaFechamento(ficha, nomePosto, ufPosto) {
+  const volSalvo = parseFloat(ficha?.volume_ref || 0);
+  if (volSalvo > 0) return volSalvo;
+
+  const vigMes = (ficha?.vigencia || '').substring(0, 7);
+  if (!vigMes || typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais)) return 0;
+
+  const volPorMes = {};
+  baseRegistrosMensais.forEach(r => {
+    if (r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO && r.MES_ANO < vigMes) {
+      volPorMes[r.MES_ANO] = (volPorMes[r.MES_ANO] || 0) + parseFloat(r.VOLUME_CICLO || 0);
+    }
+  });
+
+  const mesesAnt = Object.keys(volPorMes).filter(m => volPorMes[m] > 0).sort().reverse().slice(0, 3);
+  if (mesesAnt.length > 0) {
+    return mesesAnt.reduce((acc, m) => acc + volPorMes[m], 0) / mesesAnt.length;
+  }
+
+  const volTodosMeses = {};
+  baseRegistrosMensais.forEach(r => {
+    if (r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO) {
+      volTodosMeses[r.MES_ANO] = (volTodosMeses[r.MES_ANO] || 0) + parseFloat(r.VOLUME_CICLO || 0);
+    }
+  });
+  const mesesAtivos = Object.keys(volTodosMeses).filter(m => volTodosMeses[m] > 0).sort().reverse().slice(0, 3);
+  if (mesesAtivos.length > 0) {
+    return mesesAtivos.reduce((acc, m) => acc + volTodosMeses[m], 0) / mesesAtivos.length;
+  }
+  return 0;
 }
 
 // Converte YYYY-MM no último dia civil da competência para comparar vigências.
@@ -138,7 +195,7 @@ function obterDataFimCompetencia(mes) {
 
       /* NÚMEROS DE DESTAQUE AMPLIADOS */
       .num-kpi-grande {
-        font-size: 1.85rem;
+        font-size: 1.72rem;
         font-weight: 800;
         font-family: monospace;
         line-height: 1.15;
@@ -407,10 +464,10 @@ async function renderizarConteudoFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 1: CARDS DE IMPACTO COM NÚMEROS AMPLIADOS & NEON GLOW -->
+    <!-- BLOCO 1: CARDS DE IMPACTO COM NÚMEROS AMPLIADOS & NEON GLOW (5 CARDS PROPORCIONAIS) -->
     <div class="row g-2 mb-3 cards-fechamento-principais">
       <!-- TERMÔMETRO MACRO DO MÊS -->
-      <div class="col-12 col-md-3">
+      <div class="col-12 col-md-6 col-xl">
         <div class="card-exec-dark h-100 ${dados.operacaoVerde === null ? '' : (dados.operacaoVerde ? 'glow-verde' : 'glow-vermelho')} d-flex flex-column justify-content-between">
           <div>
             <div class="d-flex justify-content-between align-items-center mb-1">
@@ -434,11 +491,11 @@ async function renderizarConteudoFechamentoExecutivo() {
         </div>
       </div>
 
-      <!-- HARD SAVING (CAIXA REAL RETIDO NO MÊS) -->
-      <div class="col-12 col-md-3">
+      <!-- HARD SAVING (CAIXA REAL RETIDO NO MÊS VS ANP) -->
+      <div class="col-12 col-md-6 col-xl">
         <div class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
-            <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Hard Saving (Efetivo no Caixa)</span>
+            <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Hard Saving (Vs. ANP)</span>
             <div class="num-kpi-grande num-neon-verde my-1">
               + R$ ${Math.round(dados.hardSavingTotalMes).toLocaleString('pt-BR')}
             </div>
@@ -452,8 +509,28 @@ async function renderizarConteudoFechamentoExecutivo() {
         </div>
       </div>
 
+      <!-- SAVING DE NEGOCIAÇÃO DIRETA (ATUAÇÃO NA MESA) -->
+      <div class="col-12 col-md-6 col-xl">
+        <div class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
+          <div>
+            <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Saving Negociação Direta</span>
+            <div class="num-kpi-grande num-neon-verde my-1">
+              + R$ ${Math.round(dados.savingNegociacaoRealizadoMes).toLocaleString('pt-BR')}
+            </div>
+            <div class="text-white-50 small" style="font-size: 0.70rem;">
+              Redução direta obtida na mesa vs. preço anterior pago.
+            </div>
+          </div>
+          <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
+            ${dados.savingNegociacaoContratadoMes > 0
+              ? `Contratado no mês: <strong class="text-success">+R$ ${Math.round(dados.savingNegociacaoContratadoMes).toLocaleString('pt-BR')}/mês</strong>`
+              : `Atuação direta sobre a carteira`}
+          </div>
+        </div>
+      </div>
+
       <!-- COST AVOIDANCE DE TABELA -->
-      <div class="col-12 col-md-3">
+      <div class="col-12 col-md-6 col-xl">
         <div class="card-exec-dark h-100 glow-azul d-flex flex-column justify-content-between">
           <div>
             <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Cost Avoidance de Tabela</span>
@@ -471,7 +548,7 @@ async function renderizarConteudoFechamentoExecutivo() {
       </div>
 
       <!-- VOLUME SOB GESTÃO DIRETA -->
-      <div class="col-12 col-md-3">
+      <div class="col-12 col-md-6 col-xl">
         <div class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
             <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Volume Sob Gestão Direta</span>
@@ -569,11 +646,11 @@ async function renderizarConteudoFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 4: VITRINE TÁTICA (MANOBRAS DE ROTA & AÇÕES DE COMPRAS) -->
+    <!-- BLOCO 4: VITRINE TÁTICA (MANOBRAS DE ROTA, REDUÇÃO NA MESA & BLINDAGEM) -->
     <div class="card-exec-dark mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
-          <i class="bi bi-signpost-split-fill text-success me-2"></i>Vitrine Tática: Manobras de Rota & Blindagem Comercial
+          <i class="bi bi-signpost-split-fill text-success me-2"></i>Vitrine Tática: Manobras de Rota, Reduções & Blindagem Comercial
         </h6>
         <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">Decisões Vigentes na Competência</span>
       </div>
@@ -607,7 +684,8 @@ async function renderizarConteudoFechamentoExecutivo() {
               <th class="text-end">Ref. ANP</th>
               <th class="text-end">Spread vs ANP</th>
               <th class="text-end">Vol. Auditado</th>
-              <th class="text-end">Hard Saving</th>
+              <th class="text-end">Saving vs. ANP</th>
+              <th class="text-end">Saving Negociação</th>
             </tr>
           </thead>
           <tbody>
@@ -889,7 +967,7 @@ async function salvarParecerGestor(event) {
  */
 function renderizarLinhasTabelaFechamento(linhas) {
   if (!linhas || linhas.length === 0) {
-    return `<tr><td colspan="10" style="color: #94a3b8 !important; padding: 16px;">Nenhum posto faturado com acordo ativo no mês selecionado.</td></tr>`;
+    return `<tr><td colspan="11" style="color: #94a3b8 !important; padding: 16px;">Nenhum posto faturado com acordo ativo no mês selecionado.</td></tr>`;
   }
 
   return linhas.map(l => {
@@ -925,6 +1003,9 @@ function renderizarLinhasTabelaFechamento(linhas) {
         </td>
         <td class="text-end font-monospace fw-bold" style="color: #4ade80 !important;">
           ${l.hardSaving > 0 ? `+ R$ ${Math.round(l.hardSaving).toLocaleString('pt-BR')}` : '--'}
+        </td>
+        <td class="text-end font-monospace fw-bold" style="color: #4ade80 !important;">
+          ${l.savingNegociacao > 0 ? `+ R$ ${Math.round(l.savingNegociacao).toLocaleString('pt-BR')}` : '--'}
         </td>
       </tr>
     `;
@@ -991,9 +1072,21 @@ function renderizarCardsVitrineTatica(acoes) {
 
   return acoes.map(a => {
     const ehNegativo = a.impacto.includes('- R$') || a.impacto.includes('Acréscimo');
-    const classeGlow = ehNegativo ? 'glow-vermelho' : 'glow-verde';
-    const corBorda = ehNegativo ? 'rgba(248, 113, 113, 0.4) !important' : 'rgba(74, 222, 128, 0.35) !important';
-    const corTexto = ehNegativo ? 'text-danger' : 'text-success';
+    const classeGlow = ehNegativo ? 'glow-vermelho' : (a.tipo === 'BLINDAGEM' ? 'glow-azul' : 'glow-verde');
+    const corBorda = ehNegativo
+      ? 'rgba(248, 113, 113, 0.4) !important'
+      : (a.tipo === 'BLINDAGEM' ? 'rgba(56, 189, 248, 0.35) !important' : 'rgba(74, 222, 128, 0.35) !important');
+    const corTexto = ehNegativo ? 'text-danger' : (a.tipo === 'BLINDAGEM' ? 'text-info' : 'text-success');
+
+    let badgeClasse = 'bg-primary';
+    let badgeRotulo = 'COST AVOIDANCE';
+    if (a.tipo === 'BLOQUEIO') {
+      badgeClasse = ehNegativo ? 'bg-danger' : 'bg-success';
+      badgeRotulo = 'MANOBRA DE ROTA';
+    } else if (a.tipo === 'REDUCAO_MESA') {
+      badgeClasse = 'bg-success';
+      badgeRotulo = 'REDUÇÃO NA MESA';
+    }
 
     return `
       <div class="col-12 col-md-6">
@@ -1001,8 +1094,8 @@ function renderizarCardsVitrineTatica(acoes) {
           style="background: #111827; border-color: ${corBorda};">
           <div>
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="badge ${a.tipo === 'BLOQUEIO' ? (ehNegativo ? 'bg-danger' : 'bg-success') : 'bg-primary'}" style="font-size: 0.58rem;">
-                ${a.tipo === 'BLOQUEIO' ? 'MANOBRA DE ROTA' : 'COST AVOIDANCE'}
+              <span class="badge ${badgeClasse}" style="font-size: 0.58rem;">
+                ${badgeRotulo}
               </span>
             </div>
             <strong class="text-white small d-block mb-1">${a.titulo}</strong>
@@ -1256,6 +1349,8 @@ function calcularMetricasFechamento(mesAlvo) {
   const operacaoVerde = volumePonderadoAnp > 0 ? spreadMedioMes <= 0 : null;
 
   let costAvoidanceMes = 0;
+  let savingNegociacaoRealizadoMes = 0;
+  let savingNegociacaoContratadoMes = 0;
   let volumeSobAcordoMes = 0;
   let qtdPostosAcordadosAtivos = 0;
 
@@ -1282,6 +1377,29 @@ function calcularMetricasFechamento(mesAlvo) {
     const vigenciaDecisaoMes = fichaDecisaoMes?.vigencia || '';
     const mesVigenciaDecisao = vigenciaDecisaoMes ? vigenciaDecisaoMes.substring(0, 7) : '';
 
+    // Registra card de Redução na Mesa para acordos fechados com vigência na competência
+    if (statusTratativaMes === 'ACORDO_FECHADO' && mesVigenciaDecisao === mesAlvo && Number(fichaDecisaoMes?.preco) > 0) {
+      const precoNegMesa = Number(fichaDecisaoMes.preco);
+      const precoBaseMesa = obterPrecoBaseFichaFechamento(fichaDecisaoMes, nomePosto, ufPosto);
+      const volRefMesa = obterVolumeRefFichaFechamento(fichaDecisaoMes, nomePosto, ufPosto);
+
+      if (precoBaseMesa > precoNegMesa) {
+        const diffMesa = precoBaseMesa - precoNegMesa;
+        const impactoMensalMesa = diffMesa * (volRefMesa > 0 ? volRefMesa : 0);
+        savingNegociacaoContratadoMes += impactoMensalMesa;
+
+        const vigFmtMesa = vigenciaDecisaoMes.split('-').reverse().join('/');
+        acoesTaticas.push({
+          tipo: "REDUCAO_MESA",
+          titulo: `Redução na Mesa: ${nomePosto} (${ufPosto})`,
+          descricao: `Preço reduzido de <strong>R$ ${precoBaseMesa.toFixed(3)}/L</strong> para <strong>R$ ${precoNegMesa.toFixed(3)}/L</strong> (<strong>-R$ ${diffMesa.toFixed(3)}/L</strong>) com vigência a partir de ${vigFmtMesa}.`,
+          impacto: impactoMensalMesa > 0
+            ? `+ R$ ${Math.round(impactoMensalMesa).toLocaleString('pt-BR')}/mês contratados (Run-Rate sobre ${Math.round(volRefMesa).toLocaleString('pt-BR')} L/mês)`
+            : `+ R$ ${diffMesa.toFixed(3)}/L de redução unitária garantida`
+        });
+      }
+    }
+
     const regsPostoMes = regsMes.filter(r => r.POSTO === nomePosto && r.UF_POSTO === ufPosto);
     // Associa cada abastecimento ao acordo vigente na data para não somar litros de outras vigências.
     const transacoesAcordadasMes = regsPostoMes.map(registro => ({
@@ -1292,6 +1410,7 @@ function calcularMetricasFechamento(mesAlvo) {
     let ultimoPrecoBomba = 0;
     let dataUltimoBomba = "";
     let hardSavingPosto = 0;
+    let savingNegociacaoPosto = 0;
     let impactoFuroPosto = 0;
     let costAvoidancePosto = 0;
     let fichaUltimoConsumo = null;
@@ -1303,10 +1422,14 @@ function calcularMetricasFechamento(mesAlvo) {
       volPostoMes += v;
       const precoAcordadoCiclo = Number(ficha.preco) || 0;
       const precoPropostoCiclo = Number(ficha.preco_proposto) || 0;
+      const precoBaseCiclo = obterPrecoBaseFichaFechamento(ficha, nomePosto, ufPosto);
       const refAnpCiclo = obterReferenciaAnpFechamento(r, mesAlvo);
 
       if (refAnpCiclo > 0 && p < refAnpCiclo) {
         hardSavingPosto += (refAnpCiclo - p) * v;
+      }
+      if (precoBaseCiclo > 0 && p < precoBaseCiclo) {
+        savingNegociacaoPosto += (precoBaseCiclo - p) * v;
       }
       if (p > precoAcordadoCiclo) impactoFuroPosto += (p - precoAcordadoCiclo) * v;
       if (precoPropostoCiclo > precoAcordadoCiclo && p <= precoAcordadoCiclo) {
@@ -1327,6 +1450,7 @@ function calcularMetricasFechamento(mesAlvo) {
     if (volPostoMes > 0 && precoAcordado > 0 && fichaUltimoConsumo) {
       volumeSobAcordoMes += volPostoMes;
       qtdPostosAcordadosAtivos++;
+      savingNegociacaoRealizadoMes += savingNegociacaoPosto;
 
       costAvoidanceMes += costAvoidancePosto;
       if (costAvoidancePosto > 0 && precoProposto > precoAcordado && mesAlvo === (vigencia || '').substring(0, 7)) {
@@ -1379,7 +1503,8 @@ function calcularMetricasFechamento(mesAlvo) {
         refAnp,
         spreadAnp: ultimoPrecoBomba > 0 && refAnp > 0 ? (ultimoPrecoBomba - refAnp) : 0,
         volume: volPostoMes,
-        hardSaving: hardSavingPosto
+        hardSaving: hardSavingPosto,
+        savingNegociacao: savingNegociacaoPosto
       });
     }
 
@@ -1606,6 +1731,8 @@ function calcularMetricasFechamento(mesAlvo) {
     spreadMedioMes,
     operacaoVerde,
     hardSavingTotalMes,
+    savingNegociacaoRealizadoMes,
+    savingNegociacaoContratadoMes,
     costAvoidanceMes,
     volumeSobAcordoMes,
     percVolumeAcordado,
