@@ -67,37 +67,57 @@ function obterPrecoBaseFichaFechamento(ficha, nomePosto, ufPosto) {
   return ultPreco;
 }
 
-// Resolve o Volume Mensal de Referência de uma ficha (congelado ou média até 3 meses cheios anteriores à vigência).
+// Resolve o Volume Mensal de Referência pela média de até 3 meses cheios anteriores à vigência (ritmo mensal real).
 function obterVolumeRefFichaFechamento(ficha, nomePosto, ufPosto) {
+  const vigMes = (ficha?.vigencia || '').substring(0, 7);
+  if (vigMes && typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) {
+    const volPorMes = {};
+    baseRegistrosMensais.forEach(r => {
+      if (r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO && r.MES_ANO < vigMes) {
+        volPorMes[r.MES_ANO] = (volPorMes[r.MES_ANO] || 0) + parseFloat(r.VOLUME_CICLO || 0);
+      }
+    });
+
+    const mesesAnt = Object.keys(volPorMes).filter(m => volPorMes[m] > 0).sort().reverse().slice(0, 3);
+    if (mesesAnt.length > 0) {
+      return mesesAnt.reduce((acc, m) => acc + volPorMes[m], 0) / mesesAnt.length;
+    }
+  }
+
   const volSalvo = parseFloat(ficha?.volume_ref || 0);
   if (volSalvo > 0) return volSalvo;
 
-  const vigMes = (ficha?.vigencia || '').substring(0, 7);
-  if (!vigMes || typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais)) return 0;
-
-  const volPorMes = {};
-  baseRegistrosMensais.forEach(r => {
-    if (r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO && r.MES_ANO < vigMes) {
-      volPorMes[r.MES_ANO] = (volPorMes[r.MES_ANO] || 0) + parseFloat(r.VOLUME_CICLO || 0);
+  if (typeof baseRegistrosMensais !== 'undefined' && Array.isArray(baseRegistrosMensais)) {
+    const volTodosMeses = {};
+    baseRegistrosMensais.forEach(r => {
+      if (r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO) {
+        volTodosMeses[r.MES_ANO] = (volTodosMeses[r.MES_ANO] || 0) + parseFloat(r.VOLUME_CICLO || 0);
+      }
+    });
+    const mesesAtivos = Object.keys(volTodosMeses).filter(m => volTodosMeses[m] > 0).sort().reverse().slice(0, 3);
+    if (mesesAtivos.length > 0) {
+      return mesesAtivos.reduce((acc, m) => acc + volTodosMeses[m], 0) / mesesAtivos.length;
     }
-  });
-
-  const mesesAnt = Object.keys(volPorMes).filter(m => volPorMes[m] > 0).sort().reverse().slice(0, 3);
-  if (mesesAnt.length > 0) {
-    return mesesAnt.reduce((acc, m) => acc + volPorMes[m], 0) / mesesAnt.length;
-  }
-
-  const volTodosMeses = {};
-  baseRegistrosMensais.forEach(r => {
-    if (r.POSTO === nomePosto && r.UF_POSTO === ufPosto && r.MES_ANO) {
-      volTodosMeses[r.MES_ANO] = (volTodosMeses[r.MES_ANO] || 0) + parseFloat(r.VOLUME_CICLO || 0);
-    }
-  });
-  const mesesAtivos = Object.keys(volTodosMeses).filter(m => volTodosMeses[m] > 0).sort().reverse().slice(0, 3);
-  if (mesesAtivos.length > 0) {
-    return mesesAtivos.reduce((acc, m) => acc + volTodosMeses[m], 0) / mesesAtivos.length;
   }
   return 0;
+}
+
+// Classifica a rede comercial do posto reutilizando o motor global (painel.js) com fallback seguro.
+function obterRedePostoFechamento(nomePosto) {
+  if (typeof classificarRedePosto === 'function') {
+    const rede = classificarRedePosto(nomePosto);
+    if (rede && rede !== 'OUTROS' && rede !== 'INDEPENDENTE' && rede !== 'SEM_REDE') {
+      return rede;
+    }
+  }
+  const upper = String(nomePosto || '').toUpperCase();
+  if (upper.includes('MARAJO')) return 'REDE MARAJÓ';
+  if (upper.startsWith('HG ') || upper.includes(' REDE HG')) return 'REDE HG';
+  if (upper.includes('REDE SIM') || upper.startsWith('SIM ')) return 'REDE SIM';
+  if (upper.includes('GRAAL')) return 'REDE GRAAL';
+  if (upper.includes('PELICANO')) return 'REDE PELICANO';
+  if (upper.includes('DECIO') || upper.includes('DÉCIO')) return 'REDE DÉCIO';
+  return '';
 }
 
 // Converte YYYY-MM no último dia civil da competência para comparar vigências.
@@ -251,6 +271,32 @@ function obterDataFimCompetencia(mes) {
         background: rgba(255, 255, 255, 0.03) !important;
       }
 
+      /* MINI TABELA DA VITRINE TÁTICA AGRUPADA POR REDE */
+      .tabela-vitrine-rede {
+        width: 100%;
+        color: #e2e8f0;
+        font-size: 0.66rem;
+        margin-top: 6px;
+        margin-bottom: 2px;
+        border-collapse: collapse;
+      }
+      .tabela-vitrine-rede th {
+        color: #94a3b8;
+        font-size: 0.57rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        padding: 3px 4px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .tabela-vitrine-rede td {
+        padding: 4px 4px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        vertical-align: middle;
+      }
+      .tabela-vitrine-rede tbody tr:last-child td {
+        border-bottom: none;
+      }
+
       /* MODAL DE PARECER DA GESTÃO */
       #modalParecerGestor .modal-content {
         background: #0f172a;
@@ -321,6 +367,16 @@ function obterDataFimCompetencia(mes) {
         }
         body.printing-dossie .dossie-pareceres-vazio {
           display: none !important;
+        }
+        body.printing-dossie .tabela-vitrine-rede {
+          color: #0f172a !important;
+        }
+        body.printing-dossie .tabela-vitrine-rede th {
+          color: #475569 !important;
+          border-bottom-color: #cbd5e1 !important;
+        }
+        body.printing-dossie .tabela-vitrine-rede td {
+          border-bottom-color: #e2e8f0 !important;
         }
       }
     `;
@@ -518,13 +574,13 @@ async function renderizarConteudoFechamentoExecutivo() {
               + R$ ${Math.round(dados.savingNegociacaoRealizadoMes).toLocaleString('pt-BR')}
             </div>
             <div class="text-white-50 small" style="font-size: 0.70rem;">
-              Redução direta obtida na mesa vs. preço anterior pago.
+              Redução direta realizada na mesa vs. preço anterior pago.
             </div>
           </div>
-          <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
+          <div class="pt-2 mt-2 border-top border-secondary font-monospace" style="font-size: 0.68rem;">
             ${dados.savingNegociacaoContratadoMes > 0
-              ? `Contratado no mês: <strong class="text-success">+R$ ${Math.round(dados.savingNegociacaoContratadoMes).toLocaleString('pt-BR')}/mês</strong>`
-              : `Atuação direta sobre a carteira`}
+              ? `<span class="text-white-50">Contratado (Run-Rate):</span> <strong class="text-success">+R$ ${Math.round(dados.savingNegociacaoContratadoMes).toLocaleString('pt-BR')}/mês</strong>`
+              : `<span class="text-white-50">Atuação direta sobre a carteira</span>`}
           </div>
         </div>
       </div>
@@ -646,13 +702,13 @@ async function renderizarConteudoFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 4: VITRINE TÁTICA (MANOBRAS DE ROTA, REDUÇÃO NA MESA & BLINDAGEM) -->
+    <!-- BLOCO 4: VITRINE TÁTICA (CONSOLIDADA POR REDE & DECISÕES DA COMPETÊNCIA) -->
     <div class="card-exec-dark mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
-          <i class="bi bi-signpost-split-fill text-success me-2"></i>Vitrine Tática: Manobras de Rota, Reduções & Blindagem Comercial
+          <i class="bi bi-signpost-split-fill text-success me-2"></i>Vitrine Tática: Reduções Negociadas, Manobras & Blindagem
         </h6>
-        <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">Decisões Vigentes na Competência</span>
+        <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">Negociações Iniciadas na Competência</span>
       </div>
       <div class="row g-2">
         ${renderizarCardsVitrineTatica(dados.acoesTaticas)}
@@ -1025,7 +1081,6 @@ function renderizarLinhasMatrizesFechamento(linhas) {
     const corEfic = g.refDist > 0 ? (g.varDistPerc <= 0 ? '#4ade80' : '#f87171') : '#94a3b8';
     const sinalEfic = g.varDistPerc > 0 ? '+' : '';
     const corSpread = g.precoRuaUf > 0 ? (g.spreadRua >= 0.15 ? '#4ade80' : '#f87171') : '#94a3b8';
-    const corGanho = g.ganhoTotal >= 0 ? '#4ade80' : '#f87171';
 
     let celulaRuaHtml = '';
     if (g.precoRuaUf > 0) {
@@ -1057,20 +1112,76 @@ function renderizarLinhasMatrizesFechamento(linhas) {
 }
 
 /**
- * Renderização dos Cards da Vitrine Tática
+ * Renderização dos Cards da Vitrine Tática (Suporta Card Consolidado por Rede e Cards Individuais)
  */
 function renderizarCardsVitrineTatica(acoes) {
   if (!acoes || acoes.length === 0) {
     return `
       <div class="col-12">
         <div class="p-2 border border-secondary rounded bg-dark text-white-50 small mb-0">
-          Nenhuma manobra de rota ou ação tática registrada com vigência ativa nesta competência.
+          Nenhuma redução negociada, manobra de rota ou ação tática iniciada nesta competência.
         </div>
       </div>
     `;
   }
 
   return acoes.map(a => {
+    // CARD CONSOLIDADO POR REDE (TABELA COMPACTA EXECUTIVA)
+    if (a.tipo === 'REDUCAO_REDE' && Array.isArray(a.itens)) {
+      const linhasRede = a.itens.map(it => `
+        <tr>
+          <td class="text-start text-white fw-semibold text-truncate" style="max-width: 215px;" title="${it.posto}">
+            <span class="badge bg-dark text-white-50 border border-secondary font-monospace me-1" style="font-size: 0.55rem;">${it.uf}</span>${it.posto}
+          </td>
+          <td class="text-end font-monospace text-white-50">
+            R$ ${it.precoBase.toFixed(3)} &rarr; <strong class="text-white">R$ ${it.precoNeg.toFixed(3)}</strong>
+            <span class="text-success fw-bold ms-1">(-${it.diff.toFixed(3)})</span>
+          </td>
+          <td class="text-end font-monospace text-white-50">
+            ${it.volRef > 0 ? `${Math.round(it.volRef).toLocaleString('pt-BR')} L` : '--'}
+          </td>
+          <td class="text-end font-monospace fw-bold text-success">
+            ${it.impactoMensal > 0 ? `+ R$ ${Math.round(it.impactoMensal).toLocaleString('pt-BR')}` : '--'}
+          </td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="col-12 col-xl-6">
+          <div class="p-2 border rounded h-100 d-flex flex-column justify-content-between glow-verde"
+            style="background: #111827; border-color: rgba(74, 222, 128, 0.35) !important;">
+            <div>
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="badge bg-success" style="font-size: 0.58rem;">REDUÇÃO NA MESA • REDE</span>
+                <span class="text-white-50 font-monospace" style="font-size: 0.60rem;">${a.itens.length} ${a.itens.length === 1 ? 'posto' : 'postos'}</span>
+              </div>
+              <strong class="text-white small d-block">${a.titulo}</strong>
+              <div class="table-responsive">
+                <table class="tabela-vitrine-rede">
+                  <thead>
+                    <tr>
+                      <th class="text-start">Posto</th>
+                      <th class="text-end">De &rarr; Para (Desc.)</th>
+                      <th class="text-end">Vol. Base</th>
+                      <th class="text-end">Proj./Mês</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${linhasRede}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="mt-2 pt-1 border-top border-secondary d-flex justify-content-between align-items-center font-monospace fw-bold text-success" style="font-size: 0.70rem;">
+              <span>${a.volumeTotal > 0 ? `Base: ${Math.round(a.volumeTotal).toLocaleString('pt-BR')} L/mês` : 'Total Consolidado'}</span>
+              <span>${a.impacto}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // CARDS INDIVIDUAIS (POSTO AVULSO, MANOBRA DE ROTA OU BLINDAGEM)
     const ehNegativo = a.impacto.includes('- R$') || a.impacto.includes('Acréscimo');
     const classeGlow = ehNegativo ? 'glow-vermelho' : (a.tipo === 'BLINDAGEM' ? 'glow-azul' : 'glow-verde');
     const corBorda = ehNegativo
@@ -1152,7 +1263,6 @@ function renderizarGraficoEvolucaoSavings() {
       }
     });
 
-    const precoMedioFrota = volumeMes > 0 ? (gastoMes / volumeMes) : 0;
     const anpMedioFrota = volumeComAnp > 0 ? (somaAnpMes / volumeComAnp) : 0;
     const precoMedioComAnp = volumeComAnp > 0 ? (gastoComAnpMes / volumeComAnp) : 0;
     const spreadMedio = (precoMedioComAnp > 0 && anpMedioFrota > 0) ? (precoMedioComAnp - anpMedioFrota) : 0;
@@ -1358,6 +1468,8 @@ function calcularMetricasFechamento(mesAlvo) {
   const postosComFuro = [];
   const postosParaRenovar = [];
   const acoesTaticas = [];
+  const gruposReducaoRede = {};
+  const reducoesAvulsas = [];
 
   const postosProcessadosSet = new Set();
 
@@ -1377,7 +1489,7 @@ function calcularMetricasFechamento(mesAlvo) {
     const vigenciaDecisaoMes = fichaDecisaoMes?.vigencia || '';
     const mesVigenciaDecisao = vigenciaDecisaoMes ? vigenciaDecisaoMes.substring(0, 7) : '';
 
-    // Registra card de Redução na Mesa para acordos fechados com vigência na competência
+    // Coleta reduções fechadas com vigência na competência e agrupa por Rede
     if (statusTratativaMes === 'ACORDO_FECHADO' && mesVigenciaDecisao === mesAlvo && Number(fichaDecisaoMes?.preco) > 0) {
       const precoNegMesa = Number(fichaDecisaoMes.preco);
       const precoBaseMesa = obterPrecoBaseFichaFechamento(fichaDecisaoMes, nomePosto, ufPosto);
@@ -1388,15 +1500,24 @@ function calcularMetricasFechamento(mesAlvo) {
         const impactoMensalMesa = diffMesa * (volRefMesa > 0 ? volRefMesa : 0);
         savingNegociacaoContratadoMes += impactoMensalMesa;
 
-        const vigFmtMesa = vigenciaDecisaoMes.split('-').reverse().join('/');
-        acoesTaticas.push({
-          tipo: "REDUCAO_MESA",
-          titulo: `Redução na Mesa: ${nomePosto} (${ufPosto})`,
-          descricao: `Preço reduzido de <strong>R$ ${precoBaseMesa.toFixed(3)}/L</strong> para <strong>R$ ${precoNegMesa.toFixed(3)}/L</strong> (<strong>-R$ ${diffMesa.toFixed(3)}/L</strong>) com vigência a partir de ${vigFmtMesa}.`,
-          impacto: impactoMensalMesa > 0
-            ? `+ R$ ${Math.round(impactoMensalMesa).toLocaleString('pt-BR')}/mês contratados (Run-Rate sobre ${Math.round(volRefMesa).toLocaleString('pt-BR')} L/mês)`
-            : `+ R$ ${diffMesa.toFixed(3)}/L de redução unitária garantida`
-        });
+        const redeNome = obterRedePostoFechamento(nomePosto);
+        const itemReducao = {
+          posto: nomePosto,
+          uf: ufPosto,
+          vigencia: vigenciaDecisaoMes,
+          precoBase: precoBaseMesa,
+          precoNeg: precoNegMesa,
+          diff: diffMesa,
+          volRef: volRefMesa,
+          impactoMensal: impactoMensalMesa
+        };
+
+        if (redeNome) {
+          if (!gruposReducaoRede[redeNome]) gruposReducaoRede[redeNome] = [];
+          gruposReducaoRede[redeNome].push(itemReducao);
+        } else {
+          reducoesAvulsas.push(itemReducao);
+        }
       }
     }
 
@@ -1508,8 +1629,8 @@ function calcularMetricasFechamento(mesAlvo) {
       });
     }
 
-    // MANOBRA DE ROTA (Vigente na competência com sincronismo temporal exato entre Origem e Destino)
-    if (statusTratativaMes === 'POSTO_BLOQUEADO' && fichaDecisaoMes?.posto_destino) {
+    // MANOBRA DE ROTA (Exibe apenas bloqueios iniciados na competência consultada)
+    if (statusTratativaMes === 'POSTO_BLOQUEADO' && mesVigenciaDecisao === mesAlvo && fichaDecisaoMes?.posto_destino) {
       const postoDestino = fichaDecisaoMes.posto_destino;
       const ufDestino = fichaDecisaoMes.posto_destino_uf || ufPosto;
       const mesTransicao = mesVigenciaDecisao || mesAlvo;
@@ -1636,6 +1757,39 @@ function calcularMetricasFechamento(mesAlvo) {
       });
     }
   });
+
+  // Monta cards consolidados por Rede no início da Vitrine Tática (ordenados por maior saving mensal)
+  const cardsRedes = Object.entries(gruposReducaoRede).map(([redeNome, itens]) => {
+    itens.sort((a, b) => (b.impactoMensal - a.impactoMensal) || (b.diff - a.diff));
+    const totalRede = itens.reduce((acc, it) => acc + it.impactoMensal, 0);
+    const volumeTotal = itens.reduce((acc, it) => acc + (it.volRef || 0), 0);
+    return {
+      tipo: 'REDUCAO_REDE',
+      titulo: redeNome,
+      itens,
+      volumeTotal,
+      totalRede,
+      impacto: totalRede > 0
+        ? `+ R$ ${Math.round(totalRede).toLocaleString('pt-BR')}/mês contratados (Run-Rate)`
+        : `Redução unitária garantida`
+    };
+  }).sort((a, b) => b.totalRede - a.totalRede);
+
+  const cardsAvulsos = reducoesAvulsas
+    .sort((a, b) => (b.impactoMensal - a.impactoMensal) || (b.diff - a.diff))
+    .map(it => {
+      const vigFmtMesa = it.vigencia.split('-').reverse().join('/');
+      return {
+        tipo: 'REDUCAO_MESA',
+        titulo: `Redução na Mesa: ${it.posto} (${it.uf})`,
+        descricao: `Preço reduzido de <strong>R$ ${it.precoBase.toFixed(3)}/L</strong> para <strong>R$ ${it.precoNeg.toFixed(3)}/L</strong> (<strong>-R$ ${it.diff.toFixed(3)}/L</strong>) com vigência a partir de ${vigFmtMesa}.`,
+        impacto: it.impactoMensal > 0
+          ? `+ R$ ${Math.round(it.impactoMensal).toLocaleString('pt-BR')}/mês contratados (Run-Rate sobre ${Math.round(it.volRef).toLocaleString('pt-BR')} L/mês)`
+          : `+ R$ ${it.diff.toFixed(3)}/L de redução unitária garantida`
+      };
+    });
+
+  acoesTaticas.unshift(...cardsRedes, ...cardsAvulsos);
 
   // INTEGRAÇÃO DAS MATRIZES GERENCIAIS & GARAGENS PRÓPRIAS
   const matrizesGaragem = [];
