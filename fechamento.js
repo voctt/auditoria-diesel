@@ -254,11 +254,40 @@ function calcularDiasEntreDatasFechamento(dataInicioStr, dataFimStr) {
         color: #cbd5e1;
       }
 
+      /* PÍLULA DE STATUS INTEGRADA AO CARD ANP */
+      .pill-status-frota {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-family: monospace;
+        font-size: 0.56rem;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 999px;
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+      }
+      .pill-status-frota.verde {
+        background: rgba(16, 185, 129, 0.14);
+        color: #34d399;
+        border: 1px solid rgba(52, 211, 153, 0.35);
+      }
+      .pill-status-frota.vermelho {
+        background: rgba(239, 68, 68, 0.14);
+        color: #f87171;
+        border: 1px solid rgba(248, 113, 113, 0.35);
+      }
+      .pill-status-frota.neutro {
+        background: rgba(148, 163, 184, 0.14);
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
+
       /* TOOLTIP EXECUTIVO FLUTUANTE DARK MODE */
       #tooltipExecutivoDark {
         position: fixed;
         z-index: 100080;
-        width: 365px;
+        width: 375px;
         max-width: calc(100vw - 24px);
         background: rgba(15, 23, 42, 0.98);
         backdrop-filter: blur(10px);
@@ -278,6 +307,14 @@ function calcularDiasEntreDatasFechamento(dataInicioStr, dataFimStr) {
         opacity: 1;
         transform: translateY(0);
       }
+      #tooltipExecutivoDark.borda-teal {
+        border-color: rgba(45, 212, 191, 0.45);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(45, 212, 191, 0.12);
+      }
+      #tooltipExecutivoDark.borda-esmeralda {
+        border-color: rgba(52, 211, 153, 0.45);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(52, 211, 153, 0.12);
+      }
       #tooltipExecutivoDark.borda-verde {
         border-color: rgba(74, 222, 128, 0.45);
         box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(74, 222, 128, 0.12);
@@ -289,6 +326,10 @@ function calcularDiasEntreDatasFechamento(dataInicioStr, dataFimStr) {
       #tooltipExecutivoDark.borda-vermelho {
         border-color: rgba(248, 113, 113, 0.45);
         box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(248, 113, 113, 0.12);
+      }
+      #tooltipExecutivoDark.borda-neutro {
+        border-color: rgba(148, 163, 184, 0.45);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(148, 163, 184, 0.1);
       }
       .tt-exec-header {
         display: flex;
@@ -376,14 +417,26 @@ function calcularDiasEntreDatasFechamento(dataInicioStr, dataFimStr) {
         margin-top: 2px;
       }
 
-      /* BORDAS & TEXTOS NEON SUTIS */
+      /* BORDAS & TEXTOS NEON POR NATUREZA FINANCEIRA */
+      .glow-teal {
+        border: 1px solid rgba(45, 212, 191, 0.35) !important;
+        box-shadow: 0 0 18px rgba(45, 212, 191, 0.08);
+      }
+      .glow-esmeralda {
+        border: 1px solid rgba(52, 211, 153, 0.35) !important;
+        box-shadow: 0 0 18px rgba(52, 211, 153, 0.08);
+      }
       .glow-verde {
-        border: 1px solid rgba(74, 222, 128, 0.35) !important;
-        box-shadow: 0 0 18px rgba(74, 222, 128, 0.08);
+        border: 1px solid rgba(74, 222, 128, 0.38) !important;
+        box-shadow: 0 0 18px rgba(74, 222, 128, 0.09);
       }
       .glow-azul {
         border: 1px solid rgba(56, 189, 248, 0.35) !important;
         box-shadow: 0 0 18px rgba(56, 189, 248, 0.08);
+      }
+      .glow-neutro {
+        border: 1px solid rgba(148, 163, 184, 0.28) !important;
+        box-shadow: 0 0 16px rgba(148, 163, 184, 0.05);
       }
       .glow-laranja {
         border: 1px solid rgba(251, 146, 60, 0.35) !important;
@@ -401,6 +454,14 @@ function calcularDiasEntreDatasFechamento(dataInicioStr, dataFimStr) {
         font-family: monospace;
         line-height: 1.15;
         letter-spacing: -0.02em;
+      }
+      .num-neon-teal {
+        color: #2dd4bf !important;
+        text-shadow: 0 0 12px rgba(45, 212, 191, 0.32);
+      }
+      .num-neon-esmeralda {
+        color: #34d399 !important;
+        text-shadow: 0 0 12px rgba(52, 211, 153, 0.3);
       }
       .num-neon-verde {
         color: #4ade80 !important;
@@ -647,38 +708,59 @@ function prepararConteudoTooltipsFechamento(dados) {
   const ehAnual = dados.ehModoAnual;
   const rotuloPeriodo = formatarRotuloCompetencia(competenciaFechamentoAtiva);
   const sufixoPeriodo = ehAnual ? 'no ano' : 'no mês';
+  const custoMedioInterno = dados.volInternoMes > 0 ? (dados.gastoInternoMes / dados.volInternoMes) : 0;
 
-  // 1. Termômetro da Frota
-  const htmlTermometro = `
+  // 1. Arbitragem de Garagens (Tanques Próprios)
+  const topGaragens = [...(dados.matrizesGaragem || [])].slice(0, 4);
+  const listaGaragensHtml = topGaragens.length > 0
+    ? `<div class="tt-exec-lista">
+        <div class="tt-exec-label">Principais Matrizes por Ganho Retido</div>
+        ${topGaragens.map(g => `
+          <div class="tt-exec-item">
+            <div class="tt-exec-item-topo">
+              <span class="tt-exec-item-nome">${escaparHtmlParecer(g.nome)} (${escaparHtmlParecer(g.uf)})</span>
+              <span class="tt-exec-item-valor font-monospace" style="color: #2dd4bf;">+R$ ${Math.round(g.ganhoTotal).toLocaleString('pt-BR')}</span>
+            </div>
+            <div class="tt-exec-item-sub">
+              <span>Interno R$ ${g.custoGaragem.toFixed(3)} vs. Rua R$ ${g.precoRuaUf.toFixed(3)}</span>
+              <span class="tt-exec-item-valor">${Math.round(g.volume).toLocaleString('pt-BR')} L</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>`
+    : '';
+
+  const htmlArbitragemGaragens = `
     <div class="tt-exec-header">
-      <span class="tt-exec-titulo"><i class="bi bi-speedometer2 text-success me-1"></i>Termômetro da Frota</span>
+      <span class="tt-exec-titulo"><i class="bi bi-fuel-pump-fill me-1" style="color: #2dd4bf;"></i>Arbitragem de Garagens</span>
+      <span class="tt-exec-tag">Estrutura</span>
+    </div>
+    <div class="tt-exec-bloco">
+      Economia estrutural retida ao abastecer nos <strong>tanques próprios (compra no atacado)</strong> em vez de pagar o preço médio de revenda na rua ${sufixoPeriodo}.
+    </div>
+    <div class="tt-exec-bloco">
+      <div class="tt-exec-label">Parâmetros de Apuração</div>
+      <div>• Custo Médio Interno: <strong class="font-monospace text-white">R$ ${custoMedioInterno.toFixed(3)}/L</strong> (${Math.round(dados.volInternoMes).toLocaleString('pt-BR')} L)</div>
+      <div>• Spread Médio vs. Rua: <strong class="font-monospace" style="color: #2dd4bf;">+R$ ${dados.spreadMedioGaragemMes.toFixed(3)}/L</strong></div>
+      <div>• Benchmark Rua: prioriza a média externa da UF no mês (fallback oficial <em>ANP Revenda</em> quando sem compra externa).</div>
+    </div>
+    ${listaGaragensHtml}
+  `;
+
+  // 2. Eficiência vs. ANP (Consolidado com Termômetro & Soma Base)
+  const htmlEficienciaAnp = `
+    <div class="tt-exec-header">
+      <span class="tt-exec-titulo"><i class="bi bi-shield-check text-success me-1"></i>Eficiência vs. ANP</span>
       <span class="tt-exec-tag">${rotuloPeriodo}</span>
     </div>
     <div class="tt-exec-bloco">
-      Compara o <strong>preço médio ponderado pago pela frota</strong> (abastecimentos externos e internos com referência oficial disponível) frente à média oficial da <strong>ANP</strong> na mesma UF ${sufixoPeriodo}.
+      Mede a disciplina de compra da frota frente à referência oficial da <strong>ANP</strong> (<em>ANP Revenda</em> nos postos externos e <em>ANP Distribuição</em> nas garagens).
     </div>
     <div class="tt-exec-bloco">
-      <div class="tt-exec-label">Composição ${ehAnual ? 'do Ano' : 'do Mês & YTD'}</div>
+      <div class="tt-exec-label">Termômetro & Soma Estrutural</div>
       <div>• Custo Médio Frota (base ANP): <strong class="font-monospace text-white">R$ ${dados.custoMedioComAnpMes.toFixed(3)}/L</strong></div>
       <div>• Média Ponderada ANP: <strong class="font-monospace text-info">R$ ${dados.anpMediaPonderadaMes.toFixed(3)}/L</strong></div>
-      <div>• Acumulado YTD: soma do Hard Saving auditado de Janeiro até ${dados.rotuloMesMaisRecenteAno}.</div>
-    </div>
-  `;
-
-  // 2. Hard Saving (Vs. ANP)
-  const htmlHardSaving = `
-    <div class="tt-exec-header">
-      <span class="tt-exec-titulo"><i class="bi bi-shield-check text-success me-1"></i>Hard Saving (Vs. ANP)</span>
-      <span class="tt-exec-tag">Benchmark</span>
-    </div>
-    <div class="tt-exec-bloco">
-      Economia real auditada ciclo a ciclo sempre que o valor unitário pago ficou <strong>abaixo da referência oficial ANP</strong> da UF na respectiva competência:
-    </div>
-    <div class="tt-exec-bloco">
-      <div class="tt-exec-label">Critérios de Auditoria</div>
-      <div>• <strong>Postos Externos:</strong> confrontados contra <em>ANP Revenda</em>.</div>
-      <div>• <strong>Garagens / Matrizes:</strong> confrontadas contra <em>ANP Distribuição</em>.</div>
-      <div>• Fórmula: <span class="font-monospace text-success">(Ref. ANP − Preço Pago) × Litros</span>.</div>
+      <div>• Eficiência Base Total (Garagem + ANP): <strong class="font-monospace" style="color: #34d399;">+R$ ${Math.round(dados.eficienciaBaseTotalMes).toLocaleString('pt-BR')}</strong></div>
     </div>
   `;
 
@@ -710,11 +792,11 @@ function prepararConteudoTooltipsFechamento(dados) {
     </div>
     <div class="tt-exec-bloco">
       <div class="tt-exec-label text-success">Número Principal (+R$ ${Math.round(dados.savingNegociacaoRealizadoMes).toLocaleString('pt-BR')}) — Realizado</div>
-      Economia efetiva já capturada no caixa sobre os <strong>litros abastecidos ${sufixoPeriodo}</strong> após a vigência do acordo, comparando o preço negociado contra o <strong>último preço pago antes da negociação</strong>.
+      Ganho marginal capturado diretamente na mesa sobre os <strong>litros abastecidos ${sufixoPeriodo}</strong> após a vigência do acordo, comparado ao <strong>último preço pago antes da negociação</strong>.
     </div>
     <div class="tt-exec-bloco">
       <div class="tt-exec-label text-info">Rodapé: Contratado (Run-Rate)</div>
-      É o <strong>potencial mensal recorrente</strong> (velocidade de cruzeiro) dos acordos vigentes fechados no período, projetado sobre a média de volume de até <strong>3 meses cheios anteriores</strong> de cada posto.
+      Potencial mensal recorrente dos acordos vigentes fechados no período, projetado sobre a média de volume de até <strong>3 meses cheios anteriores</strong>.
     </div>
     ${listaRunRateHtml}
   `;
@@ -744,8 +826,8 @@ function prepararConteudoTooltipsFechamento(dados) {
 
   const htmlCostAvoidance = `
     <div class="tt-exec-header">
-      <span class="tt-exec-titulo"><i class="bi bi-shield-lock text-info me-1"></i>Cost Avoidance de Tabela</span>
-      <span class="tt-exec-tag">Blindagem</span>
+      <span class="tt-exec-titulo"><i class="bi bi-shield-lock text-info me-1"></i>Cost Avoidance (Blindagem)</span>
+      <span class="tt-exec-tag">Defesa de Caixa</span>
     </div>
     <div class="tt-exec-bloco">
       Custo evitado quando o posto tentou aplicar <strong>preço de bomba/proposta superior</strong>, mas a mesa comercial barrou o reajuste e manteve o faturamento no preço acordado:
@@ -754,29 +836,29 @@ function prepararConteudoTooltipsFechamento(dados) {
     ${listaAvoidanceHtml}
   `;
 
-  // 5. Volume Sob Gestão Direta
-  const htmlVolumeGestao = `
+  // 5. Cobertura Sob Gestão Direta
+  const htmlCoberturaGestao = `
     <div class="tt-exec-header">
-      <span class="tt-exec-titulo"><i class="bi bi-fuel-pump text-white me-1"></i>Volume Sob Gestão Direta</span>
-      <span class="tt-exec-tag">Cobertura</span>
+      <span class="tt-exec-titulo"><i class="bi bi-pie-chart-fill text-white me-1"></i>Cobertura Sob Gestão</span>
+      <span class="tt-exec-tag">Escala</span>
     </div>
     <div class="tt-exec-bloco">
       Total de litros abastecidos ${sufixoPeriodo} em postos que possuíam <strong>acordo comercial vigente</strong> na data do ciclo.
     </div>
     <div class="tt-exec-bloco">
-      <div class="tt-exec-label">Representatividade na Competência</div>
-      <div>• Sob Acordo: <strong class="font-monospace text-white">${Math.round(dados.volumeSobAcordoMes).toLocaleString('pt-BR')} L</strong> (${dados.qtdPostosAcordadosAtivos} postos)</div>
-      <div>• Volume Total Frota: <strong class="font-monospace text-white-50">${Math.round(dados.volumeTotalMes).toLocaleString('pt-BR')} L</strong></div>
-      <div>• Cobertura: <strong class="font-monospace text-success">${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> da operação auditada.</div>
+      <div class="tt-exec-label">Representatividade na Operação</div>
+      <div>• Volume Sob Acordo: <strong class="font-monospace text-white">${Math.round(dados.volumeSobAcordoMes).toLocaleString('pt-BR')} L</strong> (${dados.qtdPostosAcordadosAtivos} postos)</div>
+      <div>• Volume Total Auditado: <strong class="font-monospace text-white-50">${Math.round(dados.volumeTotalMes).toLocaleString('pt-BR')} L</strong></div>
+      <div>• Participação Total: <strong class="font-monospace text-white">${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> do consumo ${sufixoPeriodo}.</div>
     </div>
   `;
 
   mapaTooltipsCardsFechamento = {
-    termometro: { html: htmlTermometro, borda: dados.operacaoVerde === false ? 'borda-vermelho' : 'borda-verde' },
-    hardSaving: { html: htmlHardSaving, borda: 'borda-verde' },
+    arbitragemGaragens: { html: htmlArbitragemGaragens, borda: 'borda-teal' },
+    eficienciaAnp: { html: htmlEficienciaAnp, borda: dados.operacaoVerde === false ? 'borda-vermelho' : 'borda-esmeralda' },
     negociacaoDireta: { html: htmlNegociacaoDireta, borda: 'borda-verde' },
     costAvoidance: { html: htmlCostAvoidance, borda: 'borda-azul' },
-    volumeGestao: { html: htmlVolumeGestao, borda: 'borda-verde' }
+    coberturaGestao: { html: htmlCoberturaGestao, borda: 'borda-neutro' }
   };
 }
 
@@ -890,6 +972,12 @@ async function renderizarConteudoFechamentoExecutivo() {
   const rotuloCompetencia = formatarRotuloCompetencia(competenciaFechamentoAtiva);
   const sufixoPeriodo = ehAnual ? 'no ano' : 'no mês';
 
+  const pillStatusAnpHtml = dados.operacaoVerde === null
+    ? `<span class="pill-status-frota neutro">SEM ANP</span>`
+    : (dados.operacaoVerde
+      ? `<span class="pill-status-frota verde">&bull; NO VERDE</span>`
+      : `<span class="pill-status-frota vermelho">&bull; ALERTA ÁGIO</span>`);
+
   container.innerHTML = `
     <!-- TOPO EXECUTIVO: TÍTULO, COMPETÊNCIA SINCRONIZADA E BOTÕES CLEAN DARK -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-2 border-bottom border-secondary">
@@ -917,58 +1005,58 @@ async function renderizarConteudoFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 1: CARDS DE IMPACTO COM NÚMEROS AMPLIADOS & NEON GLOW (5 CARDS PROPORCIONAIS) -->
+    <!-- BLOCO 1: CARDS DE IMPACTO COM HIERARQUIA VISUAL POR NATUREZA FINANCEIRA -->
     <div class="row g-2 mb-3 cards-fechamento-principais">
-      <!-- TERMÔMETRO MACRO DO PERÍODO -->
+      <!-- CARD 1: ARBITRAGEM DE GARAGENS (ESTRUTURA & TANQUES PRÓPRIOS) -->
       <div class="col-12 col-md-6 col-xl">
-        <div data-kpi-tooltip="termometro" class="card-exec-dark h-100 ${dados.operacaoVerde === null ? '' : (dados.operacaoVerde ? 'glow-verde' : 'glow-vermelho')} d-flex flex-column justify-content-between">
+        <div data-kpi-tooltip="arbitragemGaragens" class="card-exec-dark h-100 glow-teal d-flex flex-column justify-content-between">
           <div>
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Termômetro da Frota</span>
-              <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-info-circle kpi-info-hint"></i>
-                <i class="bi ${dados.operacaoVerde === null ? 'bi-dash-circle text-secondary' : (dados.operacaoVerde ? 'bi-shield-check text-success' : 'bi-shield-exclamation text-danger')} fs-5"></i>
-              </div>
-            </div>
-            <div class="num-kpi-grande ${dados.operacaoVerde === null ? 'text-secondary' : (dados.operacaoVerde ? 'num-neon-verde' : 'text-danger')} my-1">
-              ${dados.operacaoVerde === null ? 'SEM REFERÊNCIA ANP' : (dados.operacaoVerde ? 'OPERAÇÃO NO VERDE' : 'ALERTA DE ÁGIO')}
-            </div>
-            <div class="text-white-50 small" style="font-size: 0.70rem; line-height: 1.3;">
-              ${dados.anpMediaPonderadaMes > 0 
-                ? (dados.operacaoVerde 
-                  ? `Preço médio da frota ficou <strong>R$ ${Math.abs(dados.spreadMedioMes).toFixed(3)}/L abaixo da média oficial ANP</strong>.` 
-                  : `Diesel comprado R$ ${dados.spreadMedioMes.toFixed(3)}/L acima da ANP na média.`)
-                : `Tabela oficial ANP não disponível para esta competência.`}
-            </div>
-          </div>
-          <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
-            Acumulado do Ano (YTD): <strong class="text-success">+R$ ${Math.round(dados.savingAcumuladoYtd).toLocaleString('pt-BR')}</strong>
-          </div>
-        </div>
-      </div>
-
-      <!-- HARD SAVING (CAIXA REAL RETIDO VS ANP) -->
-      <div class="col-12 col-md-6 col-xl">
-        <div data-kpi-tooltip="hardSaving" class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
-          <div>
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Hard Saving (Vs. ANP)</span>
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Arbitragem de Garagens</span>
               <i class="bi bi-info-circle kpi-info-hint"></i>
             </div>
-            <div class="num-kpi-grande num-neon-verde my-1">
-              + R$ ${Math.round(dados.hardSavingTotalMes).toLocaleString('pt-BR')}
+            <div class="num-kpi-grande ${dados.savingGaragemMes >= 0 ? 'num-neon-teal' : 'text-danger'} my-1">
+              ${dados.savingGaragemMes > 0 ? '+ ' : (dados.savingGaragemMes < 0 ? '- ' : '')}R$ ${Math.round(Math.abs(dados.savingGaragemMes)).toLocaleString('pt-BR')}
             </div>
-            <div class="text-white-50 small" style="font-size: 0.70rem;">
-              Economia real auditada vs. tabela oficial ANP ${sufixoPeriodo}.
+            <div class="text-white-50 small" style="font-size: 0.70rem; line-height: 1.3;">
+              Ganho retido abastecendo interno vs. preço de rua/ANP ${sufixoPeriodo}.
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
-            Volume Auditado: <strong class="text-white">${Math.round(dados.volumeTotalMes).toLocaleString('pt-BR')} L</strong>
+            Interno: <strong class="text-white">${Math.round(dados.volInternoMes).toLocaleString('pt-BR')} L</strong> (${dados.percInternoMes.toFixed(1).replace('.', ',')}%)
           </div>
         </div>
       </div>
 
-      <!-- SAVING DE NEGOCIAÇÃO DIRETA (ATUAÇÃO NA MESA) -->
+      <!-- CARD 2: EFICIÊNCIA VS. ANP + TERMÔMETRO INTEGRADO -->
+      <div class="col-12 col-md-6 col-xl">
+        <div data-kpi-tooltip="eficienciaAnp" class="card-exec-dark h-100 ${dados.operacaoVerde === false ? 'glow-vermelho' : 'glow-esmeralda'} d-flex flex-column justify-content-between">
+          <div>
+            <div class="d-flex justify-content-between align-items-center gap-1 mb-1">
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Eficiência vs. ANP</span>
+              <div class="d-flex align-items-center gap-1">
+                ${pillStatusAnpHtml}
+                <i class="bi bi-info-circle kpi-info-hint"></i>
+              </div>
+            </div>
+            <div class="num-kpi-grande num-neon-esmeralda my-1">
+              + R$ ${Math.round(dados.hardSavingTotalMes).toLocaleString('pt-BR')}
+            </div>
+            <div class="text-white-50 small" style="font-size: 0.70rem; line-height: 1.3;">
+              ${dados.anpMediaPonderadaMes > 0
+                ? (dados.operacaoVerde
+                  ? `Frota rodou <strong class="text-white">R$ ${Math.abs(dados.spreadMedioMes).toFixed(3)}/L</strong> abaixo da referência oficial ANP.`
+                  : `Frota rodou <strong class="text-danger">R$ ${dados.spreadMedioMes.toFixed(3)}/L</strong> acima da média oficial ANP.`)
+                : `Economia auditada vs. tabela oficial ANP ${sufixoPeriodo}.`}
+            </div>
+          </div>
+          <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
+            Base Total (Gar.+ANP): <strong style="color: #34d399;">+R$ ${Math.round(dados.eficienciaBaseTotalMes).toLocaleString('pt-BR')}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 3: SAVING NEGOCIAÇÃO DIRETA (ATUAÇÃO NA MESA) -->
       <div class="col-12 col-md-6 col-xl">
         <div data-kpi-tooltip="negociacaoDireta" class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
@@ -979,56 +1067,58 @@ async function renderizarConteudoFechamentoExecutivo() {
             <div class="num-kpi-grande num-neon-verde my-1">
               + R$ ${Math.round(dados.savingNegociacaoRealizadoMes).toLocaleString('pt-BR')}
             </div>
-            <div class="text-white-50 small" style="font-size: 0.70rem;">
+            <div class="text-white-50 small" style="font-size: 0.70rem; line-height: 1.3;">
               Redução direta realizada na mesa vs. preço anterior pago.
             </div>
           </div>
-          <div class="pt-2 mt-2 border-top border-secondary font-monospace" style="font-size: 0.68rem;">
+          <div class="pt-2 mt-2 border-top border-secondary font-monospace" style="font-size: 0.65rem;">
             ${dados.savingNegociacaoContratadoMes > 0
-              ? `<span class="text-white-50">Contratado (Run-Rate):</span> <strong class="text-success">+R$ ${Math.round(dados.savingNegociacaoContratadoMes).toLocaleString('pt-BR')}/mês</strong>`
+              ? `<span class="text-white-50">Run-Rate:</span> <strong class="text-success">+R$ ${Math.round(dados.savingNegociacaoContratadoMes).toLocaleString('pt-BR')}/mês</strong>`
               : `<span class="text-white-50">Atuação direta sobre a carteira</span>`}
           </div>
         </div>
       </div>
 
-      <!-- COST AVOIDANCE DE TABELA -->
+      <!-- CARD 4: COST AVOIDANCE (BLINDAGEM DE TABELA) -->
       <div class="col-12 col-md-6 col-xl">
         <div data-kpi-tooltip="costAvoidance" class="card-exec-dark h-100 glow-azul d-flex flex-column justify-content-between">
           <div>
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Cost Avoidance de Tabela</span>
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Cost Avoidance (Blindagem)</span>
               <i class="bi bi-info-circle kpi-info-hint"></i>
             </div>
             <div class="num-kpi-grande num-neon-azul my-1">
               + R$ ${Math.round(dados.costAvoidanceMes).toLocaleString('pt-BR')}
             </div>
-            <div class="text-white-50 small" style="font-size: 0.70rem;">
-              Aumentos de bomba e propostas de balcão barrados na mesa.
+            <div class="text-white-50 small" style="font-size: 0.70rem; line-height: 1.3;">
+              Reajustes de bomba e propostas de balcão barrados na mesa.
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
-            Blindagem ativa ${sufixoPeriodo}
+            ${dados.detalhesCostAvoidance.length > 0
+              ? `<strong class="text-info">${dados.detalhesCostAvoidance.length} ${dados.detalhesCostAvoidance.length === 1 ? 'posto blindado' : 'postos blindados'}</strong> ${sufixoPeriodo}`
+              : `Blindagem ativa ${sufixoPeriodo}`}
           </div>
         </div>
       </div>
 
-      <!-- VOLUME SOB GESTÃO DIRETA -->
+      <!-- CARD 5: COBERTURA SOB GESTÃO DIRETA -->
       <div class="col-12 col-md-6 col-xl">
-        <div data-kpi-tooltip="volumeGestao" class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
+        <div data-kpi-tooltip="coberturaGestao" class="card-exec-dark h-100 glow-neutro d-flex flex-column justify-content-between">
           <div>
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Volume Sob Gestão Direta</span>
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Cobertura Sob Gestão</span>
               <i class="bi bi-info-circle kpi-info-hint"></i>
             </div>
             <div class="num-kpi-grande num-neon-branco my-1">
               ${Math.round(dados.volumeSobAcordoMes).toLocaleString('pt-BR')} L
             </div>
-            <div class="text-white-50 small" style="font-size: 0.70rem;">
-              <strong>${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> do consumo ${ehAnual ? 'do ano' : 'do mês'} rodou sob postos com acordo ativo.
+            <div class="text-white-50 small" style="font-size: 0.70rem; line-height: 1.3;">
+              <strong class="text-white">${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> do consumo ${ehAnual ? 'do ano' : 'do mês'} rodou sob postos com acordo ativo.
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
-            ${dados.qtdPostosAcordadosAtivos} postos com acordo vigente
+            <strong class="text-white">${dados.qtdPostosAcordadosAtivos}</strong> postos com acordo vigente
           </div>
         </div>
       </div>
@@ -2541,6 +2631,7 @@ function calcularMetricasFechamento(competenciaAlvo) {
 
   const percInternoMes = volumeTotalMes > 0 ? ((volInternoMes / volumeTotalMes) * 100) : 0;
   const spreadMedioGaragemMes = volInternoMes > 0 ? (savingGaragemMes / volInternoMes) : 0;
+  const eficienciaBaseTotalMes = savingGaragemMes + hardSavingTotalMes;
 
   // CÁLCULO YTD ACUMULADO DO ANO
   let savingAcumuladoYtd = 0;
@@ -2569,6 +2660,7 @@ function calcularMetricasFechamento(competenciaAlvo) {
     spreadMedioMes,
     operacaoVerde,
     hardSavingTotalMes,
+    eficienciaBaseTotalMes,
     savingNegociacaoRealizadoMes,
     savingNegociacaoContratadoMes,
     costAvoidanceMes,
@@ -2584,6 +2676,7 @@ function calcularMetricasFechamento(competenciaAlvo) {
     acoesTaticas,
     matrizesGaragem,
     volInternoMes,
+    gastoInternoMes,
     percInternoMes,
     spreadMedioGaragemMes,
     savingGaragemMes
