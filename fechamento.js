@@ -1061,8 +1061,8 @@ async function renderizarConteudoFechamentoExecutivo() {
           </h6>
           <span class="small text-white-50" style="font-size: 0.68rem;">
             ${ehAnual
-              ? `Consolidação acumulada no ano (cálculo mês a mês) do ganho retido em garagem vs. preço de rua`
-              : `Auditoria de compras no atacado vs. ANP Distribuição e ganho unitário contra a bomba de rua`}
+              ? `Consolidação acumulada no ano (cálculo mês a mês) do ganho retido em garagem vs. preço de rua ou ANP Revenda da UF`
+              : `Auditoria de compras no atacado vs. ANP Distribuição e ganho unitário contra a bomba de rua (ou ANP Revenda da UF)`}
           </span>
         </div>
         <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">
@@ -1536,9 +1536,15 @@ function renderizarLinhasMatrizesFechamento(linhas) {
 
     let celulaRuaHtml = '';
     if (g.precoRuaUf > 0) {
-      celulaRuaHtml = `<span class="font-monospace text-white">R$ ${g.precoRuaUf.toFixed(3)}</span>`;
+      let badgeOrigemRua = '';
+      if (g.origemRua === 'ANP') {
+        badgeOrigemRua = `<span class="badge bg-dark text-info border border-info-subtle ms-1" style="font-size: 0.55rem;" title="Sem compra externa na UF; comparativo pela referência oficial ANP Revenda">ANP Rev.</span>`;
+      } else if (g.origemRua === 'MISTO') {
+        badgeOrigemRua = `<span class="badge bg-dark text-info border border-info-subtle ms-1" style="font-size: 0.55rem;" title="Média ponderada entre compras externas reais e ANP Revenda nos meses sem compra na UF">Misto ANP</span>`;
+      }
+      celulaRuaHtml = `<span class="font-monospace text-white">R$ ${g.precoRuaUf.toFixed(3)}</span>${badgeOrigemRua}`;
     } else {
-      celulaRuaHtml = `<span class="text-white-50 font-monospace" title="Sem compras externas comparáveis na UF neste período">Sem compra externa</span>`;
+      celulaRuaHtml = `<span class="text-white-50 font-monospace" title="Sem compras externas nem referência ANP Revenda na UF neste período">Sem ref. rua</span>`;
     }
 
     return `
@@ -2036,11 +2042,7 @@ function calcularMetricasFechamento(competenciaAlvo) {
     let precoAcordadoAvoidance = 0;
     let fichaUltimoConsumo = null;
 
-    // Variáveis isoladas para apuração de furo conforme regra exata da Auditoria Comercial:
-    // 1) Pertence à vigência atual/mais recente do posto (fichaDecisaoPeriodo.vigencia)
-    // 2) gapAcordo > 0.005
-    // 3) diasDecorridos <= 30 (após 30d é Acordo Vencido / Renovação)
-    // 4) gapAnp >= -0.05 (se gapAnp < -0.05 é Margem Preservada / Blindado)
+    // Variáveis isoladas para apuração de furo conforme regra exata da Auditoria Comercial
     let impactoFuroMesRef = 0;
     let volFuroMesRef = 0;
     let valorPagoFuroMesRef = 0;
@@ -2409,7 +2411,9 @@ function calcularMetricasFechamento(competenciaAlvo) {
   }
 
   // INTEGRAÇÃO DAS MATRIZES GERENCIAIS & GARAGENS PRÓPRIAS
-  // Calcula mês a mês antes de consolidar para preservar a aderência exata contra a rua e ANP Distr. da época.
+  // Calcula mês a mês antes de consolidar:
+  // 1ª prioridade: média real paga na rua (EXTERNO) na mesma UF no mês.
+  // 2ª prioridade (fallback oficial): ANP Revenda da UF naquele mês (anpRevenda[uf][m]).
   const matrizesGaragem = [];
   let volInternoMes = 0;
   let gastoInternoMes = 0;
@@ -2455,10 +2459,22 @@ function calcularMetricasFechamento(competenciaAlvo) {
       gastoInternoMes += gMes.vt;
 
       const mapaDist = (typeof anpDistribuicao !== 'undefined') ? anpDistribuicao : {};
+      const mapaRev = (typeof anpRevenda !== 'undefined') ? anpRevenda : {};
       const refDistMes = (mapaDist[gMes.uf] && mapaDist[gMes.uf][m]) ? Number(mapaDist[gMes.uf][m]) : 0;
 
       const dadosRuaUf = ruaPorUfMes[gMes.uf];
-      const precoRuaMes = (dadosRuaUf && dadosRuaUf.v > 0) ? (dadosRuaUf.vt / dadosRuaUf.v) : 0;
+      let precoRuaMes = 0;
+      let usouRealMes = false;
+      let usouAnpMes = false;
+
+      if (dadosRuaUf && dadosRuaUf.v > 0) {
+        precoRuaMes = dadosRuaUf.vt / dadosRuaUf.v;
+        usouRealMes = true;
+      } else if (mapaRev[gMes.uf] && Number(mapaRev[gMes.uf][m]) > 0) {
+        precoRuaMes = Number(mapaRev[gMes.uf][m]);
+        usouAnpMes = true;
+      }
+
       const ganhoMes = (precoRuaMes > 0 && custoMes > 0) ? ((precoRuaMes - custoMes) * gMes.v) : 0;
       savingGaragemMes += ganhoMes;
 
@@ -2472,7 +2488,9 @@ function calcularMetricasFechamento(competenciaAlvo) {
           volComDist: 0,
           somaRuaPonderada: 0,
           volComRua: 0,
-          ganhoTotal: 0
+          ganhoTotal: 0,
+          teveReal: false,
+          teveAnp: false
         });
       }
 
@@ -2486,6 +2504,8 @@ function calcularMetricasFechamento(competenciaAlvo) {
       if (precoRuaMes > 0) {
         acc.somaRuaPonderada += precoRuaMes * gMes.v;
         acc.volComRua += gMes.v;
+        if (usouRealMes) acc.teveReal = true;
+        if (usouAnpMes) acc.teveAnp = true;
       }
       acc.ganhoTotal += ganhoMes;
     });
@@ -2498,6 +2518,11 @@ function calcularMetricasFechamento(competenciaAlvo) {
     const precoRuaUf = acc.volComRua > 0 ? (acc.somaRuaPonderada / acc.volComRua) : 0;
     const spreadRua = (precoRuaUf > 0 && custoGaragem > 0) ? (precoRuaUf - custoGaragem) : 0;
 
+    let origemRua = 'NENHUMA';
+    if (acc.teveReal && acc.teveAnp) origemRua = 'MISTO';
+    else if (acc.teveReal) origemRua = 'REAL';
+    else if (acc.teveAnp) origemRua = 'ANP';
+
     matrizesGaragem.push({
       nome: acc.nome,
       uf: acc.uf,
@@ -2505,6 +2530,7 @@ function calcularMetricasFechamento(competenciaAlvo) {
       refDist,
       varDistPerc,
       precoRuaUf,
+      origemRua,
       spreadRua,
       volume: acc.volume,
       ganhoTotal: acc.ganhoTotal
