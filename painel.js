@@ -566,6 +566,11 @@ function limparFiltroUf() {
 }
 
 function processarPainel() {
+  if (modoAtual === 'FECHAMENTO' && typeof renderizarAbaFechamentoExecutivo === 'function') {
+    renderizarAbaFechamentoExecutivo().then(animarEntradaKpisFechamento);
+    return;
+  }
+
   const mesSel = document.getElementById('filtroMesAno') ? document.getElementById('filtroMesAno').value : 'YTD';
 
   let registros = mesSel === 'YTD' ? filtrarRegistrosYtd(baseRegistrosMensais) : baseRegistrosMensais;
