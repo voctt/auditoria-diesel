@@ -147,6 +147,17 @@ function obterDataFimCompetencia(mes) {
   return new Date(Date.UTC(ano, numeroMes, 0)).toISOString().slice(0, 10);
 }
 
+// Calcula dias inteiros entre duas datas YYYY-MM-DD em UTC.
+function calcularDiasEntreDatasFechamento(dataInicioStr, dataFimStr) {
+  const ini = (dataInicioStr || '').substring(0, 10);
+  const fim = (dataFimStr || '').substring(0, 10);
+  if (!ini || !fim) return 0;
+  const msIni = Date.parse(`${ini}T12:00:00Z`);
+  const msFim = Date.parse(`${fim}T12:00:00Z`);
+  if (!Number.isFinite(msIni) || !Number.isFinite(msFim)) return 0;
+  return Math.round((msFim - msIni) / 86400000);
+}
+
 /**
  * Injeção de Estilos CSS Dark Mode Executivo, Tooltip Flutuante & Modal do Dossiê
  */
@@ -1169,7 +1180,7 @@ async function renderizarConteudoFechamentoExecutivo() {
           </div>
 
           ${dados.postosComFuro.length === 0 
-            ? `<div class="p-2 border border-success rounded bg-dark text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Nenhum furo comercial apurado em ${dados.rotuloMesOperacional}. Todos os postos sob acordo faturaram em conformidade.</div>` 
+            ? `<div class="p-2 border border-success rounded bg-dark text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Nenhum furo comercial apurado dentro dos 30 dias de vigência em ${dados.rotuloMesOperacional}.</div>` 
             : `<div class="d-flex flex-column gap-2 flex-grow-1" style="min-height: 0; overflow-y: auto; scrollbar-width: thin;">
                 ${dados.postosComFuro.map(f => `
                   <div class="p-2 border rounded" style="background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3) !important; font-size: 0.72rem;">
@@ -1521,7 +1532,7 @@ function renderizarLinhasMatrizesFechamento(linhas) {
   return linhas.map(g => {
     const corEfic = g.refDist > 0 ? (g.varDistPerc <= 0 ? '#4ade80' : '#f87171') : '#94a3b8';
     const sinalEfic = g.varDistPerc > 0 ? '+' : '';
-    const corSpread = g.precoRuaUf > 0 ? (g.spreadRua >= 0.15 ? '#4ade80' : (g.spreadRua >= 0 ? '#4ade80' : '#f87171')) : '#94a3b8';
+    const corSpread = g.precoRuaUf > 0 ? (g.spreadRua >= 0 ? '#4ade80' : '#f87171') : '#94a3b8';
 
     let celulaRuaHtml = '';
     if (g.precoRuaUf > 0) {
@@ -2025,12 +2036,17 @@ function calcularMetricasFechamento(competenciaAlvo) {
     let precoAcordadoAvoidance = 0;
     let fichaUltimoConsumo = null;
 
-    // Variáveis isoladas para apuração de furo EXCLUSIVAMENTE no último mês operacional ativo
+    // Variáveis isoladas para apuração de furo conforme regra exata da Auditoria Comercial:
+    // 1) Pertence à vigência atual/mais recente do posto (fichaDecisaoPeriodo.vigencia)
+    // 2) gapAcordo > 0.005
+    // 3) diasDecorridos <= 30 (após 30d é Acordo Vencido / Renovação)
+    // 4) gapAnp >= -0.05 (se gapAnp < -0.05 é Margem Preservada / Blindado)
     let impactoFuroMesRef = 0;
     let volFuroMesRef = 0;
     let valorPagoFuroMesRef = 0;
     let precoAcordadoFuroMesRef = 0;
     let vigenciaFuroMesRef = '';
+    const vigenciaAtualMaisRecente = (fichaDecisaoPeriodo?.vigencia || '').substring(0, 10);
 
     transacoesAcordadasPeriodo.forEach(({ registro: r, ficha }) => {
       const v = parseFloat(r.VOLUME_CICLO || 0);
@@ -2056,13 +2072,26 @@ function calcularMetricasFechamento(competenciaAlvo) {
         precoAcordadoAvoidance = precoAcordadoCiclo;
       }
 
-      // Apura furos passíveis de glosa APENAS nos ciclos do mês operacional de referência (ex.: Nov/2026)
-      if (r.MES_ANO === mesOperacionalRef && p > precoAcordadoCiclo) {
-        impactoFuroMesRef += (p - precoAcordadoCiclo) * v;
+      // Verifica desvio passível de glosa espelhando a régua da Auditoria Comercial
+      const vigFichaCiclo = (ficha.vigencia || '').substring(0, 10);
+      const ehVigenciaAtual = statusTratativaPeriodo === 'ACORDO_FECHADO' && vigFichaCiclo === vigenciaAtualMaisRecente;
+      const gapAcordoCiclo = p - precoAcordadoCiclo;
+      const gapAnpCiclo = refAnpCiclo > 0 ? (p - refAnpCiclo) : 0;
+      const diasDesdeVigencia = calcularDiasEntreDatasFechamento(vigFichaCiclo, r.DATA_FIM_CICLO);
+
+      if (
+        r.MES_ANO === mesOperacionalRef &&
+        ehVigenciaAtual &&
+        gapAcordoCiclo > 0.005 &&
+        diasDesdeVigencia >= 0 &&
+        diasDesdeVigencia <= 30 &&
+        !(refAnpCiclo > 0 && gapAnpCiclo < -0.05)
+      ) {
+        impactoFuroMesRef += gapAcordoCiclo * v;
         volFuroMesRef += v;
         valorPagoFuroMesRef += (p * v);
         precoAcordadoFuroMesRef = precoAcordadoCiclo;
-        vigenciaFuroMesRef = ficha.vigencia || vigenciaDecisaoPeriodo;
+        vigenciaFuroMesRef = vigFichaCiclo;
       }
 
       if ((r.DATA_FIM_CICLO || '') >= dataUltimoBomba) {
@@ -2105,8 +2134,10 @@ function calcularMetricasFechamento(competenciaAlvo) {
         });
       }
 
-      // Adiciona ao card de Glosas SOMENTE se houve furo no último mês operacional ativo
-      if (impactoFuroMesRef > 0 && volFuroMesRef > 0) {
+      // Adiciona ao card de Glosas SOMENTE se houve furo válido no último mês operacional ativo
+      // e o último abastecimento registrado ainda não normalizou dentro do acordado.
+      const ultimoPrecoAindaAcima = (ultimoPrecoBomba - precoAcordadoFuroMesRef) > 0.005;
+      if (impactoFuroMesRef > 0 && volFuroMesRef > 0 && ultimoPrecoAindaAcima) {
         const precoPagoFuro = valorPagoFuroMesRef / volFuroMesRef;
         const gapAcordo = precoPagoFuro - precoAcordadoFuroMesRef;
         postosComFuro.push({
@@ -2122,9 +2153,11 @@ function calcularMetricasFechamento(competenciaAlvo) {
       }
 
       // Adiciona ao SLA de Renovação SOMENTE se o posto teve consumo no último mês operacional ativo
+      // e a vigência atual já ultrapassou 30 dias.
       const teveConsumoMesRecente = mesUltimoBomba === mesOperacionalRef;
-      if (teveConsumoMesRecente && statusTratativaPeriodo === 'ACORDO_FECHADO' && vigencia) {
-        const dtVig = new Date(`${vigencia.substring(0, 10)}T12:00:00Z`);
+      const vigAtualParaSla = vigenciaAtualMaisRecente || (vigencia || '').substring(0, 10);
+      if (teveConsumoMesRecente && statusTratativaPeriodo === 'ACORDO_FECHADO' && vigAtualParaSla) {
+        const dtVig = new Date(`${vigAtualParaSla}T12:00:00Z`);
         const hoje = new Date();
         hoje.setUTCHours(12, 0, 0, 0);
         const dtFimComp = new Date(`${dataLimitePeriodo}T12:00:00Z`);
@@ -2134,7 +2167,7 @@ function calcularMetricasFechamento(competenciaAlvo) {
           postosParaRenovar.push({
             posto: nomePosto,
             uf: ufPosto,
-            dataVigenciaFmt: vigencia.split('-').reverse().join('/'),
+            dataVigenciaFmt: vigAtualParaSla.split('-').reverse().join('/'),
             diasDecorridos: dias,
             ultimoAbastFmt: dataUltimoBomba ? dataUltimoBomba.substring(0, 10).split('-').reverse().join('/') : '--'
           });
@@ -2144,9 +2177,9 @@ function calcularMetricasFechamento(competenciaAlvo) {
       tabelaPostosMes.push({
         posto: nomePosto,
         uf: ufPosto,
-        vigenciaFmt: vigencia ? vigencia.split('-').reverse().join('/') : '--',
+        vigenciaFmt: vigAtualParaSla ? vigAtualParaSla.split('-').reverse().join('/') : '--',
         precoProposto,
-        precoAcordado,
+        precoAcordado: Number(fichaDecisaoPeriodo?.preco) || precoAcordado,
         ultimoPrecoBomba,
         refAnp,
         spreadAnp: ultimoPrecoBomba > 0 && refAnp > 0 ? (ultimoPrecoBomba - refAnp) : 0,
