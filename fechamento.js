@@ -12,6 +12,7 @@ let cacheDossieMes = {};
 let cachePareceresGestor = {};
 const mesesDossieCarregados = new Set();
 let graficoEvolucaoInstancia = null;
+let mapaTooltipsCardsFechamento = {};
 
 // Usa ANP Distribuição para abastecimento interno e ANP Revenda para abastecimento externo.
 function obterReferenciaAnpFechamento(registro, mes) {
@@ -127,7 +128,7 @@ function obterDataFimCompetencia(mes) {
 }
 
 /**
- * Injeção de Estilos CSS Dark Mode Executivo & Modal do Dossiê
+ * Injeção de Estilos CSS Dark Mode Executivo, Tooltip Flutuante & Modal do Dossiê
  */
 (function inicializarEstilosEModalDossie() {
   const idEstilo = "estilosFechamentoExecutivoDark";
@@ -187,12 +188,130 @@ function obterDataFimCompetencia(mes) {
         border-radius: 10px;
         border: 1px solid rgba(255, 255, 255, 0.07);
         padding: 16px;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
         position: relative;
         overflow: hidden;
       }
       .card-exec-dark:hover {
         transform: translateY(-2px);
+      }
+      .card-exec-dark[data-kpi-tooltip] {
+        cursor: help;
+      }
+      .kpi-info-hint {
+        color: #64748b;
+        font-size: 0.72rem;
+        transition: color 0.2s ease;
+      }
+      .card-exec-dark:hover .kpi-info-hint {
+        color: #cbd5e1;
+      }
+
+      /* TOOLTIP EXECUTIVO FLUTUANTE DARK MODE */
+      #tooltipExecutivoDark {
+        position: fixed;
+        z-index: 100080;
+        width: 340px;
+        max-width: calc(100vw - 24px);
+        background: rgba(15, 23, 42, 0.98);
+        backdrop-filter: blur(10px);
+        color: #e2e8f0;
+        border: 1px solid rgba(148, 163, 184, 0.26);
+        border-radius: 10px;
+        padding: 12px 14px;
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.04);
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(4px);
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        font-size: 0.73rem;
+        line-height: 1.42;
+      }
+      #tooltipExecutivoDark.visivel {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      #tooltipExecutivoDark.borda-verde {
+        border-color: rgba(74, 222, 128, 0.45);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(74, 222, 128, 0.12);
+      }
+      #tooltipExecutivoDark.borda-azul {
+        border-color: rgba(56, 189, 248, 0.45);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(56, 189, 248, 0.12);
+      }
+      #tooltipExecutivoDark.borda-vermelho {
+        border-color: rgba(248, 113, 113, 0.45);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 20px rgba(248, 113, 113, 0.12);
+      }
+      .tt-exec-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding-bottom: 6px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .tt-exec-titulo {
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #f8fafc;
+      }
+      .tt-exec-tag {
+        font-size: 0.58rem;
+        font-family: monospace;
+        padding: 1px 6px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #94a3b8;
+      }
+      .tt-exec-bloco {
+        margin-bottom: 7px;
+      }
+      .tt-exec-bloco:last-child {
+        margin-bottom: 0;
+      }
+      .tt-exec-label {
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 2px;
+      }
+      .tt-exec-lista {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px dashed rgba(255, 255, 255, 0.12);
+      }
+      .tt-exec-item {
+        background: rgba(30, 41, 59, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 6px;
+        padding: 5px 7px;
+        font-size: 0.68rem;
+      }
+      .tt-exec-item-topo {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        font-weight: 700;
+        color: #f8fafc;
+      }
+      .tt-exec-item-sub {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #94a3b8;
+        font-family: monospace;
+        font-size: 0.63rem;
+        margin-top: 2px;
       }
 
       /* BORDAS & TEXTOS NEON SUTIS */
@@ -354,6 +473,10 @@ function obterDataFimCompetencia(mes) {
 
       /* REGRAS DE IMPRESSÃO DO DOSSIÊ */
       @media print {
+        #tooltipExecutivoDark,
+        .kpi-info-hint {
+          display: none !important;
+        }
         body.printing-dossie #secaoFechamentoExecutivo {
           background: #ffffff !important;
           color: #0f172a !important;
@@ -383,64 +506,260 @@ function obterDataFimCompetencia(mes) {
     document.head.appendChild(styleEl);
   }
 
-  const inserirModalParecer = () => {
-    if (!document.body || document.getElementById('modalParecerGestor')) return;
+  const inserirElementosGlobais = () => {
+    if (!document.body) return;
 
-    const modalHtml = `
-      <div class="modal fade" id="modalParecerGestor" tabindex="-1" aria-labelledby="lblModalParecer" aria-hidden="true" style="z-index: 100060;">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-          <div class="modal-content">
-            <div class="modal-header d-flex justify-content-between align-items-center py-2 px-3">
-              <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-chat-square-text text-warning fs-5"></i>
-                <h6 class="modal-title fw-bold text-white mb-0" id="lblModalParecer">Novo Parecer da Gestão</h6>
+    if (!document.getElementById('tooltipExecutivoDark')) {
+      const ttEl = document.createElement('div');
+      ttEl.id = 'tooltipExecutivoDark';
+      ttEl.setAttribute('role', 'tooltip');
+      document.body.appendChild(ttEl);
+    }
+
+    if (!document.getElementById('modalParecerGestor')) {
+      const modalHtml = `
+        <div class="modal fade" id="modalParecerGestor" tabindex="-1" aria-labelledby="lblModalParecer" aria-hidden="true" style="z-index: 100060;">
+          <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+              <div class="modal-header d-flex justify-content-between align-items-center py-2 px-3">
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-chat-square-text text-warning fs-5"></i>
+                  <h6 class="modal-title fw-bold text-white mb-0" id="lblModalParecer">Novo Parecer da Gestão</h6>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
               </div>
-              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-            <div class="modal-body p-3">
-              <form id="formParecerGestor" onsubmit="salvarParecerGestor(event)">
-                <div class="mb-2">
-                  <label for="campoParecerTitulo" class="form-label small fw-bold text-white-50 mb-1">Título</label>
-                  <input id="campoParecerTitulo" class="form-control" maxlength="100" required placeholder="Ex.: Renegociação de abastecimento no corredor Sul">
-                </div>
-                <div class="mb-2">
-                  <label for="campoParecerSubtitulo" class="form-label small fw-bold text-white-50 mb-1">Subtítulo</label>
-                  <input id="campoParecerSubtitulo" class="form-control" maxlength="140" required placeholder="Ex.: Ação adotada para reduzir custo e garantir abastecimento">
-                </div>
-                <div class="mb-3">
-                  <label for="campoParecerTexto" class="form-label small fw-bold text-white-50 mb-1">Análise e observações</label>
-                  <textarea id="campoParecerTexto" class="form-control" rows="5" maxlength="3000" required placeholder="Registre o contexto, a decisão tomada, fatores que não aparecem nos dados e próximos passos."></textarea>
-                </div>
-                <div class="mb-3">
-                  <div class="d-flex justify-content-between align-items-center mb-2">
-                    <label class="form-label small fw-bold text-white-50 mb-0">Indicadores manuais de saving</label>
-                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="adicionarIndicadorParecer()">
-                      <i class="bi bi-plus-lg me-1"></i> Adicionar indicador
-                    </button>
+              <div class="modal-body p-3">
+                <form id="formParecerGestor" onsubmit="salvarParecerGestor(event)">
+                  <div class="mb-2">
+                    <label for="campoParecerTitulo" class="form-label small fw-bold text-white-50 mb-1">Título</label>
+                    <input id="campoParecerTitulo" class="form-control" maxlength="100" required placeholder="Ex.: Renegociação de abastecimento no corredor Sul">
                   </div>
-                  <div id="listaIndicadoresParecer"></div>
-                </div>
-                <div class="d-flex justify-content-between align-items-center pt-2 border-top border-secondary">
-                  <span class="text-white-50 small" style="font-size: 0.65rem;" id="parecerInfoCompetencia">--</span>
-                  <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" id="btnSalvarParecer" class="btn btn-sm btn-warning fw-bold px-3">
-                      <i class="bi bi-check-circle me-1"></i> Salvar Parecer
-                    </button>
+                  <div class="mb-2">
+                    <label for="campoParecerSubtitulo" class="form-label small fw-bold text-white-50 mb-1">Subtítulo</label>
+                    <input id="campoParecerSubtitulo" class="form-control" maxlength="140" required placeholder="Ex.: Ação adotada para reduzir custo e garantir abastecimento">
                   </div>
-                </div>
-              </form>
+                  <div class="mb-3">
+                    <label for="campoParecerTexto" class="form-label small fw-bold text-white-50 mb-1">Análise e observações</label>
+                    <textarea id="campoParecerTexto" class="form-control" rows="5" maxlength="3000" required placeholder="Registre o contexto, a decisão tomada, fatores que não aparecem nos dados e próximos passos."></textarea>
+                  </div>
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <label class="form-label small fw-bold text-white-50 mb-0">Indicadores manuais de saving</label>
+                      <button type="button" class="btn btn-sm btn-outline-warning" onclick="adicionarIndicadorParecer()">
+                        <i class="bi bi-plus-lg me-1"></i> Adicionar indicador
+                      </button>
+                    </div>
+                    <div id="listaIndicadoresParecer"></div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center pt-2 border-top border-secondary">
+                    <span class="text-white-50 small" style="font-size: 0.65rem;" id="parecerInfoCompetencia">--</span>
+                    <div class="d-flex gap-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                      <button type="submit" id="btnSalvarParecer" class="btn btn-sm btn-warning fw-bold px-3">
+                        <i class="bi bi-check-circle me-1"></i> Salvar Parecer
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
   };
 
-  if (document.body) inserirModalParecer();
-  else document.addEventListener('DOMContentLoaded', inserirModalParecer, { once: true });
+  if (document.body) inserirElementosGlobais();
+  else document.addEventListener('DOMContentLoaded', inserirElementosGlobais, { once: true });
 })();
+
+/**
+ * Montagem e Vinculação dos Tooltips Executivos Dark Mode nos Cards KPI
+ */
+function prepararConteudoTooltipsFechamento(dados) {
+  const rotuloMes = formatarRotuloMes(mesFechamentoAtivo);
+
+  // 1. Termômetro da Frota
+  const htmlTermometro = `
+    <div class="tt-exec-header">
+      <span class="tt-exec-titulo"><i class="bi bi-speedometer2 text-success me-1"></i>Termômetro da Frota</span>
+      <span class="tt-exec-tag">${rotuloMes}</span>
+    </div>
+    <div class="tt-exec-bloco">
+      Compara o <strong>preço médio ponderado pago pela frota</strong> (abastecimentos externos e internos com referência oficial disponível) frente à média oficial da <strong>ANP</strong> na mesma UF.
+    </div>
+    <div class="tt-exec-bloco">
+      <div class="tt-exec-label">Composição do Mês & YTD</div>
+      <div>• Custo Médio Frota (base ANP): <strong class="font-monospace text-white">R$ ${dados.custoMedioComAnpMes.toFixed(3)}/L</strong></div>
+      <div>• Média Ponderada ANP: <strong class="font-monospace text-info">R$ ${dados.anpMediaPonderadaMes.toFixed(3)}/L</strong></div>
+      <div>• Acumulado YTD: soma do Hard Saving auditado de Janeiro até ${rotuloMes}.</div>
+    </div>
+  `;
+
+  // 2. Hard Saving (Vs. ANP)
+  const htmlHardSaving = `
+    <div class="tt-exec-header">
+      <span class="tt-exec-titulo"><i class="bi bi-shield-check text-success me-1"></i>Hard Saving (Vs. ANP)</span>
+      <span class="tt-exec-tag">Benchmark</span>
+    </div>
+    <div class="tt-exec-bloco">
+      Economia real auditada ciclo a ciclo sempre que o valor unitário pago ficou <strong>abaixo da referência oficial ANP</strong> da UF na competência:
+    </div>
+    <div class="tt-exec-bloco">
+      <div class="tt-exec-label">Critérios de Auditoria</div>
+      <div>• <strong>Postos Externos:</strong> confrontados contra <em>ANP Revenda</em>.</div>
+      <div>• <strong>Garagens / Matrizes:</strong> confrontadas contra <em>ANP Distribuição</em>.</div>
+      <div>• Fórmula: <span class="font-monospace text-success">(Ref. ANP − Preço Pago) × Litros</span>.</div>
+    </div>
+  `;
+
+  // 3. Saving Negociação Direta
+  const itensRunRate = [...(dados.detalhesRunRate || [])].sort((a, b) => b.impactoMensal - a.impactoMensal);
+  const listaRunRateHtml = itensRunRate.length > 0
+    ? `<div class="tt-exec-lista">
+        <div class="tt-exec-label">Composição do Contratado (Run-Rate)</div>
+        ${itensRunRate.slice(0, 6).map(it => `
+          <div class="tt-exec-item">
+            <div class="tt-exec-item-topo">
+              <span class="text-truncate" style="max-width: 215px;">${escaparHtmlParecer(it.posto)} (${escaparHtmlParecer(it.uf)})</span>
+              <span class="font-monospace text-success">+R$ ${Math.round(it.impactoMensal).toLocaleString('pt-BR')}/mês</span>
+            </div>
+            <div class="tt-exec-item-sub">
+              <span>R$ ${it.precoBase.toFixed(3)} &rarr; R$ ${it.precoNeg.toFixed(3)} (-${it.diff.toFixed(3)})</span>
+              <span>Base: ${Math.round(it.volRef).toLocaleString('pt-BR')} L</span>
+            </div>
+          </div>
+        `).join('')}
+        ${itensRunRate.length > 6 ? `<div class="text-white-50 fst-italic" style="font-size: 0.63rem;">+ ${itensRunRate.length - 6} outros acordos iniciados no mês</div>` : ''}
+      </div>`
+    : '';
+
+  const htmlNegociacaoDireta = `
+    <div class="tt-exec-header">
+      <span class="tt-exec-titulo"><i class="bi bi-handshake text-success me-1"></i>Saving Negociação Direta</span>
+      <span class="tt-exec-tag">Mesa Comercial</span>
+    </div>
+    <div class="tt-exec-bloco">
+      <div class="tt-exec-label text-success">Número Principal (+R$ ${Math.round(dados.savingNegociacaoRealizadoMes).toLocaleString('pt-BR')}) — Realizado</div>
+      Economia efetiva já capturada no caixa sobre os <strong>litros abastecidos no mês</strong> após a vigência do acordo, comparando o preço negociado contra o <strong>último preço pago antes da negociação</strong>.
+    </div>
+    <div class="tt-exec-bloco">
+      <div class="tt-exec-label text-info">Rodapé: Contratado (Run-Rate)</div>
+      É o <strong>potencial mensal recorrente</strong> (velocidade de cruzeiro) dos acordos fechados nesta competência, projetado sobre a média de volume de até <strong>3 meses cheios anteriores</strong> de cada posto.
+    </div>
+    ${listaRunRateHtml}
+  `;
+
+  // 4. Cost Avoidance de Tabela
+  const itensAvoidance = [...(dados.detalhesCostAvoidance || [])].sort((a, b) => b.impactoTotal - a.impactoTotal);
+  const listaAvoidanceHtml = itensAvoidance.length > 0
+    ? `<div class="tt-exec-lista">
+        <div class="tt-exec-label">Negociações Blindadas no Mês (${itensAvoidance.length})</div>
+        ${itensAvoidance.map(it => `
+          <div class="tt-exec-item">
+            <div class="tt-exec-item-topo">
+              <span class="text-truncate" style="max-width: 215px;">${escaparHtmlParecer(it.posto)} (${escaparHtmlParecer(it.uf)})</span>
+              <span class="font-monospace text-info">+R$ ${Math.round(it.impactoTotal).toLocaleString('pt-BR')}</span>
+            </div>
+            <div class="tt-exec-item-sub">
+              <span>Balcão R$ ${it.precoProposto.toFixed(3)} &rarr; Acordo R$ ${it.precoAcordado.toFixed(3)}</span>
+              <span>${Math.round(it.volume).toLocaleString('pt-BR')} L</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>`
+    : `<div class="tt-exec-lista">
+        <div class="text-white-50" style="font-size: 0.67rem;">Nenhum reajuste de balcão barrado foi faturado nesta competência.</div>
+      </div>`;
+
+  const htmlCostAvoidance = `
+    <div class="tt-exec-header">
+      <span class="tt-exec-titulo"><i class="bi bi-shield-lock text-info me-1"></i>Cost Avoidance de Tabela</span>
+      <span class="tt-exec-tag">Blindagem</span>
+    </div>
+    <div class="tt-exec-bloco">
+      Custo evitado quando o posto tentou aplicar <strong>preço de bomba/proposta superior</strong>, mas a mesa comercial barrou o reajuste e manteve o faturamento no preço acordado:
+      <div class="font-monospace text-info mt-1" style="font-size: 0.66rem;">(Preço Balcão − Preço Acordado) × Litros</div>
+    </div>
+    ${listaAvoidanceHtml}
+  `;
+
+  // 5. Volume Sob Gestão Direta
+  const htmlVolumeGestao = `
+    <div class="tt-exec-header">
+      <span class="tt-exec-titulo"><i class="bi bi-fuel-pump text-white me-1"></i>Volume Sob Gestão Direta</span>
+      <span class="tt-exec-tag">Cobertura</span>
+    </div>
+    <div class="tt-exec-bloco">
+      Total de litros abastecidos em postos que possuíam <strong>acordo comercial vigente</strong> na data do ciclo.
+    </div>
+    <div class="tt-exec-bloco">
+      <div class="tt-exec-label">Representatividade na Competência</div>
+      <div>• Sob Acordo: <strong class="font-monospace text-white">${Math.round(dados.volumeSobAcordoMes).toLocaleString('pt-BR')} L</strong> (${dados.qtdPostosAcordadosAtivos} postos)</div>
+      <div>• Volume Total Frota: <strong class="font-monospace text-white-50">${Math.round(dados.volumeTotalMes).toLocaleString('pt-BR')} L</strong></div>
+      <div>• Cobertura: <strong class="font-monospace text-success">${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> da operação auditada.</div>
+    </div>
+  `;
+
+  mapaTooltipsCardsFechamento = {
+    termometro: { html: htmlTermometro, borda: dados.operacaoVerde === false ? 'borda-vermelho' : 'borda-verde' },
+    hardSaving: { html: htmlHardSaving, borda: 'borda-verde' },
+    negociacaoDireta: { html: htmlNegociacaoDireta, borda: 'borda-verde' },
+    costAvoidance: { html: htmlCostAvoidance, borda: 'borda-azul' },
+    volumeGestao: { html: htmlVolumeGestao, borda: 'borda-verde' }
+  };
+}
+
+function posicionarTooltipExecutivo(cardEl, tooltipEl) {
+  const rectCard = cardEl.getBoundingClientRect();
+  const rectTt = tooltipEl.getBoundingClientRect();
+  const margem = 10;
+
+  let left = rectCard.left + (rectCard.width / 2) - (rectTt.width / 2);
+  if (left < margem) left = margem;
+  if (left + rectTt.width > window.innerWidth - margem) {
+    left = window.innerWidth - rectTt.width - margem;
+  }
+
+  let top = rectCard.bottom + 8;
+  if (top + rectTt.height > window.innerHeight - margem) {
+    top = rectCard.top - rectTt.height - 8;
+  }
+  if (top < margem) top = margem;
+
+  tooltipEl.style.left = `${Math.round(left)}px`;
+  tooltipEl.style.top = `${Math.round(top)}px`;
+}
+
+function vincularTooltipsCardsFechamento() {
+  const tooltipEl = document.getElementById('tooltipExecutivoDark');
+  if (!tooltipEl) return;
+
+  const cards = document.querySelectorAll('#secaoFechamentoExecutivo [data-kpi-tooltip]');
+  cards.forEach(card => {
+    const chave = card.getAttribute('data-kpi-tooltip');
+
+    card.addEventListener('mouseenter', () => {
+      const config = mapaTooltipsCardsFechamento[chave];
+      if (!config) return;
+      tooltipEl.className = config.borda || '';
+      tooltipEl.innerHTML = config.html;
+      tooltipEl.classList.add('visivel');
+      posicionarTooltipExecutivo(card, tooltipEl);
+    });
+
+    card.addEventListener('mousemove', () => {
+      if (tooltipEl.classList.contains('visivel')) {
+        posicionarTooltipExecutivo(card, tooltipEl);
+      }
+    });
+
+    card.addEventListener('mouseleave', () => {
+      tooltipEl.classList.remove('visivel');
+    });
+  });
+}
 
 /**
  * Inicialização e renderização principal da aba de Fechamento Executivo
@@ -490,6 +809,7 @@ async function renderizarConteudoFechamentoExecutivo() {
 
   await carregarDossieMesFirestore(mesFechamentoAtivo);
   const dados = calcularMetricasFechamento(mesFechamentoAtivo);
+  prepararConteudoTooltipsFechamento(dados);
 
   container.innerHTML = `
     <!-- TOPO EXECUTIVO: TÍTULO, SELETOR E BOTÕES CLEAN DARK -->
@@ -524,11 +844,14 @@ async function renderizarConteudoFechamentoExecutivo() {
     <div class="row g-2 mb-3 cards-fechamento-principais">
       <!-- TERMÔMETRO MACRO DO MÊS -->
       <div class="col-12 col-md-6 col-xl">
-        <div class="card-exec-dark h-100 ${dados.operacaoVerde === null ? '' : (dados.operacaoVerde ? 'glow-verde' : 'glow-vermelho')} d-flex flex-column justify-content-between">
+        <div data-kpi-tooltip="termometro" class="card-exec-dark h-100 ${dados.operacaoVerde === null ? '' : (dados.operacaoVerde ? 'glow-verde' : 'glow-vermelho')} d-flex flex-column justify-content-between">
           <div>
             <div class="d-flex justify-content-between align-items-center mb-1">
               <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Termômetro da Frota</span>
-              <i class="bi ${dados.operacaoVerde === null ? 'bi-dash-circle text-secondary' : (dados.operacaoVerde ? 'bi-shield-check text-success' : 'bi-shield-exclamation text-danger')} fs-5"></i>
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-info-circle kpi-info-hint"></i>
+                <i class="bi ${dados.operacaoVerde === null ? 'bi-dash-circle text-secondary' : (dados.operacaoVerde ? 'bi-shield-check text-success' : 'bi-shield-exclamation text-danger')} fs-5"></i>
+              </div>
             </div>
             <div class="num-kpi-grande ${dados.operacaoVerde === null ? 'text-secondary' : (dados.operacaoVerde ? 'num-neon-verde' : 'text-danger')} my-1">
               ${dados.operacaoVerde === null ? 'SEM REFERÊNCIA ANP' : (dados.operacaoVerde ? 'OPERAÇÃO NO VERDE' : 'ALERTA DE ÁGIO')}
@@ -549,9 +872,12 @@ async function renderizarConteudoFechamentoExecutivo() {
 
       <!-- HARD SAVING (CAIXA REAL RETIDO NO MÊS VS ANP) -->
       <div class="col-12 col-md-6 col-xl">
-        <div class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
+        <div data-kpi-tooltip="hardSaving" class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
-            <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Hard Saving (Vs. ANP)</span>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Hard Saving (Vs. ANP)</span>
+              <i class="bi bi-info-circle kpi-info-hint"></i>
+            </div>
             <div class="num-kpi-grande num-neon-verde my-1">
               + R$ ${Math.round(dados.hardSavingTotalMes).toLocaleString('pt-BR')}
             </div>
@@ -567,9 +893,12 @@ async function renderizarConteudoFechamentoExecutivo() {
 
       <!-- SAVING DE NEGOCIAÇÃO DIRETA (ATUAÇÃO NA MESA) -->
       <div class="col-12 col-md-6 col-xl">
-        <div class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
+        <div data-kpi-tooltip="negociacaoDireta" class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
-            <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Saving Negociação Direta</span>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Saving Negociação Direta</span>
+              <i class="bi bi-info-circle kpi-info-hint"></i>
+            </div>
             <div class="num-kpi-grande num-neon-verde my-1">
               + R$ ${Math.round(dados.savingNegociacaoRealizadoMes).toLocaleString('pt-BR')}
             </div>
@@ -587,9 +916,12 @@ async function renderizarConteudoFechamentoExecutivo() {
 
       <!-- COST AVOIDANCE DE TABELA -->
       <div class="col-12 col-md-6 col-xl">
-        <div class="card-exec-dark h-100 glow-azul d-flex flex-column justify-content-between">
+        <div data-kpi-tooltip="costAvoidance" class="card-exec-dark h-100 glow-azul d-flex flex-column justify-content-between">
           <div>
-            <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Cost Avoidance de Tabela</span>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Cost Avoidance de Tabela</span>
+              <i class="bi bi-info-circle kpi-info-hint"></i>
+            </div>
             <div class="num-kpi-grande num-neon-azul my-1">
               + R$ ${Math.round(dados.costAvoidanceMes).toLocaleString('pt-BR')}
             </div>
@@ -605,9 +937,12 @@ async function renderizarConteudoFechamentoExecutivo() {
 
       <!-- VOLUME SOB GESTÃO DIRETA -->
       <div class="col-12 col-md-6 col-xl">
-        <div class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
+        <div data-kpi-tooltip="volumeGestao" class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
-            <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Volume Sob Gestão Direta</span>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.62rem; letter-spacing: 0.05em;">Volume Sob Gestão Direta</span>
+              <i class="bi bi-info-circle kpi-info-hint"></i>
+            </div>
             <div class="num-kpi-grande num-neon-branco my-1">
               ${Math.round(dados.volumeSobAcordoMes).toLocaleString('pt-BR')} L
             </div>
@@ -814,6 +1149,7 @@ async function renderizarConteudoFechamentoExecutivo() {
     </div>
   `;
 
+  vincularTooltipsCardsFechamento();
   renderizarGraficoEvolucaoSavings();
 }
 
@@ -1470,6 +1806,8 @@ function calcularMetricasFechamento(mesAlvo) {
   const acoesTaticas = [];
   const gruposReducaoRede = {};
   const reducoesAvulsas = [];
+  const detalhesCostAvoidance = [];
+  const detalhesRunRate = [];
 
   const postosProcessadosSet = new Set();
 
@@ -1512,6 +1850,10 @@ function calcularMetricasFechamento(mesAlvo) {
           impactoMensal: impactoMensalMesa
         };
 
+        if (impactoMensalMesa > 0) {
+          detalhesRunRate.push(itemReducao);
+        }
+
         if (redeNome) {
           if (!gruposReducaoRede[redeNome]) gruposReducaoRede[redeNome] = [];
           gruposReducaoRede[redeNome].push(itemReducao);
@@ -1534,6 +1876,9 @@ function calcularMetricasFechamento(mesAlvo) {
     let savingNegociacaoPosto = 0;
     let impactoFuroPosto = 0;
     let costAvoidancePosto = 0;
+    let volAvoidancePosto = 0;
+    let precoPropostoAvoidance = 0;
+    let precoAcordadoAvoidance = 0;
     let fichaUltimoConsumo = null;
 
     transacoesAcordadasMes.forEach(({ registro: r, ficha }) => {
@@ -1555,6 +1900,9 @@ function calcularMetricasFechamento(mesAlvo) {
       if (p > precoAcordadoCiclo) impactoFuroPosto += (p - precoAcordadoCiclo) * v;
       if (precoPropostoCiclo > precoAcordadoCiclo && p <= precoAcordadoCiclo) {
         costAvoidancePosto += (precoPropostoCiclo - precoAcordadoCiclo) * v;
+        volAvoidancePosto += v;
+        precoPropostoAvoidance = precoPropostoCiclo;
+        precoAcordadoAvoidance = precoAcordadoCiclo;
       }
       if (r.DATA_FIM_CICLO && r.DATA_FIM_CICLO > dataUltimoBomba) {
         dataUltimoBomba = r.DATA_FIM_CICLO;
@@ -1574,6 +1922,18 @@ function calcularMetricasFechamento(mesAlvo) {
       savingNegociacaoRealizadoMes += savingNegociacaoPosto;
 
       costAvoidanceMes += costAvoidancePosto;
+      if (costAvoidancePosto > 0) {
+        detalhesCostAvoidance.push({
+          posto: nomePosto,
+          uf: ufPosto,
+          precoProposto: precoPropostoAvoidance || precoProposto,
+          precoAcordado: precoAcordadoAvoidance || precoAcordado,
+          economiaUnitaria: (precoPropostoAvoidance || precoProposto) - (precoAcordadoAvoidance || precoAcordado),
+          volume: volAvoidancePosto,
+          impactoTotal: costAvoidancePosto
+        });
+      }
+
       if (costAvoidancePosto > 0 && precoProposto > precoAcordado && mesAlvo === (vigencia || '').substring(0, 7)) {
           acoesTaticas.push({
             tipo: "BLINDAGEM",
@@ -1881,6 +2241,7 @@ function calcularMetricasFechamento(mesAlvo) {
   return {
     volumeTotalMes,
     custoMedioFrotaMes,
+    custoMedioComAnpMes,
     anpMediaPonderadaMes,
     spreadMedioMes,
     operacaoVerde,
@@ -1888,6 +2249,8 @@ function calcularMetricasFechamento(mesAlvo) {
     savingNegociacaoRealizadoMes,
     savingNegociacaoContratadoMes,
     costAvoidanceMes,
+    detalhesCostAvoidance,
+    detalhesRunRate,
     volumeSobAcordoMes,
     percVolumeAcordado,
     qtdPostosAcordadosAtivos,
@@ -1908,6 +2271,8 @@ function calcularMetricasFechamento(mesAlvo) {
  * Troca de Mês no Seletor
  */
 function trocarMesFechamento(novoMes) {
+  const tooltipEl = document.getElementById('tooltipExecutivoDark');
+  if (tooltipEl) tooltipEl.classList.remove('visivel');
   mesFechamentoAtivo = novoMes;
   renderizarAbaFechamentoExecutivo();
 }
@@ -1987,6 +2352,9 @@ function decodificarValorFirestore(valor) {
 async function emitirRelatorioFechamentoExecutivo() {
   const container = document.getElementById('secaoFechamentoExecutivo');
   if (!container) return;
+
+  const tooltipEl = document.getElementById('tooltipExecutivoDark');
+  if (tooltipEl) tooltipEl.classList.remove('visivel');
 
   // 1) Configurações de tema claro para o ApexCharts
   const opcoesTemaClaro = {
