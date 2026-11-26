@@ -1,18 +1,38 @@
 /* ==========================================================================
    MÓDULO DE FECHAMENTO MENSAL EXECUTIVO & DOSSIÊ DA DIRETORIA (DARK MODE)
    CARGOSOFT | VOCTT INTELIGÊNCIA DE FROTAS
-   Controla a geração do dossiê executivo mensal, relatórios gerenciais,
+   Controla a geração do dossiê executivo (mensal e anual consolidado),
    consolidação KMM/ANP, saving de negociação direta, pareceres e Firestore.
    ========================================================================== */
 
 const FIRESTORE_BASE_DOSSIE = "https://firestore.googleapis.com/v1/projects/cargosoft-diesel/databases/(default)/documents/fechamentos_dossie";
 
-let mesFechamentoAtivo = null;
+let competenciaFechamentoAtiva = null;
 let cacheDossieMes = {};
 let cachePareceresGestor = {};
 const mesesDossieCarregados = new Set();
 let graficoEvolucaoInstancia = null;
 let mapaTooltipsCardsFechamento = {};
+
+// Lê a competência selecionada diretamente no filtro mestre do cabeçalho (#filtroMesAno).
+function obterCompetenciaFiltroGlobal() {
+  const selectGlobal = document.getElementById('filtroMesAno');
+  if (selectGlobal && selectGlobal.value) {
+    return selectGlobal.value;
+  }
+  return 'YTD';
+}
+
+// Retorna o ano-base mais recente presente em baseRegistrosMensais.
+function obterAnoBaseFechamento() {
+  if (typeof obterAnoMaisRecenteBase === 'function') {
+    const ano = obterAnoMaisRecenteBase();
+    if (ano) return ano;
+  }
+  if (typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais)) return '';
+  const meses = [...new Set(baseRegistrosMensais.map(r => r.MES_ANO).filter(Boolean))].sort();
+  return meses.length ? meses[meses.length - 1].slice(0, 4) : '';
+}
 
 // Usa ANP Distribuição para abastecimento interno e ANP Revenda para abastecimento externo.
 function obterReferenciaAnpFechamento(registro, mes) {
@@ -145,6 +165,22 @@ function obterDataFimCompetencia(mes) {
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
       }
 
+      /* BADGE INDICADORA DE COMPETÊNCIA SINCRONIZADA COM O TOPO */
+      .badge-competencia-dossie {
+        background: #1e293b;
+        color: #4ade80;
+        border: 1px solid rgba(74, 222, 128, 0.35);
+        font-family: monospace;
+        font-size: 0.74rem;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+
       /* BARRA DE ROLAGEM DARK ARREDONDADA E ELEGANTE */
       #secaoFechamentoExecutivo [style*="overflow-y: auto"],
       #secaoFechamentoExecutivo [style*="overflow-y:auto"] {
@@ -211,7 +247,7 @@ function obterDataFimCompetencia(mes) {
       #tooltipExecutivoDark {
         position: fixed;
         z-index: 100080;
-        width: 340px;
+        width: 365px;
         max-width: calc(100vw - 24px);
         background: rgba(15, 23, 42, 0.98);
         backdrop-filter: blur(10px);
@@ -266,6 +302,8 @@ function obterDataFimCompetencia(mes) {
         border-radius: 4px;
         background: rgba(255, 255, 255, 0.08);
         color: #94a3b8;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .tt-exec-bloco {
         margin-bottom: 7px;
@@ -293,21 +331,34 @@ function obterDataFimCompetencia(mes) {
         background: rgba(30, 41, 59, 0.65);
         border: 1px solid rgba(255, 255, 255, 0.06);
         border-radius: 6px;
-        padding: 5px 7px;
+        padding: 5px 8px;
         font-size: 0.68rem;
       }
       .tt-exec-item-topo {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 6px;
+        gap: 10px;
         font-weight: 700;
         color: #f8fafc;
+      }
+      .tt-exec-item-nome {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .tt-exec-item-valor {
+        flex-shrink: 0;
+        white-space: nowrap;
+        text-align: right;
       }
       .tt-exec-item-sub {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 8px;
         color: #94a3b8;
         font-family: monospace;
         font-size: 0.63rem;
@@ -477,6 +528,11 @@ function obterDataFimCompetencia(mes) {
         .kpi-info-hint {
           display: none !important;
         }
+        body.printing-dossie .badge-competencia-dossie {
+          background: #f1f5f9 !important;
+          color: #0f172a !important;
+          border: 1px solid #cbd5e1 !important;
+        }
         body.printing-dossie #secaoFechamentoExecutivo {
           background: #ffffff !important;
           color: #0f172a !important;
@@ -484,8 +540,7 @@ function obterDataFimCompetencia(mes) {
           box-shadow: none !important;
         }
         body.printing-dossie .btn,
-        body.printing-dossie select,
-        body.printing-dossie #seletorMesFechamento {
+        body.printing-dossie select {
           display: none !important;
         }
         body.printing-dossie .dossie-pareceres-vazio {
@@ -578,22 +633,24 @@ function obterDataFimCompetencia(mes) {
  * Montagem e Vinculação dos Tooltips Executivos Dark Mode nos Cards KPI
  */
 function prepararConteudoTooltipsFechamento(dados) {
-  const rotuloMes = formatarRotuloMes(mesFechamentoAtivo);
+  const ehAnual = dados.ehModoAnual;
+  const rotuloPeriodo = formatarRotuloCompetencia(competenciaFechamentoAtiva);
+  const sufixoPeriodo = ehAnual ? 'no ano' : 'no mês';
 
   // 1. Termômetro da Frota
   const htmlTermometro = `
     <div class="tt-exec-header">
       <span class="tt-exec-titulo"><i class="bi bi-speedometer2 text-success me-1"></i>Termômetro da Frota</span>
-      <span class="tt-exec-tag">${rotuloMes}</span>
+      <span class="tt-exec-tag">${rotuloPeriodo}</span>
     </div>
     <div class="tt-exec-bloco">
-      Compara o <strong>preço médio ponderado pago pela frota</strong> (abastecimentos externos e internos com referência oficial disponível) frente à média oficial da <strong>ANP</strong> na mesma UF.
+      Compara o <strong>preço médio ponderado pago pela frota</strong> (abastecimentos externos e internos com referência oficial disponível) frente à média oficial da <strong>ANP</strong> na mesma UF ${sufixoPeriodo}.
     </div>
     <div class="tt-exec-bloco">
-      <div class="tt-exec-label">Composição do Mês & YTD</div>
+      <div class="tt-exec-label">Composição ${ehAnual ? 'do Ano' : 'do Mês & YTD'}</div>
       <div>• Custo Médio Frota (base ANP): <strong class="font-monospace text-white">R$ ${dados.custoMedioComAnpMes.toFixed(3)}/L</strong></div>
       <div>• Média Ponderada ANP: <strong class="font-monospace text-info">R$ ${dados.anpMediaPonderadaMes.toFixed(3)}/L</strong></div>
-      <div>• Acumulado YTD: soma do Hard Saving auditado de Janeiro até ${rotuloMes}.</div>
+      <div>• Acumulado YTD: soma do Hard Saving auditado de Janeiro até ${dados.rotuloMesMaisRecenteAno}.</div>
     </div>
   `;
 
@@ -604,7 +661,7 @@ function prepararConteudoTooltipsFechamento(dados) {
       <span class="tt-exec-tag">Benchmark</span>
     </div>
     <div class="tt-exec-bloco">
-      Economia real auditada ciclo a ciclo sempre que o valor unitário pago ficou <strong>abaixo da referência oficial ANP</strong> da UF na competência:
+      Economia real auditada ciclo a ciclo sempre que o valor unitário pago ficou <strong>abaixo da referência oficial ANP</strong> da UF na respectiva competência:
     </div>
     <div class="tt-exec-bloco">
       <div class="tt-exec-label">Critérios de Auditoria</div>
@@ -618,20 +675,20 @@ function prepararConteudoTooltipsFechamento(dados) {
   const itensRunRate = [...(dados.detalhesRunRate || [])].sort((a, b) => b.impactoMensal - a.impactoMensal);
   const listaRunRateHtml = itensRunRate.length > 0
     ? `<div class="tt-exec-lista">
-        <div class="tt-exec-label">Composição do Contratado (Run-Rate)</div>
+        <div class="tt-exec-label">Principais Acordos no Contratado (Run-Rate)</div>
         ${itensRunRate.slice(0, 6).map(it => `
           <div class="tt-exec-item">
             <div class="tt-exec-item-topo">
-              <span class="text-truncate" style="max-width: 215px;">${escaparHtmlParecer(it.posto)} (${escaparHtmlParecer(it.uf)})</span>
-              <span class="font-monospace text-success">+R$ ${Math.round(it.impactoMensal).toLocaleString('pt-BR')}/mês</span>
+              <span class="tt-exec-item-nome">${escaparHtmlParecer(it.posto)} (${escaparHtmlParecer(it.uf)})</span>
+              <span class="tt-exec-item-valor font-monospace text-success">+R$ ${Math.round(it.impactoMensal).toLocaleString('pt-BR')}/mês</span>
             </div>
             <div class="tt-exec-item-sub">
               <span>R$ ${it.precoBase.toFixed(3)} &rarr; R$ ${it.precoNeg.toFixed(3)} (-${it.diff.toFixed(3)})</span>
-              <span>Base: ${Math.round(it.volRef).toLocaleString('pt-BR')} L</span>
+              <span class="tt-exec-item-valor">Base: ${Math.round(it.volRef).toLocaleString('pt-BR')} L</span>
             </div>
           </div>
         `).join('')}
-        ${itensRunRate.length > 6 ? `<div class="text-white-50 fst-italic" style="font-size: 0.63rem;">+ ${itensRunRate.length - 6} outros acordos iniciados no mês</div>` : ''}
+        ${itensRunRate.length > 6 ? `<div class="text-white-50 fst-italic" style="font-size: 0.63rem;">+ ${itensRunRate.length - 6} outros acordos no período</div>` : ''}
       </div>`
     : '';
 
@@ -642,11 +699,11 @@ function prepararConteudoTooltipsFechamento(dados) {
     </div>
     <div class="tt-exec-bloco">
       <div class="tt-exec-label text-success">Número Principal (+R$ ${Math.round(dados.savingNegociacaoRealizadoMes).toLocaleString('pt-BR')}) — Realizado</div>
-      Economia efetiva já capturada no caixa sobre os <strong>litros abastecidos no mês</strong> após a vigência do acordo, comparando o preço negociado contra o <strong>último preço pago antes da negociação</strong>.
+      Economia efetiva já capturada no caixa sobre os <strong>litros abastecidos ${sufixoPeriodo}</strong> após a vigência do acordo, comparando o preço negociado contra o <strong>último preço pago antes da negociação</strong>.
     </div>
     <div class="tt-exec-bloco">
       <div class="tt-exec-label text-info">Rodapé: Contratado (Run-Rate)</div>
-      É o <strong>potencial mensal recorrente</strong> (velocidade de cruzeiro) dos acordos fechados nesta competência, projetado sobre a média de volume de até <strong>3 meses cheios anteriores</strong> de cada posto.
+      É o <strong>potencial mensal recorrente</strong> (velocidade de cruzeiro) dos acordos vigentes fechados no período, projetado sobre a média de volume de até <strong>3 meses cheios anteriores</strong> de cada posto.
     </div>
     ${listaRunRateHtml}
   `;
@@ -655,22 +712,23 @@ function prepararConteudoTooltipsFechamento(dados) {
   const itensAvoidance = [...(dados.detalhesCostAvoidance || [])].sort((a, b) => b.impactoTotal - a.impactoTotal);
   const listaAvoidanceHtml = itensAvoidance.length > 0
     ? `<div class="tt-exec-lista">
-        <div class="tt-exec-label">Negociações Blindadas no Mês (${itensAvoidance.length})</div>
-        ${itensAvoidance.map(it => `
+        <div class="tt-exec-label">Negociações Blindadas ${ehAnual ? 'no Ano' : 'no Mês'} (${itensAvoidance.length})</div>
+        ${itensAvoidance.slice(0, 7).map(it => `
           <div class="tt-exec-item">
             <div class="tt-exec-item-topo">
-              <span class="text-truncate" style="max-width: 215px;">${escaparHtmlParecer(it.posto)} (${escaparHtmlParecer(it.uf)})</span>
-              <span class="font-monospace text-info">+R$ ${Math.round(it.impactoTotal).toLocaleString('pt-BR')}</span>
+              <span class="tt-exec-item-nome">${escaparHtmlParecer(it.posto)} (${escaparHtmlParecer(it.uf)})</span>
+              <span class="tt-exec-item-valor font-monospace text-info">+R$ ${Math.round(it.impactoTotal).toLocaleString('pt-BR')}</span>
             </div>
             <div class="tt-exec-item-sub">
               <span>Balcão R$ ${it.precoProposto.toFixed(3)} &rarr; Acordo R$ ${it.precoAcordado.toFixed(3)}</span>
-              <span>${Math.round(it.volume).toLocaleString('pt-BR')} L</span>
+              <span class="tt-exec-item-valor">${Math.round(it.volume).toLocaleString('pt-BR')} L</span>
             </div>
           </div>
         `).join('')}
+        ${itensAvoidance.length > 7 ? `<div class="text-white-50 fst-italic" style="font-size: 0.63rem;">+ ${itensAvoidance.length - 7} outros postos blindados</div>` : ''}
       </div>`
     : `<div class="tt-exec-lista">
-        <div class="text-white-50" style="font-size: 0.67rem;">Nenhum reajuste de balcão barrado foi faturado nesta competência.</div>
+        <div class="text-white-50" style="font-size: 0.67rem;">Nenhum reajuste de balcão barrado foi faturado neste período.</div>
       </div>`;
 
   const htmlCostAvoidance = `
@@ -692,7 +750,7 @@ function prepararConteudoTooltipsFechamento(dados) {
       <span class="tt-exec-tag">Cobertura</span>
     </div>
     <div class="tt-exec-bloco">
-      Total de litros abastecidos em postos que possuíam <strong>acordo comercial vigente</strong> na data do ciclo.
+      Total de litros abastecidos ${sufixoPeriodo} em postos que possuíam <strong>acordo comercial vigente</strong> na data do ciclo.
     </div>
     <div class="tt-exec-bloco">
       <div class="tt-exec-label">Representatividade na Competência</div>
@@ -784,6 +842,9 @@ async function renderizarConteudoFechamentoExecutivo() {
   const container = document.getElementById('secaoFechamentoExecutivo');
   if (!container) return;
 
+  const tooltipEl = document.getElementById('tooltipExecutivoDark');
+  if (tooltipEl) tooltipEl.classList.remove('visivel');
+
   if (typeof baseRegistrosMensais === 'undefined' || !Array.isArray(baseRegistrosMensais) || baseRegistrosMensais.length === 0) {
     container.innerHTML = `
       <div class="alert alert-dark p-3 text-center border-secondary">
@@ -793,12 +854,10 @@ async function renderizarConteudoFechamentoExecutivo() {
     return;
   }
 
-  const mesesDisponiveis = [...new Set(baseRegistrosMensais.map(r => r.MES_ANO).filter(Boolean))].sort().reverse();
-  
-  // Resolução dinâmica: seleciona o mês mais recente da base caso não haja seleção ou o mês ativo não exista
-  if (mesesDisponiveis.length > 0 && (!mesFechamentoAtivo || !mesesDisponiveis.includes(mesFechamentoAtivo))) {
-    mesFechamentoAtivo = mesesDisponiveis[0];
-  }
+  competenciaFechamentoAtiva = obterCompetenciaFiltroGlobal();
+  const ehAnual = competenciaFechamentoAtiva === 'YTD';
+  const anoBase = obterAnoBaseFechamento();
+  const mesesDoAno = [...new Set(baseRegistrosMensais.map(r => r.MES_ANO).filter(m => m && (!anoBase || m.startsWith(`${anoBase}-`))))].sort();
 
   container.innerHTML = `
     <div class="text-center py-5 text-muted">
@@ -807,12 +866,21 @@ async function renderizarConteudoFechamentoExecutivo() {
     </div>
   `;
 
-  await carregarDossieMesFirestore(mesFechamentoAtivo);
-  const dados = calcularMetricasFechamento(mesFechamentoAtivo);
+  if (ehAnual) {
+    const chavesDossie = [`YTD_${anoBase}`, ...mesesDoAno];
+    await Promise.all(chavesDossie.map(chave => carregarDossieMesFirestore(chave)));
+  } else {
+    await carregarDossieMesFirestore(competenciaFechamentoAtiva);
+  }
+
+  const dados = calcularMetricasFechamento(competenciaFechamentoAtiva);
   prepararConteudoTooltipsFechamento(dados);
 
+  const rotuloCompetencia = formatarRotuloCompetencia(competenciaFechamentoAtiva);
+  const sufixoPeriodo = ehAnual ? 'no ano' : 'no mês';
+
   container.innerHTML = `
-    <!-- TOPO EXECUTIVO: TÍTULO, SELETOR E BOTÕES CLEAN DARK -->
+    <!-- TOPO EXECUTIVO: TÍTULO, COMPETÊNCIA SINCRONIZADA E BOTÕES CLEAN DARK -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-2 border-bottom border-secondary">
       <div>
         <h5 class="fw-bold mb-0 text-white d-flex align-items-center gap-2">
@@ -824,13 +892,11 @@ async function renderizarConteudoFechamentoExecutivo() {
         </span>
       </div>
 
-      <div class="d-flex align-items-center gap-2">
-        <label class="small fw-bold text-white-50 text-nowrap mb-0" style="font-size: 0.68rem;">Competência:</label>
-        <select id="seletorMesFechamento" class="form-select form-select-sm font-monospace fw-bold" 
-          style="width: 145px; background: #1e293b; color: #f8fafc; border-color: #475569;" 
-          onchange="trocarMesFechamento(this.value)">
-          ${mesesDisponiveis.map(m => `<option value="${m}" ${m === mesFechamentoAtivo ? 'selected' : ''}>${formatarRotuloMes(m)}</option>`).join('')}
-        </select>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge-competencia-dossie" title="Sincronizado com o filtro de competência superior">
+          <i class="bi bi-calendar-check"></i>
+          <span>${escaparHtmlParecer(rotuloCompetencia)}</span>
+        </span>
         <button class="btn btn-sm btn-clean-dark shadow-sm text-nowrap px-3" onclick="abrirModalParecer()">
           <i class="bi bi-chat-square-text me-1 text-warning"></i> Inserir Parecer
         </button>
@@ -842,7 +908,7 @@ async function renderizarConteudoFechamentoExecutivo() {
 
     <!-- BLOCO 1: CARDS DE IMPACTO COM NÚMEROS AMPLIADOS & NEON GLOW (5 CARDS PROPORCIONAIS) -->
     <div class="row g-2 mb-3 cards-fechamento-principais">
-      <!-- TERMÔMETRO MACRO DO MÊS -->
+      <!-- TERMÔMETRO MACRO DO PERÍODO -->
       <div class="col-12 col-md-6 col-xl">
         <div data-kpi-tooltip="termometro" class="card-exec-dark h-100 ${dados.operacaoVerde === null ? '' : (dados.operacaoVerde ? 'glow-verde' : 'glow-vermelho')} d-flex flex-column justify-content-between">
           <div>
@@ -870,7 +936,7 @@ async function renderizarConteudoFechamentoExecutivo() {
         </div>
       </div>
 
-      <!-- HARD SAVING (CAIXA REAL RETIDO NO MÊS VS ANP) -->
+      <!-- HARD SAVING (CAIXA REAL RETIDO VS ANP) -->
       <div class="col-12 col-md-6 col-xl">
         <div data-kpi-tooltip="hardSaving" class="card-exec-dark h-100 glow-verde d-flex flex-column justify-content-between">
           <div>
@@ -882,7 +948,7 @@ async function renderizarConteudoFechamentoExecutivo() {
               + R$ ${Math.round(dados.hardSavingTotalMes).toLocaleString('pt-BR')}
             </div>
             <div class="text-white-50 small" style="font-size: 0.70rem;">
-              Economia real auditada vs. tabela oficial ANP no mês.
+              Economia real auditada vs. tabela oficial ANP ${sufixoPeriodo}.
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
@@ -930,7 +996,7 @@ async function renderizarConteudoFechamentoExecutivo() {
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
-            Blindagem ativa no mês
+            Blindagem ativa ${sufixoPeriodo}
           </div>
         </div>
       </div>
@@ -947,7 +1013,7 @@ async function renderizarConteudoFechamentoExecutivo() {
               ${Math.round(dados.volumeSobAcordoMes).toLocaleString('pt-BR')} L
             </div>
             <div class="text-white-50 small" style="font-size: 0.70rem;">
-              <strong>${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> do consumo do mês rodou sob postos com acordo ativo.
+              <strong>${dados.percVolumeAcordado.toFixed(1).replace('.', ',')}%</strong> do consumo ${ehAnual ? 'do ano' : 'do mês'} rodou sob postos com acordo ativo.
             </div>
           </div>
           <div class="pt-2 mt-2 border-top border-secondary font-monospace text-white-50" style="font-size: 0.65rem;">
@@ -983,7 +1049,9 @@ async function renderizarConteudoFechamentoExecutivo() {
             <i class="bi bi-fuel-pump-fill text-success me-2"></i>Estratégia de Tanques Próprios & Margem de Garagem (Matrizes)
           </h6>
           <span class="small text-white-50" style="font-size: 0.68rem;">
-            Auditoria de compras no atacado vs. ANP Distribuição e ganho unitário contra a bomba de rua
+            ${ehAnual
+              ? `Consolidação acumulada no ano (cálculo mês a mês) do ganho retido em garagem vs. preço de rua`
+              : `Auditoria de compras no atacado vs. ANP Distribuição e ganho unitário contra a bomba de rua`}
           </span>
         </div>
         <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">
@@ -994,23 +1062,23 @@ async function renderizarConteudoFechamentoExecutivo() {
       <div class="row g-2 mb-2">
         <div class="col-12 col-md-4">
           <div class="p-2 rounded bg-dark border border-secondary">
-            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">Volume Interno no Mês</span>
+            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">${ehAnual ? 'Volume Interno Acumulado (Ano)' : 'Volume Interno no Mês'}</span>
             <div class="fw-bold font-monospace text-white fs-6">${Math.round(dados.volInternoMes).toLocaleString('pt-BR')} L</div>
             <div class="text-white-50" style="font-size: 0.62rem;">${dados.percInternoMes.toFixed(1).replace('.', ',')}% do abastecimento total</div>
           </div>
         </div>
         <div class="col-12 col-md-4">
           <div class="p-2 rounded bg-dark border border-secondary">
-            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">Spread Médio Garagem vs. Rua</span>
+            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">${ehAnual ? 'Spread Médio Ponderado vs. Rua' : 'Spread Médio Garagem vs. Rua'}</span>
             <div class="fw-bold font-monospace ${dados.spreadMedioGaragemMes >= 0 ? 'text-success' : 'text-danger'} fs-6">${dados.spreadMedioGaragemMes > 0 ? '+' : (dados.spreadMedioGaragemMes < 0 ? '-' : '')} R$ ${Math.abs(dados.spreadMedioGaragemMes).toFixed(3)}/L</div>
             <div class="text-white-50" style="font-size: 0.62rem;">Vantagem líquida unitária interna</div>
           </div>
         </div>
         <div class="col-12 col-md-4">
           <div class="p-2 rounded bg-dark border border-secondary">
-            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">Economia Retida em Garagem</span>
+            <span class="text-white-50 text-uppercase" style="font-size: 0.60rem; font-weight: 700;">${ehAnual ? 'Ganho Total Retido em Garagem (Ano)' : 'Economia Retida em Garagem'}</span>
             <div class="fw-bold font-monospace ${dados.savingGaragemMes >= 0 ? 'text-success' : 'text-danger'} fs-6">${dados.savingGaragemMes > 0 ? '+' : (dados.savingGaragemMes < 0 ? '-' : '')} R$ ${Math.round(Math.abs(dados.savingGaragemMes)).toLocaleString('pt-BR')}</div>
-            <div class="text-white-50" style="font-size: 0.62rem;">Preservação direta de caixa</div>
+            <div class="text-white-50" style="font-size: 0.62rem;">${ehAnual ? 'Gap acumulado abastecendo interno vs. externo' : 'Preservação direta de caixa'}</div>
           </div>
         </div>
       </div>
@@ -1021,13 +1089,13 @@ async function renderizarConteudoFechamentoExecutivo() {
             <tr>
               <th class="text-start">Filial / Garagem</th>
               <th>UF</th>
-              <th class="text-end">Custo Garagem (R$/L)</th>
+              <th class="text-end">${ehAnual ? 'Custo Médio (R$/L)' : 'Custo Garagem (R$/L)'}</th>
               <th class="text-end">Ref. ANP Distr.</th>
               <th class="text-end">Eficiência Atacado (%)</th>
               <th class="text-end">Média Rua (UF)</th>
               <th class="text-end">Spread vs. Rua (R$/L)</th>
               <th class="text-end">Volume</th>
-              <th class="text-end">Ganho Retido</th>
+              <th class="text-end">${ehAnual ? 'Ganho Retido (Ano)' : 'Ganho Retido'}</th>
             </tr>
           </thead>
           <tbody>
@@ -1037,27 +1105,29 @@ async function renderizarConteudoFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 4: VITRINE TÁTICA (CONSOLIDADA POR REDE & DECISÕES DA COMPETÊNCIA) -->
+    <!-- BLOCO 4: VITRINE TÁTICA (CONSOLIDADA POR REDE & DECISÕES DO PERÍODO) -->
     <div class="card-exec-dark mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
           <i class="bi bi-signpost-split-fill text-success me-2"></i>Vitrine Tática: Reduções Negociadas, Manobras & Blindagem
         </h6>
-        <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">Negociações Iniciadas na Competência</span>
+        <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">
+          ${ehAnual ? `Consolidado Executivo ${anoBase}` : 'Negociações Iniciadas na Competência'}
+        </span>
       </div>
       <div class="row g-2">
-        ${renderizarCardsVitrineTatica(dados.acoesTaticas)}
+        ${renderizarCardsVitrineTatica(dados.acoesTaticas, ehAnual)}
       </div>
     </div>
 
     <!-- BLOCO 5: PARECER ESTRATÉGICO DO GESTOR -->
-    ${renderizarPareceresGestor()}
+    ${renderizarPareceresGestor(ehAnual, anoBase, mesesDoAno)}
 
-    <!-- BLOCO 6: RESUMO DE NEGOCIAÇÕES ATIVAS DO MÊS -->
+    <!-- BLOCO 6: RESUMO DE NEGOCIAÇÕES ATIVAS DO PERÍODO -->
     <div class="card-exec-dark mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <h6 class="fw-bold mb-0 text-white" style="font-size: 0.85rem;">
-          <i class="bi bi-table text-secondary me-2"></i>Resumo dos Postos Sob Acordo Vigente na Competência
+          <i class="bi bi-table text-secondary me-2"></i>${ehAnual ? `Resumo Consolidado dos Postos Sob Acordo (${anoBase})` : 'Resumo dos Postos Sob Acordo Vigente na Competência'}
         </h6>
         <span class="badge bg-dark text-white-50 border border-secondary font-monospace" style="font-size: 0.60rem;">${dados.tabelaPostosMes.length} postos auditados</span>
       </div>
@@ -1086,20 +1156,20 @@ async function renderizarConteudoFechamentoExecutivo() {
       </div>
     </div>
 
-    <!-- BLOCO 7: GOVERNANÇA, GLOSAS & PLANO DE AÇÃO PARA O PRÓXIMO MÊS -->
+    <!-- BLOCO 7: GOVERNANÇA, GLOSAS & PLANO DE AÇÃO (APENAS CARTEIRA ATIVA RECENTE) -->
     <div class="row g-2">
       <!-- GLOSAS E FUROS A CONTESTAR -->
       <div class="col-12 col-md-6">
         <div class="card-exec-dark glow-vermelho h-100 p-3 d-flex flex-column" style="max-height: 480px;">
           <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary flex-shrink-0">
             <h6 class="fw-bold mb-0 text-danger" style="font-size: 0.85rem;">
-              <i class="bi bi-exclamation-octagon-fill me-1"></i> Desvios do Mês: Passíveis de Glosa Quinzenal
+              <i class="bi bi-exclamation-octagon-fill me-1"></i> Desvios Recentes (${dados.rotuloMesOperacional}): Passíveis de Glosa
             </h6>
             <span class="badge bg-danger font-monospace" style="font-size: 0.60rem;">${dados.postosComFuro.length} desvios</span>
           </div>
 
           ${dados.postosComFuro.length === 0 
-            ? `<div class="p-2 border border-success rounded bg-dark text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Nenhum furo comercial apurado na competência. Todos os postos sob acordo faturaram em conformidade.</div>` 
+            ? `<div class="p-2 border border-success rounded bg-dark text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Nenhum furo comercial apurado em ${dados.rotuloMesOperacional}. Todos os postos sob acordo faturaram em conformidade.</div>` 
             : `<div class="d-flex flex-column gap-2 flex-grow-1" style="min-height: 0; overflow-y: auto; scrollbar-width: thin;">
                 ${dados.postosComFuro.map(f => `
                   <div class="p-2 border rounded" style="background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3) !important; font-size: 0.72rem;">
@@ -1108,10 +1178,10 @@ async function renderizarConteudoFechamentoExecutivo() {
                       <span class="badge bg-danger font-monospace">+R$ ${f.gap.toFixed(3)}/L</span>
                     </div>
                     <div class="text-white-50 mt-1">
-                      Acordado: R$ ${f.precoAcordado.toFixed(3)} (Vigência: ${f.vigenciaFmt}) | Pago: <strong class="text-danger">R$ ${f.precoPago.toFixed(3)}</strong>
+                      Acordado: R$ ${f.precoAcordado.toFixed(3)} (Vigência: ${f.vigenciaFmt}) | Pago nos ciclos com furo: <strong class="text-danger">R$ ${f.precoPagoFuro.toFixed(3)}</strong>
                     </div>
                     <div class="text-danger fw-bold mt-1">
-                      Desvio financeiro total: R$ ${Math.round(f.impactoReais).toLocaleString('pt-BR')} (sobre ${Math.round(f.volume).toLocaleString('pt-BR')} L)
+                      Desvio financeiro total: R$ ${Math.round(f.impactoReais).toLocaleString('pt-BR')} (sobre ${Math.round(f.volumeFuro).toLocaleString('pt-BR')} L faturados acima)
                     </div>
                   </div>
                 `).join('')}
@@ -1127,17 +1197,17 @@ async function renderizarConteudoFechamentoExecutivo() {
             <h6 class="fw-bold mb-0 text-warning" style="font-size: 0.85rem;">
               <i class="bi bi-clock-history text-warning me-1"></i> Foco de Compras: Renovar Negociação (SLA > 30d)
             </h6>
-            <span class="badge bg-warning text-dark font-monospace" style="font-size: 0.60rem;">${dados.postosParaRenovar.length} acordos</span>
+            <span class="badge bg-warning text-dark font-monospace" style="font-size: 0.60rem;">${dados.postosParaRenovar.length} acordos ativos</span>
           </div>
 
           ${dados.postosParaRenovar.length === 0 
-            ? `<div class="p-2 border border-secondary rounded bg-dark text-white-50 small mb-0"><i class="bi bi-shield-check text-success me-1"></i> Todas as tabelas ativas estão vigentes e dentro do SLA de 30 dias.</div>` 
+            ? `<div class="p-2 border border-secondary rounded bg-dark text-white-50 small mb-0"><i class="bi bi-shield-check text-success me-1"></i> Todas as tabelas ativas com consumo recente estão dentro do SLA de 30 dias.</div>` 
             : `<div class="d-flex flex-column gap-2 flex-grow-1" style="min-height: 0; overflow-y: auto; scrollbar-width: thin;">
                 ${dados.postosParaRenovar.map(p => `
                   <div class="p-2 border rounded d-flex justify-content-between align-items-center" style="background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3) !important; font-size: 0.72rem;">
                     <div>
                       <strong class="text-white d-block">${p.posto} (${p.uf})</strong>
-                      <span class="text-white-50">Vigência: ${p.dataVigenciaFmt} (+${p.diasDecorridos} dias rodando)</span>
+                      <span class="text-white-50">Vigência: ${p.dataVigenciaFmt} (+${p.diasDecorridos} dias rodando) &bull; Último abast.: ${p.ultimoAbastFmt}</span>
                     </div>
                     <span class="badge bg-warning text-dark font-monospace">Renovar Mesa</span>
                   </div>
@@ -1162,16 +1232,48 @@ function escaparHtmlParecer(valor) {
   })[caractere]);
 }
 
-function renderizarPareceresGestor() {
-  const pareceres = [...(cachePareceresGestor[mesFechamentoAtivo] || [])];
-  const notaLegada = cacheDossieMes[mesFechamentoAtivo] || '';
-  if (notaLegada) {
-    pareceres.unshift({
-      titulo: 'Observação anterior da gestão',
-      subtitulo: 'Registro salvo no formato anterior de parecer',
-      texto: notaLegada,
-      indicadores: []
+function obterChaveFirestoreParecerAtivo() {
+  if (competenciaFechamentoAtiva === 'YTD') {
+    const ano = obterAnoBaseFechamento();
+    return `YTD_${ano || new Date().getFullYear()}`;
+  }
+  return competenciaFechamentoAtiva;
+}
+
+function renderizarPareceresGestor(ehAnual = false, anoBase = '', mesesDoAno = []) {
+  let pareceres = [];
+
+  if (ehAnual) {
+    const chaveAnual = `YTD_${anoBase}`;
+    (cachePareceresGestor[chaveAnual] || []).forEach(p => {
+      pareceres.push({ ...p, origemCompetencia: `Consolidado ${anoBase}` });
     });
+
+    [...mesesDoAno].reverse().forEach(mes => {
+      (cachePareceresGestor[mes] || []).forEach(p => {
+        pareceres.push({ ...p, origemCompetencia: formatarRotuloCompetencia(mes) });
+      });
+      if (cacheDossieMes[mes]) {
+        pareceres.push({
+          titulo: `Observação da gestão (${formatarRotuloCompetencia(mes)})`,
+          subtitulo: 'Registro salvo no formato anterior de parecer',
+          texto: cacheDossieMes[mes],
+          indicadores: [],
+          origemCompetencia: formatarRotuloCompetencia(mes)
+        });
+      }
+    });
+  } else {
+    pareceres = [...(cachePareceresGestor[competenciaFechamentoAtiva] || [])];
+    const notaLegada = cacheDossieMes[competenciaFechamentoAtiva] || '';
+    if (notaLegada) {
+      pareceres.unshift({
+        titulo: 'Observação anterior da gestão',
+        subtitulo: 'Registro salvo no formato anterior de parecer',
+        texto: notaLegada,
+        indicadores: []
+      });
+    }
   }
 
   const cards = pareceres.map(parecer => {
@@ -1188,13 +1290,16 @@ function renderizarPareceresGestor() {
       `;
     }).join('');
     const dataRegistro = parecer.criadoEm ? new Date(parecer.criadoEm).toLocaleDateString('pt-BR') : '';
+    const tagCompetencia = parecer.origemCompetencia
+      ? `<span class="badge bg-dark text-warning border border-warning-subtle ms-1" style="font-size: 0.56rem;">${escaparHtmlParecer(parecer.origemCompetencia)}</span>`
+      : '';
 
     return `
       <div class="col-12">
         <article class="parecer-manual-card">
           <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
             <div class="min-w-0">
-              <span class="badge text-dark mb-1" style="background: #eab308; font-size: 0.58rem;">PARECER DA GESTÃO</span>
+              <span class="badge text-dark mb-1" style="background: #eab308; font-size: 0.58rem;">PARECER DA GESTÃO</span>${tagCompetencia}
               <h6 class="fw-bold text-white mb-1">${escaparHtmlParecer(parecer.titulo)}</h6>
               <div class="parecer-manual-subtitulo">${escaparHtmlParecer(parecer.subtitulo)}</div>
             </div>
@@ -1212,11 +1317,11 @@ function renderizarPareceresGestor() {
       <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
         <div>
           <h6 class="fw-bold text-white mb-0"><i class="bi bi-chat-square-text text-warning me-2"></i>Pareceres da Gestão</h6>
-          <span class="small text-white-50" style="font-size: 0.68rem;">Análises complementares registradas manualmente para ${escaparHtmlParecer(formatarRotuloMes(mesFechamentoAtivo))}</span>
+          <span class="small text-white-50" style="font-size: 0.68rem;">Análises complementares registradas manualmente para ${escaparHtmlParecer(formatarRotuloCompetencia(competenciaFechamentoAtiva))}</span>
         </div>
         <span class="badge bg-dark text-warning border border-warning-subtle font-monospace" style="font-size: 0.60rem;">${pareceres.length} pareceres</span>
       </div>
-      ${cards ? `<div class="row g-2">${cards}</div>` : `<div class="small text-white-50 py-2 dossie-pareceres-vazio">Nenhum parecer registrado para esta competência.</div>`}
+      ${cards ? `<div class="row g-2">${cards}</div>` : `<div class="small text-white-50 py-2 dossie-pareceres-vazio">Nenhum parecer registrado para este período.</div>`}
     </section>
   `;
 }
@@ -1233,7 +1338,7 @@ function abrirModalParecer() {
   formulario.reset();
   listaIndicadores.innerHTML = '';
   adicionarIndicadorParecer();
-  if (competencia) competencia.innerText = `Competência: ${formatarRotuloMes(mesFechamentoAtivo)}`;
+  if (competencia) competencia.innerText = `Competência: ${formatarRotuloCompetencia(competenciaFechamentoAtiva)}`;
 
   const modalEl = document.getElementById('modalParecerGestor');
   if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
@@ -1306,6 +1411,7 @@ async function salvarParecerGestor(event) {
   const botao = document.getElementById('btnSalvarParecer');
   if (!formulario || !botao || !formulario.reportValidity()) return;
 
+  const chaveDoc = obterChaveFirestoreParecerAtivo();
   const indicadores = Array.from(document.querySelectorAll('#listaIndicadoresParecer .item-indicador-parecer')).map(linha => ({
     titulo: linha.querySelector('.campo-indicador-titulo').value.trim(),
     valor: linha.querySelector('.campo-indicador-valor').valueAsNumber
@@ -1318,7 +1424,7 @@ async function salvarParecerGestor(event) {
     criadoEm: new Date().toISOString(),
     autor: (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado?.email) || 'Gestor'
   };
-  const pareceresAtualizados = [...(cachePareceresGestor[mesFechamentoAtivo] || []), parecer];
+  const pareceresAtualizados = [...(cachePareceresGestor[chaveDoc] || []), parecer];
   const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : '';
 
   botao.disabled = true;
@@ -1327,12 +1433,12 @@ async function salvarParecerGestor(event) {
   try {
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
-    const resp = await fetch(`${FIRESTORE_BASE_DOSSIE}/${mesFechamentoAtivo}`, {
+    const resp = await fetch(`${FIRESTORE_BASE_DOSSIE}/${chaveDoc}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
         fields: {
-          mes_ano: { stringValue: mesFechamentoAtivo },
+          mes_ano: { stringValue: chaveDoc },
           pareceres: { arrayValue: { values: pareceresAtualizados.map(serializarParecerFirestore) } },
           atualizado_em: { timestampValue: parecer.criadoEm }
         }
@@ -1340,8 +1446,8 @@ async function salvarParecerGestor(event) {
     });
     if (!resp.ok) throw new Error(`Erro HTTP ${resp.status}`);
 
-    cachePareceresGestor[mesFechamentoAtivo] = pareceresAtualizados;
-    mesesDossieCarregados.add(mesFechamentoAtivo);
+    cachePareceresGestor[chaveDoc] = pareceresAtualizados;
+    mesesDossieCarregados.add(chaveDoc);
     const modalEl = document.getElementById('modalParecerGestor');
     const instancia = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
     if (instancia) instancia.hide();
@@ -1359,7 +1465,7 @@ async function salvarParecerGestor(event) {
  */
 function renderizarLinhasTabelaFechamento(linhas) {
   if (!linhas || linhas.length === 0) {
-    return `<tr><td colspan="11" style="color: #94a3b8 !important; padding: 16px;">Nenhum posto faturado com acordo ativo no mês selecionado.</td></tr>`;
+    return `<tr><td colspan="11" style="color: #94a3b8 !important; padding: 16px;">Nenhum posto faturado com acordo ativo no período selecionado.</td></tr>`;
   }
 
   return linhas.map(l => {
@@ -1406,23 +1512,22 @@ function renderizarLinhasTabelaFechamento(linhas) {
 
 /**
  * Renderização das Linhas da Tabela de Matrizes (Garagens)
- * (Com badge explícita de estimativa caso não haja abastecimento na rua na UF)
  */
 function renderizarLinhasMatrizesFechamento(linhas) {
   if (!linhas || linhas.length === 0) {
-    return `<tr><td colspan="9" style="color: #94a3b8 !important; padding: 14px;">Sem registros de abastecimento interno para esta competência.</td></tr>`;
+    return `<tr><td colspan="9" style="color: #94a3b8 !important; padding: 14px;">Sem registros de abastecimento interno para este período.</td></tr>`;
   }
 
   return linhas.map(g => {
     const corEfic = g.refDist > 0 ? (g.varDistPerc <= 0 ? '#4ade80' : '#f87171') : '#94a3b8';
     const sinalEfic = g.varDistPerc > 0 ? '+' : '';
-    const corSpread = g.precoRuaUf > 0 ? (g.spreadRua >= 0.15 ? '#4ade80' : '#f87171') : '#94a3b8';
+    const corSpread = g.precoRuaUf > 0 ? (g.spreadRua >= 0.15 ? '#4ade80' : (g.spreadRua >= 0 ? '#4ade80' : '#f87171')) : '#94a3b8';
 
     let celulaRuaHtml = '';
     if (g.precoRuaUf > 0) {
       celulaRuaHtml = `<span class="font-monospace text-white">R$ ${g.precoRuaUf.toFixed(3)}</span>`;
     } else {
-      celulaRuaHtml = `<span class="text-white-50 font-monospace" title="Sem compras externas na UF nesta competência">Sem compra externa</span>`;
+      celulaRuaHtml = `<span class="text-white-50 font-monospace" title="Sem compras externas comparáveis na UF neste período">Sem compra externa</span>`;
     }
 
     return `
@@ -1439,7 +1544,7 @@ function renderizarLinhasMatrizesFechamento(linhas) {
           ${g.precoRuaUf > 0 ? `${g.spreadRua > 0 ? '+' : (g.spreadRua < 0 ? '-' : '')} R$ ${Math.abs(g.spreadRua).toFixed(3)}` : '--'}
         </td>
         <td class="text-end font-monospace text-white">${Math.round(g.volume).toLocaleString('pt-BR')} L</td>
-        <td class="text-end font-monospace fw-bold" style="color: #4ade80 !important;">
+        <td class="text-end font-monospace fw-bold" style="color: ${g.ganhoTotal >= 0 ? '#4ade80' : '#f87171'} !important;">
           ${g.ganhoTotal > 0 ? '+' : (g.ganhoTotal < 0 ? '-' : '')} R$ ${Math.round(Math.abs(g.ganhoTotal)).toLocaleString('pt-BR')}
         </td>
       </tr>
@@ -1450,21 +1555,25 @@ function renderizarLinhasMatrizesFechamento(linhas) {
 /**
  * Renderização dos Cards da Vitrine Tática (Suporta Card Consolidado por Rede e Cards Individuais)
  */
-function renderizarCardsVitrineTatica(acoes) {
+function renderizarCardsVitrineTatica(acoes, ehAnual = false) {
   if (!acoes || acoes.length === 0) {
     return `
       <div class="col-12">
         <div class="p-2 border border-secondary rounded bg-dark text-white-50 small mb-0">
-          Nenhuma redução negociada, manobra de rota ou ação tática iniciada nesta competência.
+          Nenhuma redução negociada, manobra de rota ou ação tática registrada neste período.
         </div>
       </div>
     `;
   }
 
   return acoes.map(a => {
-    // CARD CONSOLIDADO POR REDE (TABELA COMPACTA EXECUTIVA)
+    // CARD CONSOLIDADO POR REDE (TABELA COMPACTA EXECUTIVA — LIMITA TOP 5 NO MODO ANUAL)
     if (a.tipo === 'REDUCAO_REDE' && Array.isArray(a.itens)) {
-      const linhasRede = a.itens.map(it => `
+      const limiteItens = ehAnual ? 5 : a.itens.length;
+      const itensExibidos = a.itens.slice(0, limiteItens);
+      const itensRestantes = a.itens.slice(limiteItens);
+
+      const linhasRede = itensExibidos.map(it => `
         <tr>
           <td class="text-start text-white fw-semibold text-truncate" style="max-width: 215px;" title="${it.posto}">
             <span class="badge bg-dark text-white-50 border border-secondary font-monospace me-1" style="font-size: 0.55rem;">${it.uf}</span>${it.posto}
@@ -1481,6 +1590,21 @@ function renderizarCardsVitrineTatica(acoes) {
           </td>
         </tr>
       `).join('');
+
+      let linhaResumoRestante = '';
+      if (itensRestantes.length > 0) {
+        const volRestante = itensRestantes.reduce((acc, it) => acc + (it.volRef || 0), 0);
+        const impactoRestante = itensRestantes.reduce((acc, it) => acc + (it.impactoMensal || 0), 0);
+        linhaResumoRestante = `
+          <tr>
+            <td colspan="2" class="text-start text-white-50 fst-italic">
+              + ${itensRestantes.length} demais ${itensRestantes.length === 1 ? 'posto da rede' : 'postos da rede'}
+            </td>
+            <td class="text-end font-monospace text-white-50">${volRestante > 0 ? `${Math.round(volRestante).toLocaleString('pt-BR')} L` : '--'}</td>
+            <td class="text-end font-monospace fw-bold text-success">${impactoRestante > 0 ? `+ R$ ${Math.round(impactoRestante).toLocaleString('pt-BR')}` : '--'}</td>
+          </tr>
+        `;
+      }
 
       return `
         <div class="col-12 col-xl-6">
@@ -1504,6 +1628,7 @@ function renderizarCardsVitrineTatica(acoes) {
                   </thead>
                   <tbody>
                     ${linhasRede}
+                    ${linhaResumoRestante}
                   </tbody>
                 </table>
               </div>
@@ -1517,7 +1642,7 @@ function renderizarCardsVitrineTatica(acoes) {
       `;
     }
 
-    // CARDS INDIVIDUAIS (POSTO AVULSO, MANOBRA DE ROTA OU BLINDAGEM)
+    // CARDS INDIVIDUAIS OU RESUMO CONSOLIDADO ANUAL
     const ehNegativo = a.impacto.includes('- R$') || a.impacto.includes('Acréscimo');
     const classeGlow = ehNegativo ? 'glow-vermelho' : (a.tipo === 'BLINDAGEM' ? 'glow-azul' : 'glow-verde');
     const corBorda = ehNegativo
@@ -1533,6 +1658,9 @@ function renderizarCardsVitrineTatica(acoes) {
     } else if (a.tipo === 'REDUCAO_MESA') {
       badgeClasse = 'bg-success';
       badgeRotulo = 'REDUÇÃO NA MESA';
+    } else if (a.tipo === 'RESUMO_AVULSOS') {
+      badgeClasse = 'bg-success';
+      badgeRotulo = 'CARTEIRA AVULSA';
     }
 
     return `
@@ -1568,7 +1696,8 @@ function renderizarGraficoEvolucaoSavings() {
     try { graficoEvolucaoInstancia.destroy(); } catch(e){}
   }
 
-  const mesesDisponiveis = [...new Set(baseRegistrosMensais.map(r => r.MES_ANO).filter(Boolean))].sort();
+  const anoBase = obterAnoBaseFechamento();
+  const mesesDisponiveis = [...new Set(baseRegistrosMensais.map(r => r.MES_ANO).filter(m => m && (!anoBase || m.startsWith(`${anoBase}-`))))].sort();
   
   const seriesHardSaving = [];
   const seriesSpreadAnp = [];
@@ -1758,11 +1887,21 @@ function renderizarGraficoEvolucaoSavings() {
 }
 
 /**
- * Motor de Cálculo Matemático e Agrupamento da Competência
+ * Motor de Cálculo Matemático e Agrupamento (Suporta Competência Mensal e Ano Completo YTD)
  */
-function calcularMetricasFechamento(mesAlvo) {
-  // Consolida apenas a competência selecionada e pareia cada ciclo com sua referência ANP.
-  const regsMes = baseRegistrosMensais.filter(r => r.MES_ANO === mesAlvo);
+function calcularMetricasFechamento(competenciaAlvo) {
+  const ehModoAnual = competenciaAlvo === 'YTD';
+  const anoBase = obterAnoBaseFechamento();
+  const mesesBaseAno = [...new Set(baseRegistrosMensais.map(r => r.MES_ANO).filter(m => m && (!anoBase || m.startsWith(`${anoBase}-`))))].sort();
+  const mesMaisRecenteAno = mesesBaseAno[mesesBaseAno.length - 1] || '';
+  const mesOperacionalRef = ehModoAnual ? mesMaisRecenteAno : competenciaAlvo;
+  const rotuloMesOperacional = formatarRotuloCompetencia(mesOperacionalRef);
+  const rotuloMesMaisRecenteAno = formatarRotuloCompetencia(mesMaisRecenteAno);
+
+  const regsPeriodo = ehModoAnual
+    ? baseRegistrosMensais.filter(r => r.MES_ANO && (!anoBase || r.MES_ANO.startsWith(`${anoBase}-`)))
+    : baseRegistrosMensais.filter(r => r.MES_ANO === competenciaAlvo);
+
   const mapaTrat = (typeof mapaTratativasCadastradas !== 'undefined') ? mapaTratativasCadastradas : {};
 
   let volumeTotalMes = 0;
@@ -1772,14 +1911,14 @@ function calcularMetricasFechamento(mesAlvo) {
   let volumePonderadoAnp = 0;
   let valorPonderadoAnp = 0;
 
-  regsMes.forEach(r => {
+  regsPeriodo.forEach(r => {
     const v = parseFloat(r.VOLUME_CICLO || 0);
     const p = parseFloat(r.VALOR_UNITARIO || 0);
     const vt = parseFloat(r.VALOR_TOTAL_CICLO || (v * p));
     volumeTotalMes += v;
     valorTotalGastoMes += vt;
 
-    const refAnp = obterReferenciaAnpFechamento(r, mesAlvo);
+    const refAnp = obterReferenciaAnpFechamento(r, r.MES_ANO);
     if (refAnp > 0 && p > 0 && v > 0) {
       somaAnpPonderada += (refAnp * v);
       valorPonderadoAnp += (p * v);
@@ -1808,8 +1947,10 @@ function calcularMetricasFechamento(mesAlvo) {
   const reducoesAvulsas = [];
   const detalhesCostAvoidance = [];
   const detalhesRunRate = [];
+  const manobrasAno = [];
 
   const postosProcessadosSet = new Set();
+  const dataLimitePeriodo = mesOperacionalRef ? obterDataFimCompetencia(mesOperacionalRef) : '';
 
   Object.keys(mapaTrat).forEach(docId => {
     const trat = mapaTrat[docId];
@@ -1821,17 +1962,20 @@ function calcularMetricasFechamento(mesAlvo) {
     if (postosProcessadosSet.has(chaveUnica)) return;
     postosProcessadosSet.add(chaveUnica);
 
-    const dataFimMes = obterDataFimCompetencia(mesAlvo);
-    const fichaDecisaoMes = obterFichaTratativaAteData(trat, dataFimMes);
-    const statusTratativaMes = fichaDecisaoMes?.status || '';
-    const vigenciaDecisaoMes = fichaDecisaoMes?.vigencia || '';
-    const mesVigenciaDecisao = vigenciaDecisaoMes ? vigenciaDecisaoMes.substring(0, 7) : '';
+    const fichaDecisaoPeriodo = dataLimitePeriodo ? obterFichaTratativaAteData(trat, dataLimitePeriodo) : null;
+    const statusTratativaPeriodo = fichaDecisaoPeriodo?.status || '';
+    const vigenciaDecisaoPeriodo = fichaDecisaoPeriodo?.vigencia || '';
+    const mesVigenciaDecisao = vigenciaDecisaoPeriodo ? vigenciaDecisaoPeriodo.substring(0, 7) : '';
 
-    // Coleta reduções fechadas com vigência na competência e agrupa por Rede
-    if (statusTratativaMes === 'ACORDO_FECHADO' && mesVigenciaDecisao === mesAlvo && Number(fichaDecisaoMes?.preco) > 0) {
-      const precoNegMesa = Number(fichaDecisaoMes.preco);
-      const precoBaseMesa = obterPrecoBaseFichaFechamento(fichaDecisaoMes, nomePosto, ufPosto);
-      const volRefMesa = obterVolumeRefFichaFechamento(fichaDecisaoMes, nomePosto, ufPosto);
+    // Coleta reduções fechadas com vigência no período (mês consultado ou qualquer mês do ano no modo YTD)
+    const condicaoVigenciaReducao = ehModoAnual
+      ? (mesVigenciaDecisao && (!anoBase || mesVigenciaDecisao.startsWith(`${anoBase}-`)))
+      : (mesVigenciaDecisao === competenciaAlvo);
+
+    if (statusTratativaPeriodo === 'ACORDO_FECHADO' && condicaoVigenciaReducao && Number(fichaDecisaoPeriodo?.preco) > 0) {
+      const precoNegMesa = Number(fichaDecisaoPeriodo.preco);
+      const precoBaseMesa = obterPrecoBaseFichaFechamento(fichaDecisaoPeriodo, nomePosto, ufPosto);
+      const volRefMesa = obterVolumeRefFichaFechamento(fichaDecisaoPeriodo, nomePosto, ufPosto);
 
       if (precoBaseMesa > precoNegMesa) {
         const diffMesa = precoBaseMesa - precoNegMesa;
@@ -1842,7 +1986,7 @@ function calcularMetricasFechamento(mesAlvo) {
         const itemReducao = {
           posto: nomePosto,
           uf: ufPosto,
-          vigencia: vigenciaDecisaoMes,
+          vigencia: vigenciaDecisaoPeriodo,
           precoBase: precoBaseMesa,
           precoNeg: precoNegMesa,
           diff: diffMesa,
@@ -1863,33 +2007,41 @@ function calcularMetricasFechamento(mesAlvo) {
       }
     }
 
-    const regsPostoMes = regsMes.filter(r => r.POSTO === nomePosto && r.UF_POSTO === ufPosto);
-    // Associa cada abastecimento ao acordo vigente na data para não somar litros de outras vigências.
-    const transacoesAcordadasMes = regsPostoMes.map(registro => ({
+    const regsPostoPeriodo = regsPeriodo.filter(r => r.POSTO === nomePosto && r.UF_POSTO === ufPosto);
+    const transacoesAcordadasPeriodo = regsPostoPeriodo.map(registro => ({
       registro,
       ficha: obterFichaTratativaAteData(trat, (registro.DATA_FIM_CICLO || '').substring(0, 10))
     })).filter(item => item.ficha?.status === 'ACORDO_FECHADO' && Number(item.ficha.preco) > 0);
-    let volPostoMes = 0;
+
+    let volPostoPeriodo = 0;
     let ultimoPrecoBomba = 0;
     let dataUltimoBomba = "";
+    let mesUltimoBomba = "";
     let hardSavingPosto = 0;
     let savingNegociacaoPosto = 0;
-    let impactoFuroPosto = 0;
     let costAvoidancePosto = 0;
     let volAvoidancePosto = 0;
     let precoPropostoAvoidance = 0;
     let precoAcordadoAvoidance = 0;
     let fichaUltimoConsumo = null;
 
-    transacoesAcordadasMes.forEach(({ registro: r, ficha }) => {
+    // Variáveis isoladas para apuração de furo EXCLUSIVAMENTE no último mês operacional ativo
+    let impactoFuroMesRef = 0;
+    let volFuroMesRef = 0;
+    let valorPagoFuroMesRef = 0;
+    let precoAcordadoFuroMesRef = 0;
+    let vigenciaFuroMesRef = '';
+
+    transacoesAcordadasPeriodo.forEach(({ registro: r, ficha }) => {
       const v = parseFloat(r.VOLUME_CICLO || 0);
       const p = parseFloat(r.VALOR_UNITARIO || 0);
       if (v <= 0 || p <= 0) return;
-      volPostoMes += v;
+
+      volPostoPeriodo += v;
       const precoAcordadoCiclo = Number(ficha.preco) || 0;
       const precoPropostoCiclo = Number(ficha.preco_proposto) || 0;
       const precoBaseCiclo = obterPrecoBaseFichaFechamento(ficha, nomePosto, ufPosto);
-      const refAnpCiclo = obterReferenciaAnpFechamento(r, mesAlvo);
+      const refAnpCiclo = obterReferenciaAnpFechamento(r, r.MES_ANO);
 
       if (refAnpCiclo > 0 && p < refAnpCiclo) {
         hardSavingPosto += (refAnpCiclo - p) * v;
@@ -1897,27 +2049,37 @@ function calcularMetricasFechamento(mesAlvo) {
       if (precoBaseCiclo > 0 && p < precoBaseCiclo) {
         savingNegociacaoPosto += (precoBaseCiclo - p) * v;
       }
-      if (p > precoAcordadoCiclo) impactoFuroPosto += (p - precoAcordadoCiclo) * v;
       if (precoPropostoCiclo > precoAcordadoCiclo && p <= precoAcordadoCiclo) {
         costAvoidancePosto += (precoPropostoCiclo - precoAcordadoCiclo) * v;
         volAvoidancePosto += v;
         precoPropostoAvoidance = precoPropostoCiclo;
         precoAcordadoAvoidance = precoAcordadoCiclo;
       }
-      if (r.DATA_FIM_CICLO && r.DATA_FIM_CICLO > dataUltimoBomba) {
-        dataUltimoBomba = r.DATA_FIM_CICLO;
+
+      // Apura furos passíveis de glosa APENAS nos ciclos do mês operacional de referência (ex.: Nov/2026)
+      if (r.MES_ANO === mesOperacionalRef && p > precoAcordadoCiclo) {
+        impactoFuroMesRef += (p - precoAcordadoCiclo) * v;
+        volFuroMesRef += v;
+        valorPagoFuroMesRef += (p * v);
+        precoAcordadoFuroMesRef = precoAcordadoCiclo;
+        vigenciaFuroMesRef = ficha.vigencia || vigenciaDecisaoPeriodo;
+      }
+
+      if ((r.DATA_FIM_CICLO || '') >= dataUltimoBomba) {
+        dataUltimoBomba = r.DATA_FIM_CICLO || '';
+        mesUltimoBomba = r.MES_ANO || mesOperacionalRef;
         ultimoPrecoBomba = p;
         fichaUltimoConsumo = ficha;
       }
     });
 
-    const vigencia = fichaUltimoConsumo?.vigencia || vigenciaDecisaoMes;
+    const vigencia = fichaUltimoConsumo?.vigencia || vigenciaDecisaoPeriodo;
     const precoAcordado = Number(fichaUltimoConsumo?.preco) || 0;
     const precoProposto = Number(fichaUltimoConsumo?.preco_proposto) || 0;
-    const refAnp = Number(anpRevenda[ufPosto]?.[mesAlvo] || 0);
+    const refAnp = Number(anpRevenda[ufPosto]?.[mesUltimoBomba || mesOperacionalRef] || 0);
 
-    if (volPostoMes > 0 && precoAcordado > 0 && fichaUltimoConsumo) {
-      volumeSobAcordoMes += volPostoMes;
+    if (volPostoPeriodo > 0 && precoAcordado > 0 && fichaUltimoConsumo) {
+      volumeSobAcordoMes += volPostoPeriodo;
       qtdPostosAcordadosAtivos++;
       savingNegociacaoRealizadoMes += savingNegociacaoPosto;
 
@@ -1934,34 +2096,38 @@ function calcularMetricasFechamento(mesAlvo) {
         });
       }
 
-      if (costAvoidancePosto > 0 && precoProposto > precoAcordado && mesAlvo === (vigencia || '').substring(0, 7)) {
-          acoesTaticas.push({
-            tipo: "BLINDAGEM",
-            titulo: `Blindagem de Balcão: ${nomePosto} (${ufPosto})`,
-            descricao: `Tentativa do posto de subir para <strong>R$ ${precoProposto.toFixed(3)}</strong> foi barrada na mesa, mantendo o acordo em <strong>R$ ${precoAcordado.toFixed(3)}</strong>.`,
-            impacto: `+ R$ ${Math.round(costAvoidancePosto).toLocaleString('pt-BR')} de Cost Avoidance no mês`
-          });
-      }
-
-      if (impactoFuroPosto > 0) {
-        const gapAcordo = volPostoMes > 0 ? impactoFuroPosto / volPostoMes : 0;
-        postosComFuro.push({
-          posto: nomePosto,
-          uf: ufPosto,
-          vigenciaFmt: vigencia ? vigencia.split('-').reverse().join('/') : '--',
-          precoAcordado,
-          precoPago: ultimoPrecoBomba,
-          gap: gapAcordo,
-          volume: volPostoMes,
-          impactoReais: impactoFuroPosto
+      if (!ehModoAnual && costAvoidancePosto > 0 && precoProposto > precoAcordado && competenciaAlvo === (vigencia || '').substring(0, 7)) {
+        acoesTaticas.push({
+          tipo: "BLINDAGEM",
+          titulo: `Blindagem de Balcão: ${nomePosto} (${ufPosto})`,
+          descricao: `Tentativa do posto de subir para <strong>R$ ${precoProposto.toFixed(3)}</strong> foi barrada na mesa, mantendo o acordo em <strong>R$ ${precoAcordado.toFixed(3)}</strong>.`,
+          impacto: `+ R$ ${Math.round(costAvoidancePosto).toLocaleString('pt-BR')} de Cost Avoidance no mês`
         });
       }
 
-      if (statusTratativaMes === 'ACORDO_FECHADO' && vigencia) {
+      // Adiciona ao card de Glosas SOMENTE se houve furo no último mês operacional ativo
+      if (impactoFuroMesRef > 0 && volFuroMesRef > 0) {
+        const precoPagoFuro = valorPagoFuroMesRef / volFuroMesRef;
+        const gapAcordo = precoPagoFuro - precoAcordadoFuroMesRef;
+        postosComFuro.push({
+          posto: nomePosto,
+          uf: ufPosto,
+          vigenciaFmt: vigenciaFuroMesRef ? vigenciaFuroMesRef.split('-').reverse().join('/') : '--',
+          precoAcordado: precoAcordadoFuroMesRef,
+          precoPagoFuro,
+          gap: gapAcordo,
+          volumeFuro: volFuroMesRef,
+          impactoReais: impactoFuroMesRef
+        });
+      }
+
+      // Adiciona ao SLA de Renovação SOMENTE se o posto teve consumo no último mês operacional ativo
+      const teveConsumoMesRecente = mesUltimoBomba === mesOperacionalRef;
+      if (teveConsumoMesRecente && statusTratativaPeriodo === 'ACORDO_FECHADO' && vigencia) {
         const dtVig = new Date(`${vigencia.substring(0, 10)}T12:00:00Z`);
         const hoje = new Date();
         hoje.setUTCHours(12, 0, 0, 0);
-        const dtFimComp = new Date(`${dataFimMes}T12:00:00Z`);
+        const dtFimComp = new Date(`${dataLimitePeriodo}T12:00:00Z`);
         const dtRef = dtFimComp > hoje ? hoje : dtFimComp;
         const dias = Math.round((dtRef - dtVig) / (1000 * 60 * 60 * 24));
         if (dias > 30) {
@@ -1969,7 +2135,8 @@ function calcularMetricasFechamento(mesAlvo) {
             posto: nomePosto,
             uf: ufPosto,
             dataVigenciaFmt: vigencia.split('-').reverse().join('/'),
-            diasDecorridos: dias
+            diasDecorridos: dias,
+            ultimoAbastFmt: dataUltimoBomba ? dataUltimoBomba.substring(0, 10).split('-').reverse().join('/') : '--'
           });
         }
       }
@@ -1983,17 +2150,21 @@ function calcularMetricasFechamento(mesAlvo) {
         ultimoPrecoBomba,
         refAnp,
         spreadAnp: ultimoPrecoBomba > 0 && refAnp > 0 ? (ultimoPrecoBomba - refAnp) : 0,
-        volume: volPostoMes,
+        volume: volPostoPeriodo,
         hardSaving: hardSavingPosto,
         savingNegociacao: savingNegociacaoPosto
       });
     }
 
-    // MANOBRA DE ROTA (Exibe apenas bloqueios iniciados na competência consultada)
-    if (statusTratativaMes === 'POSTO_BLOQUEADO' && mesVigenciaDecisao === mesAlvo && fichaDecisaoMes?.posto_destino) {
-      const postoDestino = fichaDecisaoMes.posto_destino;
-      const ufDestino = fichaDecisaoMes.posto_destino_uf || ufPosto;
-      const mesTransicao = mesVigenciaDecisao || mesAlvo;
+    // MANOBRA DE ROTA (Exibe bloqueios iniciados no mês consultado ou acumula no modo anual)
+    const condicaoBloqueio = ehModoAnual
+      ? (statusTratativaPeriodo === 'POSTO_BLOQUEADO' && mesVigenciaDecisao && (!anoBase || mesVigenciaDecisao.startsWith(`${anoBase}-`)) && fichaDecisaoPeriodo?.posto_destino)
+      : (statusTratativaPeriodo === 'POSTO_BLOQUEADO' && mesVigenciaDecisao === competenciaAlvo && fichaDecisaoPeriodo?.posto_destino);
+
+    if (condicaoBloqueio) {
+      const postoDestino = fichaDecisaoPeriodo.posto_destino;
+      const ufDestino = fichaDecisaoPeriodo.posto_destino_uf || ufPosto;
+      const mesTransicao = mesVigenciaDecisao || mesOperacionalRef;
 
       const historicoOrigem = baseRegistrosMensais.filter(r =>
         r.POSTO === nomePosto && r.UF_POSTO === ufPosto
@@ -2077,7 +2248,7 @@ function calcularMetricasFechamento(mesAlvo) {
         } else if (tratDestino?.preco_acordado > 0 && tratDestino.vigencia?.substring(0, 7) <= mesTransicao) {
           precoDestino = tratDestino.preco_acordado;
         } else {
-          const regsDestinoMesAlvo = historicoDestino.filter(r => r.MES_ANO === mesAlvo);
+          const regsDestinoMesAlvo = historicoDestino.filter(r => r.MES_ANO === mesOperacionalRef);
           let vDestAlvo = 0, vtDestAlvo = 0;
           regsDestinoMesAlvo.forEach(r => {
             const v = parseFloat(r.VOLUME_CICLO || 0);
@@ -2093,30 +2264,46 @@ function calcularMetricasFechamento(mesAlvo) {
       const volumeFmt = Math.round(volumeReferencia).toLocaleString('pt-BR');
       const mesTransFmt = mesTransicao.split('-').reverse().join('/');
 
-      let descricaoManobra;
-      let impactoManobra;
-
-      if (volumeReferencia <= 0) {
-        descricaoManobra = `Sem volume histórico representativo para <strong>${nomePosto} (${ufPosto})</strong> até ${mesAlvo}.`;
-        impactoManobra = 'Saving não calculado: volume real indisponível';
-      } else if (diffUnitario === null) {
-        descricaoManobra = `Volume base de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}), suspenso em <strong>${nomePosto} (${ufPosto})</strong> e destinado para <strong>${postoDestino}</strong>.`;
-        impactoManobra = 'Saving não calculado: preço real da época indisponível';
+      if (ehModoAnual) {
+        manobrasAno.push({
+          postoOrigem: nomePosto,
+          ufOrigem: ufPosto,
+          postoDestino,
+          ufDestino,
+          volumeReferencia,
+          savingProjetado
+        });
       } else {
-        descricaoManobra = `Volume de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}) realocado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${postoDestino} (${ufDestino})</strong>; preço real na transição (${mesTransFmt}) R$ ${precoOrigem.toFixed(3)}/L vs. R$ ${precoDestino.toFixed(3)}/L no destino.`;
-        
-        const tipoImpacto = savingProjetado >= 0 ? 'Economia Mensal Projetada' : 'Acréscimo Mensal Projetado';
-        impactoManobra = `${savingProjetado >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingProjetado)).toLocaleString('pt-BR')} de ${tipoImpacto}`;
-      }
+        let descricaoManobra;
+        let impactoManobra;
 
-      acoesTaticas.push({
-        tipo: "BLOQUEIO",
-        titulo: `Manobra de Rota: Bloqueio & Realocação Estratégica`,
-        descricao: descricaoManobra,
-        impacto: impactoManobra
-      });
+        if (volumeReferencia <= 0) {
+          descricaoManobra = `Sem volume histórico representativo para <strong>${nomePosto} (${ufPosto})</strong> até ${mesOperacionalRef}.`;
+          impactoManobra = 'Saving não calculado: volume real indisponível';
+        } else if (diffUnitario === null) {
+          descricaoManobra = `Volume base de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}), suspenso em <strong>${nomePosto} (${ufPosto})</strong> e destinado para <strong>${postoDestino}</strong>.`;
+          impactoManobra = 'Saving não calculado: preço real da época indisponível';
+        } else {
+          descricaoManobra = `Volume de <strong>${volumeFmt} L/mês</strong> (${rotuloPeriodoVolume}) realocado de <strong>${nomePosto} (${ufPosto})</strong> para <strong>${postoDestino} (${ufDestino})</strong>; preço real na transição (${mesTransFmt}) R$ ${precoOrigem.toFixed(3)}/L vs. R$ ${precoDestino.toFixed(3)}/L no destino.`;
+          
+          const tipoImpacto = savingProjetado >= 0 ? 'Economia Mensal Projetada' : 'Acréscimo Mensal Projetado';
+          impactoManobra = `${savingProjetado >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(savingProjetado)).toLocaleString('pt-BR')} de ${tipoImpacto}`;
+        }
+
+        acoesTaticas.push({
+          tipo: "BLOQUEIO",
+          titulo: `Manobra de Rota: Bloqueio & Realocação Estratégica`,
+          descricao: descricaoManobra,
+          impacto: impactoManobra
+        });
+      }
     }
   });
+
+  // Ordena tabelas e governança por relevância financeira
+  tabelaPostosMes.sort((a, b) => (b.hardSaving + b.savingNegociacao) - (a.hardSaving + a.savingNegociacao) || b.volume - a.volume);
+  postosComFuro.sort((a, b) => b.impactoReais - a.impactoReais);
+  postosParaRenovar.sort((a, b) => b.diasDecorridos - a.diasDecorridos);
 
   // Monta cards consolidados por Rede no início da Vitrine Tática (ordenados por maior saving mensal)
   const cardsRedes = Object.entries(gruposReducaoRede).map(([redeNome, itens]) => {
@@ -2135,99 +2322,172 @@ function calcularMetricasFechamento(mesAlvo) {
     };
   }).sort((a, b) => b.totalRede - a.totalRede);
 
-  const cardsAvulsos = reducoesAvulsas
-    .sort((a, b) => (b.impactoMensal - a.impactoMensal) || (b.diff - a.diff))
-    .map(it => {
-      const vigFmtMesa = it.vigencia.split('-').reverse().join('/');
-      return {
-        tipo: 'REDUCAO_MESA',
-        titulo: `Redução na Mesa: ${it.posto} (${it.uf})`,
-        descricao: `Preço reduzido de <strong>R$ ${it.precoBase.toFixed(3)}/L</strong> para <strong>R$ ${it.precoNeg.toFixed(3)}/L</strong> (<strong>-R$ ${it.diff.toFixed(3)}/L</strong>) com vigência a partir de ${vigFmtMesa}.`,
-        impacto: it.impactoMensal > 0
-          ? `+ R$ ${Math.round(it.impactoMensal).toLocaleString('pt-BR')}/mês contratados (Run-Rate sobre ${Math.round(it.volRef).toLocaleString('pt-BR')} L/mês)`
-          : `+ R$ ${it.diff.toFixed(3)}/L de redução unitária garantida`
-      };
-    });
+  if (ehModoAnual) {
+    // No modo anual, consolida postos avulsos e manobras em cards resumo executivos
+    if (reducoesAvulsas.length > 0) {
+      const totalAvulsos = reducoesAvulsas.reduce((acc, it) => acc + it.impactoMensal, 0);
+      const volAvulsos = reducoesAvulsas.reduce((acc, it) => acc + (it.volRef || 0), 0);
+      const topAvulso = [...reducoesAvulsas].sort((a, b) => b.impactoMensal - a.impactoMensal)[0];
+      acoesTaticas.push({
+        tipo: 'RESUMO_AVULSOS',
+        titulo: `Reduções em Postos Avulsos (${reducoesAvulsas.length} postos)`,
+        descricao: `Carteira avulsa renegociada em ${anoBase} sobre base de <strong>${Math.round(volAvulsos).toLocaleString('pt-BR')} L/mês</strong>. Destaque: <strong>${topAvulso.posto} (${topAvulso.uf})</strong> (-R$ ${topAvulso.diff.toFixed(3)}/L).`,
+        impacto: `+ R$ ${Math.round(totalAvulsos).toLocaleString('pt-BR')}/mês contratados (Run-Rate)`
+      });
+    }
 
-  acoesTaticas.unshift(...cardsRedes, ...cardsAvulsos);
+    if (manobrasAno.length > 0) {
+      const totalManobras = manobrasAno.reduce((acc, m) => acc + m.savingProjetado, 0);
+      const volManobras = manobrasAno.reduce((acc, m) => acc + m.volumeReferencia, 0);
+      acoesTaticas.push({
+        tipo: 'BLOQUEIO',
+        titulo: `Manobras de Rota & Bloqueios (${manobrasAno.length} migrações)`,
+        descricao: `Realocação estratégica de <strong>${Math.round(volManobras).toLocaleString('pt-BR')} L/mês</strong> de postos bloqueados para corredores com melhor tarifa em ${anoBase}.`,
+        impacto: `${totalManobras >= 0 ? '+' : '-'} R$ ${Math.round(Math.abs(totalManobras)).toLocaleString('pt-BR')}/mês de Economia Projetada`
+      });
+    }
+
+    if (costAvoidanceMes > 0) {
+      acoesTaticas.push({
+        tipo: 'BLINDAGEM',
+        titulo: `Blindagem de Tabela Acumulada (${detalhesCostAvoidance.length} postos)`,
+        descricao: `Reajustes de balcão barrados na mesa comercial ao longo de ${anoBase}, preservando as condições acordadas.`,
+        impacto: `+ R$ ${Math.round(costAvoidanceMes).toLocaleString('pt-BR')} de Cost Avoidance acumulado`
+      });
+    }
+
+    acoesTaticas.unshift(...cardsRedes);
+  } else {
+    const cardsAvulsos = reducoesAvulsas
+      .sort((a, b) => (b.impactoMensal - a.impactoMensal) || (b.diff - a.diff))
+      .map(it => {
+        const vigFmtMesa = it.vigencia.split('-').reverse().join('/');
+        return {
+          tipo: 'REDUCAO_MESA',
+          titulo: `Redução na Mesa: ${it.posto} (${it.uf})`,
+          descricao: `Preço reduzido de <strong>R$ ${it.precoBase.toFixed(3)}/L</strong> para <strong>R$ ${it.precoNeg.toFixed(3)}/L</strong> (<strong>-R$ ${it.diff.toFixed(3)}/L</strong>) com vigência a partir de ${vigFmtMesa}.`,
+          impacto: it.impactoMensal > 0
+            ? `+ R$ ${Math.round(it.impactoMensal).toLocaleString('pt-BR')}/mês contratados (Run-Rate sobre ${Math.round(it.volRef).toLocaleString('pt-BR')} L/mês)`
+            : `+ R$ ${it.diff.toFixed(3)}/L de redução unitária garantida`
+        };
+      });
+
+    acoesTaticas.unshift(...cardsRedes, ...cardsAvulsos);
+  }
 
   // INTEGRAÇÃO DAS MATRIZES GERENCIAIS & GARAGENS PRÓPRIAS
+  // Calcula mês a mês antes de consolidar para preservar a aderência exata contra a rua e ANP Distr. da época.
   const matrizesGaragem = [];
   let volInternoMes = 0;
   let gastoInternoMes = 0;
   let savingGaragemMes = 0;
 
-  const garagensRegs = regsMes.filter(r => r.TIPO_OPERACAO === 'INTERNO');
-  const garagensPorNome = new Map();
-  garagensRegs.forEach(r => {
-    const nomeGaragem = r.MUNICIPIO_POSTO || r.POSTO || `Unidade ${r.UF_POSTO || ''}`;
-    const chaveGaragem = JSON.stringify([r.UF_POSTO, r.MUNICIPIO_POSTO, r.POSTO]);
-    if (!garagensPorNome.has(chaveGaragem)) {
-      garagensPorNome.set(chaveGaragem, { nome: nomeGaragem, uf: r.UF_POSTO || '', registros: [] });
-    }
-    garagensPorNome.get(chaveGaragem).registros.push(r);
+  const mesesParaGaragem = ehModoAnual ? mesesBaseAno : [competenciaAlvo];
+  const garagensConsolidadoMap = new Map();
+
+  mesesParaGaragem.forEach(m => {
+    const regsDoMes = baseRegistrosMensais.filter(r => r.MES_ANO === m);
+    const garagensRegsMes = regsDoMes.filter(r => r.TIPO_OPERACAO === 'INTERNO');
+
+    // Pré-calcula média de rua por UF nesse mês específico
+    const ruaPorUfMes = {};
+    regsDoMes.filter(r => r.TIPO_OPERACAO === 'EXTERNO').forEach(r => {
+      const uf = r.UF_POSTO || '';
+      const vol = parseFloat(r.VOLUME_CICLO || 0);
+      const vt = parseFloat(r.VALOR_TOTAL_CICLO || (vol * parseFloat(r.VALOR_UNITARIO || 0)));
+      if (!ruaPorUfMes[uf]) ruaPorUfMes[uf] = { v: 0, vt: 0 };
+      ruaPorUfMes[uf].v += vol;
+      ruaPorUfMes[uf].vt += vt;
+    });
+
+    const garagensMesMap = new Map();
+    garagensRegsMes.forEach(r => {
+      const nomeGaragem = typeof identificarNomePonto === 'function'
+        ? identificarNomePonto(r.POSTO, r.MUNICIPIO_POSTO, r.UF_POSTO, 'INTERNO')
+        : (r.MUNICIPIO_POSTO || r.POSTO || `Unidade ${r.UF_POSTO || ''}`);
+      const chaveGaragem = JSON.stringify([r.UF_POSTO, nomeGaragem]);
+      if (!garagensMesMap.has(chaveGaragem)) {
+        garagensMesMap.set(chaveGaragem, { nome: nomeGaragem, uf: r.UF_POSTO || '', v: 0, vt: 0 });
+      }
+      const item = garagensMesMap.get(chaveGaragem);
+      const vol = parseFloat(r.VOLUME_CICLO || 0);
+      item.v += vol;
+      item.vt += parseFloat(r.VALOR_TOTAL_CICLO || (vol * parseFloat(r.VALOR_UNITARIO || 0)));
+    });
+
+    garagensMesMap.forEach((gMes, chaveGaragem) => {
+      if (gMes.v <= 0) return;
+      const custoMes = gMes.vt / gMes.v;
+      volInternoMes += gMes.v;
+      gastoInternoMes += gMes.vt;
+
+      const mapaDist = (typeof anpDistribuicao !== 'undefined') ? anpDistribuicao : {};
+      const refDistMes = (mapaDist[gMes.uf] && mapaDist[gMes.uf][m]) ? Number(mapaDist[gMes.uf][m]) : 0;
+
+      const dadosRuaUf = ruaPorUfMes[gMes.uf];
+      const precoRuaMes = (dadosRuaUf && dadosRuaUf.v > 0) ? (dadosRuaUf.vt / dadosRuaUf.v) : 0;
+      const ganhoMes = (precoRuaMes > 0 && custoMes > 0) ? ((precoRuaMes - custoMes) * gMes.v) : 0;
+      savingGaragemMes += ganhoMes;
+
+      if (!garagensConsolidadoMap.has(chaveGaragem)) {
+        garagensConsolidadoMap.set(chaveGaragem, {
+          nome: gMes.nome,
+          uf: gMes.uf,
+          volume: 0,
+          gastoTotal: 0,
+          somaRefDistPonderada: 0,
+          volComDist: 0,
+          somaRuaPonderada: 0,
+          volComRua: 0,
+          ganhoTotal: 0
+        });
+      }
+
+      const acc = garagensConsolidadoMap.get(chaveGaragem);
+      acc.volume += gMes.v;
+      acc.gastoTotal += gMes.vt;
+      if (refDistMes > 0) {
+        acc.somaRefDistPonderada += refDistMes * gMes.v;
+        acc.volComDist += gMes.v;
+      }
+      if (precoRuaMes > 0) {
+        acc.somaRuaPonderada += precoRuaMes * gMes.v;
+        acc.volComRua += gMes.v;
+      }
+      acc.ganhoTotal += ganhoMes;
+    });
   });
 
-  garagensPorNome.forEach(({ registros: regsG, nome: nomeGaragem, uf: ufG }) => {
-    let vG = 0;
-    let vtG = 0;
-
-    regsG.forEach(r => {
-      const vol = parseFloat(r.VOLUME_CICLO || 0);
-      vG += vol;
-      vtG += parseFloat(r.VALOR_TOTAL_CICLO || (vol * parseFloat(r.VALOR_UNITARIO || 0)));
-    });
-
-    const custoGaragem = vG > 0 ? (vtG / vG) : 0;
-    volInternoMes += vG;
-    gastoInternoMes += vtG;
-
-    // Confronto com ANP Distribuição da UF estrita ao mês alvo
-    const mapaDist = (typeof anpDistribuicao !== 'undefined') ? anpDistribuicao : {};
-    const refDist = (mapaDist[ufG] && mapaDist[ufG][mesAlvo]) ? mapaDist[ufG][mesAlvo] : 0;
+  garagensConsolidadoMap.forEach(acc => {
+    const custoGaragem = acc.volume > 0 ? (acc.gastoTotal / acc.volume) : 0;
+    const refDist = acc.volComDist > 0 ? (acc.somaRefDistPonderada / acc.volComDist) : 0;
     const varDistPerc = (custoGaragem > 0 && refDist > 0) ? (((custoGaragem - refDist) / refDist) * 100) : 0;
-
-    // Confronto com o preço médio da rua na mesma UF naquele mês
-    const regsRuaUf = regsMes.filter(r => r.TIPO_OPERACAO === 'EXTERNO' && r.UF_POSTO === ufG);
-    let vRua = 0, vtRua = 0;
-    regsRuaUf.forEach(r => {
-      const vol = parseFloat(r.VOLUME_CICLO || 0);
-      vRua += vol;
-      vtRua += parseFloat(r.VALOR_TOTAL_CICLO || (vol * parseFloat(r.VALOR_UNITARIO || 0)));
-    });
-
-    let precoRuaUf = 0;
-
-    // O ganho contra a rua só é calculado quando há compras externas reais comparáveis na mesma UF.
-    if (vRua > 0) {
-      precoRuaUf = vtRua / vRua;
-    }
-
+    const precoRuaUf = acc.volComRua > 0 ? (acc.somaRuaPonderada / acc.volComRua) : 0;
     const spreadRua = (precoRuaUf > 0 && custoGaragem > 0) ? (precoRuaUf - custoGaragem) : 0;
-    const ganhoTotalGaragem = spreadRua * vG;
-    savingGaragemMes += ganhoTotalGaragem;
 
     matrizesGaragem.push({
-      nome: nomeGaragem,
-      uf: ufG,
+      nome: acc.nome,
+      uf: acc.uf,
       custoGaragem,
       refDist,
       varDistPerc,
       precoRuaUf,
       spreadRua,
-      volume: vG,
-      ganhoTotal: ganhoTotalGaragem
+      volume: acc.volume,
+      ganhoTotal: acc.ganhoTotal
     });
   });
+
+  matrizesGaragem.sort((a, b) => b.ganhoTotal - a.ganhoTotal || b.volume - a.volume);
 
   const percInternoMes = volumeTotalMes > 0 ? ((volInternoMes / volumeTotalMes) * 100) : 0;
   const spreadMedioGaragemMes = volInternoMes > 0 ? (savingGaragemMes / volInternoMes) : 0;
 
   // CÁLCULO YTD ACUMULADO DO ANO
-  // Acumula de janeiro até a competência consultada, usando o benchmark próprio de cada operação.
   let savingAcumuladoYtd = 0;
   baseRegistrosMensais.forEach(r => {
-    if (!r.MES_ANO || r.MES_ANO.substring(0, 4) !== mesAlvo.substring(0, 4) || r.MES_ANO > mesAlvo) return;
+    if (!r.MES_ANO || r.MES_ANO.substring(0, 4) !== (anoBase || mesOperacionalRef.substring(0, 4))) return;
+    if (!ehModoAnual && r.MES_ANO > mesOperacionalRef) return;
     const p = parseFloat(r.VALOR_UNITARIO || 0);
     const v = parseFloat(r.VOLUME_CICLO || 0);
     const refAnp = obterReferenciaAnpFechamento(r, r.MES_ANO);
@@ -2239,6 +2499,10 @@ function calcularMetricasFechamento(mesAlvo) {
   const percVolumeAcordado = volumeTotalMes > 0 ? ((volumeSobAcordoMes / volumeTotalMes) * 100) : 0;
 
   return {
+    ehModoAnual,
+    anoBase,
+    rotuloMesOperacional,
+    rotuloMesMaisRecenteAno,
     volumeTotalMes,
     custoMedioFrotaMes,
     custoMedioComAnpMes,
@@ -2268,26 +2532,20 @@ function calcularMetricasFechamento(mesAlvo) {
 }
 
 /**
- * Troca de Mês no Seletor
+ * Formata 'YTD' ou '2026-10' para rótulo executivo limpo
  */
-function trocarMesFechamento(novoMes) {
-  const tooltipEl = document.getElementById('tooltipExecutivoDark');
-  if (tooltipEl) tooltipEl.classList.remove('visivel');
-  mesFechamentoAtivo = novoMes;
-  renderizarAbaFechamentoExecutivo();
-}
-
-/**
- * Formata '2026-10' para 'Outubro/2026'
- */
-function formatarRotuloMes(mesAnoStr) {
-  if (!mesAnoStr || !mesAnoStr.includes('-')) return mesAnoStr;
+function formatarRotuloCompetencia(compStr) {
+  if (!compStr || compStr === 'YTD') {
+    const ano = obterAnoBaseFechamento();
+    return `Ano Completo${ano ? ` ${ano}` : ''} (Consolidado)`;
+  }
+  if (!compStr.includes('-')) return compStr;
   const nomes = {
     '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
     '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
     '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro'
   };
-  const [ano, mes] = mesAnoStr.split('-');
+  const [ano, mes] = compStr.split('-');
   return `${nomes[mes] || mes}/${ano}`;
 }
 
@@ -2295,7 +2553,7 @@ function formatarRotuloMes(mesAnoStr) {
  * Leitura do Dossiê do Firestore
  */
 async function carregarDossieMesFirestore(mesAno) {
-  if (mesesDossieCarregados.has(mesAno)) return;
+  if (!mesAno || mesesDossieCarregados.has(mesAno)) return;
 
   try {
     const token = (typeof utilizadorAutenticado !== 'undefined' && utilizadorAutenticado) ? utilizadorAutenticado.idToken : "";
@@ -2328,7 +2586,7 @@ async function carregarDossieMesFirestore(mesAno) {
       mesesDossieCarregados.add(mesAno);
     }
   } catch (err) {
-    console.warn("Aviso ao carregar dossiê do mês:", err);
+    console.warn("Aviso ao carregar dossiê do período:", err);
   }
 }
 
@@ -2347,7 +2605,7 @@ function decodificarValorFirestore(valor) {
 }
 
 /**
- * Impressão Executiva Sem Sobreposições (Folha A4 Paisagem)
+ * Impressão Executiva Sem Sobreposições (Folha A4)
  */
 async function emitirRelatorioFechamentoExecutivo() {
   const container = document.getElementById('secaoFechamentoExecutivo');
@@ -2419,7 +2677,6 @@ async function emitirRelatorioFechamentoExecutivo() {
     }
   };
 
-  // Atualiza para o tema claro e dispara resize antes da impressão
   if (graficoEvolucaoInstancia) {
     try {
       await graficoEvolucaoInstancia.updateOptions(opcoesTemaClaro, false, false);
@@ -2429,10 +2686,8 @@ async function emitirRelatorioFechamentoExecutivo() {
     }
   }
 
-  // 2) Adiciona classe auxiliar no body
   document.body.classList.add('printing-dossie');
 
-  // 3) Limpeza e restauração após impressão (via window.onafterprint e fallback)
   let restaurado = false;
   const restaurarEstadoOriginal = async () => {
     if (restaurado) return;
@@ -2454,7 +2709,6 @@ async function emitirRelatorioFechamentoExecutivo() {
   try {
     window.print();
   } finally {
-    // Fallback assíncrono para garantir restauração caso onafterprint não dispare
     setTimeout(restaurarEstadoOriginal, 1000);
   }
 }
